@@ -48,7 +48,7 @@ app.use(
   }),
 );
 
-app.get("/make-server-3b84b96c/og-image.svg", async (c) => {
+app.get("/og-image.svg", ...)
   const svg = `<svg width="1200" height="630" viewBox="0 0 1200 630" xmlns="http://www.w3.org/2000/svg">
     <rect width="1200" height="630" fill="#111317"/>
     <rect x="50" y="50" width="1100" height="530" fill="none" stroke="#00E676" stroke-width="8" />
@@ -63,7 +63,7 @@ app.get("/make-server-3b84b96c/og-image.svg", async (c) => {
   });
 });
 
-app.post("/make-server-3b84b96c/track-event", async (c) => {
+app.post("/track-event", ...)
   try {
     const body = await c.req.json();
     const event = {
@@ -101,7 +101,7 @@ app.post("/make-server-3b84b96c/track-event", async (c) => {
 });
 
 // Register a free featured-match email (no payment, just collects the address)
-app.post("/make-server-3b84b96c/register-free-access", async (c) => {
+app.post("/register-free-access", ...)
   try {
     const body = await c.req.json();
     const email = (body.email || '').trim().toLowerCase();
@@ -131,7 +131,7 @@ app.post("/make-server-3b84b96c/register-free-access", async (c) => {
 
 // Register a checkout-start lead — saved before Stripe redirect so the email
 // is captured even if the user never completes payment.
-app.post("/make-server-3b84b96c/register-checkout-lead", async (c) => {
+app.post("/register-checkout-lead", ...)
   try {
     const body = await c.req.json();
     const email = (body.email || '').trim().toLowerCase();
@@ -175,7 +175,7 @@ app.post("/make-server-3b84b96c/register-checkout-lead", async (c) => {
   }
 });
 
-app.get("/make-server-3b84b96c/analytics-events", async (c) => {
+app.get("/analytics-events", ...)
   try {
     // Build a Supabase client with service role key so we can bypass PostgREST
     // row-limit defaults and apply a proper 30-day date-range filter directly
@@ -225,7 +225,7 @@ app.get("/make-server-3b84b96c/analytics-events", async (c) => {
 // Returns metadata about every analytics event in the KV table so the admin
 // dashboard can distinguish "no older data in storage" from "older data was
 // fetched but filtered away".
-app.get("/make-server-3b84b96c/analytics-debug", async (c) => {
+app.get("/analytics-debug", ...)
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
     const serviceKey  = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -304,7 +304,7 @@ app.get("/make-server-3b84b96c/analytics-debug", async (c) => {
 // Reads ALL keys in the table (no prefix filter) and groups them by their
 // leading namespace (everything before the first colon).
 // This answers: "is older traffic stored under a different key name?"
-app.get("/make-server-3b84b96c/kv-namespace-scan", async (c) => {
+app.get("/kv-namespace-scan", ...)
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
     const serviceKey  = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -365,7 +365,7 @@ app.get("/make-server-3b84b96c/kv-namespace-scan", async (c) => {
   }
 });
 
-app.get("/make-server-3b84b96c/live-odds", async (c) => {
+app.get("/live-odds", ...)
   try {
     const apiKey = Deno.env.get("ODDS_API_KEY");
     if (!apiKey) {
@@ -405,7 +405,7 @@ app.get("/make-server-3b84b96c/live-odds", async (c) => {
   }
 });
 
-app.post("/make-server-3b84b96c/verify-email", async (c) => {
+app.post("/verify-email", ...)
   try {
     const body = await c.req.json();
     const email = body?.email?.trim()?.toLowerCase();
@@ -482,7 +482,7 @@ app.post("/make-server-3b84b96c/verify-email", async (c) => {
   }
 });
 
-app.post("/make-server-3b84b96c/verify-otp", async (c) => {
+app.post("/verify-otp", ...)
   try {
     const body = await c.req.json();
     const email = body?.email?.trim()?.toLowerCase();
@@ -502,7 +502,7 @@ app.post("/make-server-3b84b96c/verify-otp", async (c) => {
   }
 });
 
-app.post("/make-server-3b84b96c/create-customer-portal", async (c) => {
+app.post("/create-customer-portal", ...)
   try {
     const body = await c.req.json();
     const email = body?.email?.trim()?.toLowerCase();
@@ -532,7 +532,7 @@ app.post("/make-server-3b84b96c/create-customer-portal", async (c) => {
   }
 });
 
-app.post("/make-server-3b84b96c/create-checkout-session", async (c) => {
+app.post("/create-checkout-session", ...)
   try {
     const body = await c.req.json();
     const email = body?.email?.trim()?.toLowerCase();
@@ -577,7 +577,7 @@ app.post("/make-server-3b84b96c/create-checkout-session", async (c) => {
   }
 });
 
-app.post("/make-server-3b84b96c/subscribe", async (c) => {
+app.post("/subscribe", ...)
   try {
     console.log("[Subscribe] Received subscribe request");
     const body = await c.req.json();
@@ -695,7 +695,7 @@ app.post("/make-server-3b84b96c/subscribe", async (c) => {
 });
 
 // Admin endpoint to send mass emails
-app.post("/make-server-3b84b96c/admin/broadcast", async (c) => {
+app.post("/admin/broadcast", ...)
   try {
     const authHeader = c.req.header('Authorization');
     // Basic protection - should use proper auth in production
@@ -782,7 +782,7 @@ app.post("/make-server-3b84b96c/admin/broadcast", async (c) => {
 });
 
 // Admin endpoint to list subscribers
-app.get("/make-server-3b84b96c/admin/subscribers", async (c) => {
+app.get("/admin/subscribers", ...)
   try {
     const subs = await kv.getByPrefix('subscriber:');
     const parsed = subs.map(s => {
@@ -797,7 +797,7 @@ app.get("/make-server-3b84b96c/admin/subscribers", async (c) => {
 });
 
 // Admin endpoint to list free-access registrations (entered email on featured match gate)
-app.get("/make-server-3b84b96c/admin/free-access", async (c) => {
+app.get("/admin/free-access", ...)
   try {
     const entries = await kv.getByPrefix('free_access:');
     const parsed = entries.map(e => {
@@ -813,7 +813,7 @@ app.get("/make-server-3b84b96c/admin/free-access", async (c) => {
 });
 
 // Admin endpoint to list checkout leads (emails captured before Stripe redirect)
-app.get("/make-server-3b84b96c/admin/checkout-leads", async (c) => {
+app.get("/admin/checkout-leads", ...)
   try {
     const entries = await kv.getByPrefix('checkout_lead:');
     const parsed = entries.map(e => {
@@ -829,7 +829,7 @@ app.get("/make-server-3b84b96c/admin/checkout-leads", async (c) => {
 });
 
 // Admin endpoint to list email broadcasts
-app.get("/make-server-3b84b96c/admin/broadcasts", async (c) => {
+app.get("/admin/broadcasts", ...)
   try {
     const broadcasts = await kv.getByPrefix('broadcast:');
     const parsed = broadcasts.map(b => {
@@ -842,7 +842,7 @@ app.get("/make-server-3b84b96c/admin/broadcasts", async (c) => {
 });
 
 // Debug endpoint: test KV write and read
-app.get("/make-server-3b84b96c/test-kv", async (c) => {
+app.get("/test-kv", ...)
   try {
     const testKey = "subscriber:test@debug.com";
     const testVal = { email: "test@debug.com", subscribedAt: new Date().toISOString(), source: "debug_test" };
@@ -881,8 +881,7 @@ app.get("/make-server-3b84b96c/test-kv", async (c) => {
 });
 
 // Health check endpoint
-app.get("/make-server-3b84b96c/health", (c) => {
-  return c.json({ status: "ok" });
+app.get("/health", ...)  return c.json({ status: "ok" });
 });
 
 // Configure Cron Jobs for automated emails
