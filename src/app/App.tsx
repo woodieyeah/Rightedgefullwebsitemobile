@@ -4376,10 +4376,10 @@ export default function App() {
           const parsed = JSON.parse(accessVal);
           if (parsed.email) {
             visitorEmail = parsed.email.toLowerCase();
-            if (INTERNAL_EMAILS.includes(visitorEmail!)) isInternal = true;
+            if (INTERNAL_EMAILS.includes(visitorEmail)) isInternal = true;
           }
         }
-      } catch(e) {}
+      } catch (e) {}
 
       // 4. Legacy rightedge_user key
       try {
@@ -4388,7 +4388,7 @@ export default function App() {
           const user = JSON.parse(userStr);
           if (user.email && INTERNAL_EMAILS.includes(user.email.toLowerCase())) isInternal = true;
         }
-      } catch(e) {}
+      } catch (e) {}
 
       // 5. Current page is the admin route
       if (window.location.hash.toLowerCase().includes('admin')) isInternal = true;
@@ -4427,26 +4427,26 @@ export default function App() {
 
       try {
         await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-3b84b96c/track-event`, {
-  method: "POST",
-  headers: {
-    "Content-Type": "application/json",
-    "apikey": publicAnonKey,
-    "Authorization": `Bearer ${publicAnonKey}`,
-  },
-  body: JSON.stringify(payload),
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "apikey": publicAnonKey,
+            "Authorization": `Bearer ${publicAnonKey}`,
+          },
+          body: JSON.stringify(payload),
         });
       } catch (err) {
         console.error("Failed to track event:", err);
       }
+    };
 
     // Track pageview on route change (excluding admin views)
     if (sitePage !== 'admin') {
       trackAnalyticsEvent(`${sitePage}_view`);
     }
-    
+
     // Expose globally for other components to track events like clicks/conversions
     (window as any).trackAnalyticsEvent = trackAnalyticsEvent;
-
   }, [sitePage]);
 
   useEffect(() => {
