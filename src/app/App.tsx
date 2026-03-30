@@ -4427,12 +4427,14 @@ export default function App() {
 
       try {
         await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-3b84b96c/track-event`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${publicAnonKey}`,
-          },
-          body: JSON.stringify(payload),
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    "apikey": publicAnonKey,
+    "Authorization": `Bearer ${publicAnonKey}`,
+  },
+  body: JSON.stringify(payload),
+});
         });
       } catch (err) {
         console.error("Failed to track event:", err);
