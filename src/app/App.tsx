@@ -4439,7 +4439,6 @@ export default function App() {
       } catch (err) {
         console.error("Failed to track event:", err);
       }
-    };
 
     // Track pageview on route change (excluding admin views)
     if (sitePage !== 'admin') {
