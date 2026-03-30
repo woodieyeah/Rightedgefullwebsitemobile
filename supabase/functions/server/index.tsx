@@ -48,7 +48,7 @@ app.use(
   }),
 );
 
-app.get("/og-image.svg", ...)
+app.get("/og-image.svg",async (c) => {)
   const svg = `<svg width="1200" height="630" viewBox="0 0 1200 630" xmlns="http://www.w3.org/2000/svg">
     <rect width="1200" height="630" fill="#111317"/>
     <rect x="50" y="50" width="1100" height="530" fill="none" stroke="#00E676" stroke-width="8" />
@@ -63,7 +63,7 @@ app.get("/og-image.svg", ...)
   });
 });
 
-app.post("/track-event", ...)
+app.post("/track-event", async (c) => {
   try {
     const body = await c.req.json();
     const event = {
@@ -101,7 +101,7 @@ app.post("/track-event", ...)
 });
 
 // Register a free featured-match email (no payment, just collects the address)
-app.post("/register-free-access", ...)
+app.post("/register-free-access", async (c) => {
   try {
     const body = await c.req.json();
     const email = (body.email || '').trim().toLowerCase();
@@ -131,7 +131,7 @@ app.post("/register-free-access", ...)
 
 // Register a checkout-start lead — saved before Stripe redirect so the email
 // is captured even if the user never completes payment.
-app.post("/register-checkout-lead", ...)
+app.post("/register-checkout-lead", async (c) => {
   try {
     const body = await c.req.json();
     const email = (body.email || '').trim().toLowerCase();
@@ -175,7 +175,7 @@ app.post("/register-checkout-lead", ...)
   }
 });
 
-app.get("/analytics-events", ...)
+app.get("/analytics-events", async (c) => {
   try {
     // Build a Supabase client with service role key so we can bypass PostgREST
     // row-limit defaults and apply a proper 30-day date-range filter directly
@@ -225,7 +225,7 @@ app.get("/analytics-events", ...)
 // Returns metadata about every analytics event in the KV table so the admin
 // dashboard can distinguish "no older data in storage" from "older data was
 // fetched but filtered away".
-app.get("/analytics-debug", ...)
+app.get("/analytics-debug", async (c) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
     const serviceKey  = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -304,7 +304,7 @@ app.get("/analytics-debug", ...)
 // Reads ALL keys in the table (no prefix filter) and groups them by their
 // leading namespace (everything before the first colon).
 // This answers: "is older traffic stored under a different key name?"
-app.get("/kv-namespace-scan", ...)
+app.get("/kv-namespace-scan", async (c) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
     const serviceKey  = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -365,7 +365,7 @@ app.get("/kv-namespace-scan", ...)
   }
 });
 
-app.get("/live-odds", ...)
+app.get("/live-odds", async (c) => {
   try {
     const apiKey = Deno.env.get("ODDS_API_KEY");
     if (!apiKey) {
@@ -405,7 +405,7 @@ app.get("/live-odds", ...)
   }
 });
 
-app.post("/verify-email", ...)
+app.post("/verify-email", async (c) => {)
   try {
     const body = await c.req.json();
     const email = body?.email?.trim()?.toLowerCase();
@@ -482,7 +482,7 @@ app.post("/verify-email", ...)
   }
 });
 
-app.post("/verify-otp", ...)
+app.post("/verify-otp", async (c) => {)
   try {
     const body = await c.req.json();
     const email = body?.email?.trim()?.toLowerCase();
@@ -502,7 +502,7 @@ app.post("/verify-otp", ...)
   }
 });
 
-app.post("/create-customer-portal", ...)
+app.post("/create-customer-portal", async (c) => {
   try {
     const body = await c.req.json();
     const email = body?.email?.trim()?.toLowerCase();
@@ -532,7 +532,7 @@ app.post("/create-customer-portal", ...)
   }
 });
 
-app.post("/create-checkout-session", ...)
+app.post("/create-checkout-session", async (c) => {
   try {
     const body = await c.req.json();
     const email = body?.email?.trim()?.toLowerCase();
@@ -577,7 +577,7 @@ app.post("/create-checkout-session", ...)
   }
 });
 
-app.post("/subscribe", ...)
+app.post("/subscribe", async (c) => {
   try {
     console.log("[Subscribe] Received subscribe request");
     const body = await c.req.json();
@@ -695,7 +695,7 @@ app.post("/subscribe", ...)
 });
 
 // Admin endpoint to send mass emails
-app.post("/admin/broadcast", ...)
+app.post("/admin/broadcast", async (c) => {
   try {
     const authHeader = c.req.header('Authorization');
     // Basic protection - should use proper auth in production
@@ -782,7 +782,7 @@ app.post("/admin/broadcast", ...)
 });
 
 // Admin endpoint to list subscribers
-app.get("/admin/subscribers", ...)
+app.get("/admin/subscribers", async (c) => {
   try {
     const subs = await kv.getByPrefix('subscriber:');
     const parsed = subs.map(s => {
@@ -797,7 +797,7 @@ app.get("/admin/subscribers", ...)
 });
 
 // Admin endpoint to list free-access registrations (entered email on featured match gate)
-app.get("/admin/free-access", ...)
+app.get("/admin/free-access", async (c) => {
   try {
     const entries = await kv.getByPrefix('free_access:');
     const parsed = entries.map(e => {
@@ -813,7 +813,7 @@ app.get("/admin/free-access", ...)
 });
 
 // Admin endpoint to list checkout leads (emails captured before Stripe redirect)
-app.get("/admin/checkout-leads", ...)
+app.get("/admin/checkout-leads", async (c) => {
   try {
     const entries = await kv.getByPrefix('checkout_lead:');
     const parsed = entries.map(e => {
@@ -829,7 +829,7 @@ app.get("/admin/checkout-leads", ...)
 });
 
 // Admin endpoint to list email broadcasts
-app.get("/admin/broadcasts", ...)
+app.get("/admin/broadcasts", async (c) => {
   try {
     const broadcasts = await kv.getByPrefix('broadcast:');
     const parsed = broadcasts.map(b => {
@@ -842,7 +842,7 @@ app.get("/admin/broadcasts", ...)
 });
 
 // Debug endpoint: test KV write and read
-app.get("/test-kv", ...)
+app.get("/test-kv", async (c) => {
   try {
     const testKey = "subscriber:test@debug.com";
     const testVal = { email: "test@debug.com", subscribedAt: new Date().toISOString(), source: "debug_test" };
@@ -881,7 +881,7 @@ app.get("/test-kv", ...)
 });
 
 // Health check endpoint
-app.get("/health", ...)  return c.json({ status: "ok" });
+app.get("/health", async (c) => {  return c.json({ status: "ok" });
 });
 
 // Configure Cron Jobs for automated emails
