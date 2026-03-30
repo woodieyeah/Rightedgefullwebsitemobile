@@ -48,6 +48,14 @@ app.use(
   }),
 );
 
+app.options("/*", (c) => {
+  c.header("Access-Control-Allow-Origin", "*");
+  c.header("Access-Control-Allow-Headers", "Content-Type, Authorization, apikey");
+  c.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+  c.header("Access-Control-Max-Age", "600");
+  return c.body(null, 204);
+});
+
 app.get("/og-image.svg",async (c) => {
   const svg = `<svg width="1200" height="630" viewBox="0 0 1200 630" xmlns="http://www.w3.org/2000/svg">
     <rect width="1200" height="630" fill="#111317"/>
