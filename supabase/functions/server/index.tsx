@@ -41,14 +41,14 @@ app.use(
   "/*",
   cors({
     origin: "*",
-    allowHeaders: ["Content-Type", "Authorization"],
+    allowHeaders: ["Content-Type", "Authorization", "apikey"],
     allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     exposeHeaders: ["Content-Length"],
     maxAge: 600,
   }),
 );
 
-app.get("/og-image.svg",async (c) => {)
+app.get("/og-image.svg",async (c) => {
   const svg = `<svg width="1200" height="630" viewBox="0 0 1200 630" xmlns="http://www.w3.org/2000/svg">
     <rect width="1200" height="630" fill="#111317"/>
     <rect x="50" y="50" width="1100" height="530" fill="none" stroke="#00E676" stroke-width="8" />
@@ -405,7 +405,7 @@ app.get("/live-odds", async (c) => {
   }
 });
 
-app.post("/verify-email", async (c) => {)
+app.post("/verify-email", async (c) => {
   try {
     const body = await c.req.json();
     const email = body?.email?.trim()?.toLowerCase();
@@ -482,7 +482,7 @@ app.post("/verify-email", async (c) => {)
   }
 });
 
-app.post("/verify-otp", async (c) => {)
+app.post("/verify-otp", async (c) => {
   try {
     const body = await c.req.json();
     const email = body?.email?.trim()?.toLowerCase();
