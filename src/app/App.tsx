@@ -4434,7 +4434,6 @@ export default function App() {
     "Authorization": `Bearer ${publicAnonKey}`,
   },
   body: JSON.stringify(payload),
-});
         });
       } catch (err) {
         console.error("Failed to track event:", err);
