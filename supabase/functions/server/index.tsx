@@ -5,7 +5,7 @@ import { Resend } from "npm:resend";
 import Stripe from "npm:stripe";
 import { createClient } from "jsr:@supabase/supabase-js@2.49.8";
 import * as kv from "./kv_store.tsx";
-const app = new Hono();
+const app = new Hono().basePath('/make-server-3b84b96c');
 
 // Enable logger
 app.use('*', logger(console.log));
