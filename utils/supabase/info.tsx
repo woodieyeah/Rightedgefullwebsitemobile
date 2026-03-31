@@ -7,4 +7,4 @@ export const projectId = supabaseUrl
   ? supabaseUrl.replace("https://", "").replace(".supabase.co", "")
   : "spahmuawycgohcznathc";
 
-export const publicAnonKey = supabaseAnonKey || "sb_publishable_rI9-2nwU3U_-EhcNWFjrMw_ELLp4xJU";
+export const publicAnonKey = supabaseAnonKey || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNwYWhtdWF3eWNnb2hjem5hdGhjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMxNDEwMDksImV4cCI6MjA4ODcxNzAwOX0.W66FwTKxo3s0_v0kTFlEQkqYC3OOPRKpi8iNyEcmIqw";
