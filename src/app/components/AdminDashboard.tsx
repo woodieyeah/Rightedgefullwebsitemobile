@@ -246,7 +246,7 @@ export function AdminDashboard({ data, onNavigateAdStudio }: { data?: any, onNav
     try {
       setLoading(true);
       // Fetch subscribers
-      const subRes = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-3b84b96c/admin/subscribers`, {
+      const subRes = await fetch(`/api/admin/subscribers`, {
         headers: { 'Authorization': `Bearer ${publicAnonKey}` }
       });
       if (subRes.ok) {
@@ -254,7 +254,7 @@ export function AdminDashboard({ data, onNavigateAdStudio }: { data?: any, onNav
       }
       
       // Fetch broadcast history
-      const broadRes = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-3b84b96c/admin/broadcasts`, {
+      const broadRes = await fetch(`/api/admin/broadcasts`, {
         headers: { 'Authorization': `Bearer ${publicAnonKey}` }
       });
       if (broadRes.ok) {
@@ -264,7 +264,7 @@ export function AdminDashboard({ data, onNavigateAdStudio }: { data?: any, onNav
       // Fetch advanced analytics data — server now returns up to 30 days of
       // events with a 10 000-row limit so client-side time filters have a
       // full dataset to work against.
-      const analyticsRes = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-3b84b96c/analytics-events`, {
+      const analyticsRes = await fetch(`/api/analytics-events`, {
         headers: { 'Authorization': `Bearer ${publicAnonKey}` }
       });
       if (analyticsRes.ok) {
@@ -287,7 +287,7 @@ export function AdminDashboard({ data, onNavigateAdStudio }: { data?: any, onNav
       // pattern (e.g. traffic:, pageview:, visit:) before the analytics:event:
       // system was introduced.
       try {
-        const nsRes = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-3b84b96c/kv-namespace-scan`, {
+        const nsRes = await fetch(`/api/kv-namespace-scan`, {
           headers: { 'Authorization': `Bearer ${publicAnonKey}` }
         });
         if (nsRes.ok) {
@@ -303,7 +303,7 @@ export function AdminDashboard({ data, onNavigateAdStudio }: { data?: any, onNav
 
       // ── Free Leads ───��──────────────────────────��─────────────────────────
       try {
-        const leadsRes = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-3b84b96c/admin/free-access`, {
+        const leadsRes = await fetch(`/api/admin/free-access`, {
           headers: { 'Authorization': `Bearer ${publicAnonKey}` }
         });
         if (leadsRes.ok) {
@@ -319,7 +319,7 @@ export function AdminDashboard({ data, onNavigateAdStudio }: { data?: any, onNav
 
       // ── Checkout Leads ─────────────────────────────────────────────────────
       try {
-        const clRes = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-3b84b96c/admin/checkout-leads`, {
+        const clRes = await fetch(`/api/admin/checkout-leads`, {
           headers: { 'Authorization': `Bearer ${publicAnonKey}` }
         });
         if (clRes.ok) {
@@ -497,7 +497,7 @@ export function AdminDashboard({ data, onNavigateAdStudio }: { data?: any, onNav
     try {
       setSending(true);
       setResult(null);
-      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-3b84b96c/admin/broadcast`, {
+      const res = await fetch(`/api/admin/broadcast`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
