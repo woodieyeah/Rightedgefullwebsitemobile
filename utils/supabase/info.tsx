@@ -5,6 +5,6 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 export const projectId = supabaseUrl
   ? supabaseUrl.replace("https://", "").replace(".supabase.co", "")
-  : "";
+  : "spahmuawycgohcznathc";
 
-export const publicAnonKey = supabaseAnonKey || "";
+export const publicAnonKey = supabaseAnonKey || "sb_publishable_rI9-2nwU3U_-EhcNWFjrMw_ELLp4xJU";
