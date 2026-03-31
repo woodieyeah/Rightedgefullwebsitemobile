@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://spahmuawycgohcznathc.supabase.co/functions/v1/make-server-3b84b96c/:path*"
+    }
+  ]
+}
