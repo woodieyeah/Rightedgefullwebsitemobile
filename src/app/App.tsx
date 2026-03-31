@@ -1437,7 +1437,7 @@ function FeaturedMatchEmailGate({
     try {
       // Save email server-side first — only unlock the match if the save confirms.
       const saveRes = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-3b84b96c/register-free-access`,
+        ``/api/register-free-access`,
         {
           method: 'POST',
           headers: {
@@ -1610,7 +1610,7 @@ function EmailGateModal({
         }
 
         const res = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/make-server-3b84b96c/verify-email`,
+          ``/api/verify-email`,
           {
             method: "POST",
             headers: {
@@ -1637,7 +1637,7 @@ function EmailGateModal({
           const urlParams = new URLSearchParams(window.location.search);
           try {
             await fetch(
-              `https://${projectId}.supabase.co/functions/v1/make-server-3b84b96c/register-checkout-lead`,
+              ``/api/register-checkout-lead`,
               {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${publicAnonKey}` },
@@ -1658,7 +1658,7 @@ function EmailGateModal({
           }
 
           const checkoutRes = await fetch(
-            `https://${projectId}.supabase.co/functions/v1/make-server-3b84b96c/create-checkout-session`,
+            ``/api/create-checkout-session`,
             {
               method: "POST",
               headers: {
@@ -1697,7 +1697,7 @@ function EmailGateModal({
       
       try {
         const res = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/make-server-3b84b96c/verify-otp`,
+          ``/api/verify-otp`,
           {
             method: "POST",
             headers: {
@@ -1992,7 +1992,7 @@ async function fetchLiveOddsCached() {
 
   // 3. Fetch fresh data
   fetchOddsPromise = fetch(
-    `https://${projectId}.supabase.co/functions/v1/make-server-3b84b96c/live-odds`,
+    ``/api/live-odds`,
     {
       headers: {
         Authorization: `Bearer ${publicAnonKey}`,
@@ -3785,7 +3785,7 @@ function AppDashboard({
         return;
       }
 
-      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-3b84b96c/create-customer-portal`, {
+      const res = await fetch(``/api/create-customer-portal`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -4426,7 +4426,7 @@ export default function App() {
       };
 
       try {
-        await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-3b84b96c/track-event`, {
+        await fetch(``/api/track-event`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -4501,7 +4501,7 @@ export default function App() {
         // Persist the subscriber server-side (writes subscriber: KV record,
         // sends welcome email once, and flips checkout_lead.completed_subscription=true)
         fetch(
-          `https://${projectId}.supabase.co/functions/v1/make-server-3b84b96c/subscribe`,
+          ``/api/subscribe`,
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${publicAnonKey}` },
@@ -4598,14 +4598,14 @@ export default function App() {
         <meta property="og:title" content="RightEdge NRL Predictions & Best Bets" />
         <meta property="og:description" content="Australia's premier NRL analytics platform. Expert best bets, match predictions, win probabilities, and market-edge identification — powered by a mathematical model." />
         <meta property="og:url" content="https://www.rightedge.com.au/" />
-        <meta property="og:image" content={`https://${projectId}.supabase.co/functions/v1/make-server-3b84b96c/og-image.svg`} />
+        <meta property="og:image" content={``/api/og-image.svg`} />
         <meta property="og:locale" content="en_AU" />
 
         {/* ── Twitter / X Card ── */}
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content="RightEdge NRL Predictions & Best Bets" />
         <meta name="twitter:description" content="Australia's premier NRL analytics platform. Expert best bets, match predictions, and value bets powered by a mathematical model." />
-        <meta name="twitter:image" content={`https://${projectId}.supabase.co/functions/v1/make-server-3b84b96c/og-image.svg`} />
+        <meta name="twitter:image" content={``/api/og-image.svg`} />
 
         {/* ── JSON-LD Structured Data ── */}
         <script type="application/ld+json">{`${JSON.stringify({
