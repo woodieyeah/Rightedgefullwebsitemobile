@@ -4580,7 +4580,8 @@ export default function App() {
   }, []);
 
   return (
-    <Helmet>
+    <HelmetProvider>
+      <Helmet>
         {/* ── Google Search Console Verification ── */}
         <meta name="google-site-verification" content="wb31UE7IgqZ6wAT2M2iIJ8YK1dZjdQc_LSYaiuRBsd0" />
 
@@ -4630,3 +4631,141 @@ export default function App() {
           "sameAs": []
         })}</script>
       </Helmet>
+    <div className="min-h-screen bg-[#0B0D10] text-[#F5F3EE] relative overflow-hidden font-sans">
+      <div
+        className="absolute inset-0 opacity-[0.03] pointer-events-none"
+        style={{
+          backgroundImage:
+            'url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%27200%27 height=%27200%27 viewBox=%270 0 200 200%27%3E%3Cfilter id=%27n%27%3E%3CfeTurbulence type=%27fractalNoise%27 baseFrequency=%270.85%27 numOctaves=%272%27 stitchTiles=%27stitch%27/%3E%3C/filter%3E%3Crect width=%27200%27 height=%27200%27 filter=%27url(%23n)%27 opacity=%271%27/%3E%3C/svg%3E")',
+        }}
+      />
+
+      <div
+        className={`max-w-[1600px] mx-auto relative z-10 flex flex-col gap-10 ${sitePage === "app" ? "px-3 py-4 sm:px-6 sm:py-6" : "px-6 py-6"}`}
+      >
+        <div
+          className={
+            sitePage === "app" ? "hidden xl:block" : "block"
+          }
+        >
+          <PublicNav page={sitePage} setPage={handleSetPage} />
+        </div>
+
+        {sitePage === "home" && (
+          <HomePage
+            data={data}
+            onGoApp={navigateToApp}
+            hasFeaturedAccess={featuredAccess}
+            onUnlockFeatured={() => {
+              document.getElementById('featured-match-section')?.scrollIntoView({ behavior: 'smooth' });
+              setTimeout(() => setShowFeaturedGate(true), 300);
+            }}
+          />
+        )}
+
+        {sitePage === "results" && data && (
+          <ResultsPage data={data} />
+        )}
+        {sitePage === "methodology" && <MethodologyPage />}
+        {sitePage === "ad-studio" && (
+          <AdStudio
+            onExit={() => {
+              window.location.hash = "home";
+            }}
+            data={data}
+          />
+        )}
+        {sitePage === "admin" && (
+          <AdminDashboard
+            data={data}
+            onNavigateAdStudio={() => {
+              window.location.hash = "ad-studio";
+            }}
+          />
+        )}
+        {sitePage === "app" && (
+          <AppDashboard
+            data={data}
+            loading={loading}
+            error={error}
+            refreshing={refreshing}
+            loadData={loadData}
+            onExit={() => {
+              window.location.hash = "home";
+            }}
+          />
+        )}
+
+        <EmailGateModal
+          open={showEmailGate}
+          onClose={() => {
+            (window as any).trackAnalyticsEvent?.('paywall_dismiss');
+            setShowEmailGate(false);
+          }}
+          onSuccess={handleEmailSuccess}
+        />
+
+        <FeaturedMatchEmailGate
+          open={showFeaturedGate}
+          onClose={() => setShowFeaturedGate(false)}
+          onSuccess={() => {
+            setFeaturedAccess(true);
+            setShowFeaturedGate(false);
+          }}
+        />
+
+        <div className="p-8 mt-8 border-t-4 border-white/10 bg-[#111317]">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+            <div>
+              <div className="text-white font-black text-2xl uppercase tracking-tighter mb-2">
+                RightEdge
+                <button
+                  onClick={() => {
+                    localStorage.removeItem(
+                      "rightedge_email_access",
+                    );
+                    window.location.reload();
+                  }}
+                  className="ml-4 text-[10px] text-white/20 hover:text-[#FF2E63] transition-colors"
+                  title="Debug: Reset Email Access"
+                >
+                  [RESET ACCESS]
+                </button>
+              </div>
+              <div className="text-sm font-bold text-[#FFEA00] uppercase tracking-widest">
+                Mathematical NRL Analytics & Value Betting
+              </div>
+            </div>
+            <div className="text-xs text-white/50 leading-relaxed font-bold max-w-[720px] uppercase tracking-wider">
+              <p className="mb-4">
+                RightEdge provides projected scores, win
+                probabilities, true model odds, and identified
+                market edges for the NRL. Our official plays and
+                strict staking logic are designed for
+                disciplined bettors treating sports analytics as
+                an investment.
+              </p>
+              <p className="text-[#FF2E63]/80 mb-4">
+                Disclaimer: RightEdge is an independent
+                analytics tool and is not affiliated with,
+                endorsed by, or licensed by the National Rugby
+                League or its clubs.
+              </p>
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={() => {
+                    window.location.hash = "admin";
+                  }}
+                  className="text-[10px] text-white/20 hover:text-[#00E676] uppercase tracking-widest font-black transition-colors"
+                >
+                  Admin Access
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    </HelmetProvider>
+  );
+}
