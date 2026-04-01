@@ -4597,10 +4597,10 @@ export default function App() {
   <meta property="og:url" content="https://www.rightedge.com.au/" />
   <meta property="og:title" content="RightEdge NRL Predictions & Best Bets" />
   <meta property="og:description" content="RightEdge is Australia's premier NRL analytics and value betting platform. Get expert NRL best bets, match predictions, win probabilities, and model-driven insights every round." />
-  <meta property="og:image" content="https://rightedge.com.au/public/logo-square.png" />
+  <meta property="og:image" content="https://rightedge.com.au/logo-square.png" />
   
   {/* UPDATED: Points to your new square logo */}
-  <meta property="og:image" content="https://www.rightedge.com.au/public/logo-square.png" />
+  <meta property="og:image" content="https://www.rightedge.com.au/logo-square.png" />
   <meta property="og:locale" content="en_AU" />
 
   {/* ── Twitter / X Card ── */}
@@ -4608,7 +4608,7 @@ export default function App() {
   <meta property="twitter:url" content="https://www.rightedge.com.au/" />
   <meta property="twitter:title" content="RightEdge NRL Predictions & Best Bets" />
   <meta property="twitter:description" content="RightEdge is Australia's premier NRL analytics and value betting platform. Get expert NRL best bets, match predictions, win probabilities, and model-driven insights every round." />
-  <meta property="twitter:image" content="https://rightedge.com.au/public/logo-square.png" />
+  <meta property="twitter:image" content="https://rightedge.com.au/logo-square.png" />
   
   {/* UPDATED: Points to your new square logo */}
   <meta name="twitter:image" content="https://www.rightedge.com.au/logo-square.png" />
