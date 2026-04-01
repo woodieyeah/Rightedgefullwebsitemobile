@@ -4593,19 +4593,22 @@ export default function App() {
   <link rel="canonical" href="https://www.rightedge.com.au/" />
 
   {/* ── Open Graph / Facebook ── */}
-  <meta property="og:image" content="https://www.rightedge.com.au/logo-square.png" />
-  <meta property="og:image:secure_url" content="https://www.rightedge.com.au/logo-square.png" />
-  <meta property="og:image:type" content="image/png" />
-  <meta property="og:image:width" content="1080" />
-  <meta property="og:image:height" content="1080" />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://www.rightedge.com.au/" />
+  <meta property="og:title" content="RightEdge NRL Predictions & Best Bets" />
+  <meta property="og:description" content="RightEdge is Australia's premier NRL analytics and value betting platform. Get expert NRL best bets, match predictions, win probabilities, and model-driven insights every round." />
+  <meta property="og:image" content="https://rightedge.com.au/public/logo-square.png" />
   
   {/* UPDATED: Points to your new square logo */}
-  <meta property="og:image" content="https://www.rightedge.com.au/logo-square.png" />
+  <meta property="og:image" content="https://www.rightedge.com.au/public/logo-square.png" />
   <meta property="og:locale" content="en_AU" />
 
   {/* ── Twitter / X Card ── */}
-  <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:image" content="https://www.rightedge.com.au/logo-square.png" />
+  <meta property="twitter:card" content="summary_large_image" />
+  <meta property="twitter:url" content="https://www.rightedge.com.au/" />
+  <meta property="twitter:title" content="RightEdge NRL Predictions & Best Bets" />
+  <meta property="twitter:description" content="RightEdge is Australia's premier NRL analytics and value betting platform. Get expert NRL best bets, match predictions, win probabilities, and model-driven insights every round." />
+  <meta property="twitter:image" content="https://rightedge.com.au/public/logo-square.png" />
   
   {/* UPDATED: Points to your new square logo */}
   <meta name="twitter:image" content="https://www.rightedge.com.au/logo-square.png" />
