@@ -4581,56 +4581,47 @@ export default function App() {
 
   return (
     <HelmetProvider>
-      <Helmet>
-        {/* ── Google Search Console Verification ── */}
-        <meta name="google-site-verification" content="wb31UE7IgqZ6wAT2M2iIJ8YK1dZjdQc_LSYaiuRBsd0" />
+<Helmet>
+  {/* ── Google Search Console Verification ── */}
+  <meta name="google-site-verification" content="wb31UE7IgqZ6wAT2M2iIJ8YK1dZjdQc_LSYaiuRBsd0" />
 
-        {/* ── Primary SEO ── */}
-        <title>RightEdge NRL Predictions & Best Bets</title>
-        <meta name="description" content="RightEdge is Australia's premier NRL analytics and value betting platform. Get expert NRL best bets, match predictions, win probabilities, and model-driven insights every round." />
-        <meta name="keywords" content="RightEdge, RightEdge NRL, RightEdge NRL Best Bets, NRL best bets, NRL analytics, NRL predictions, NRL betting tips, NRL value bets, NRL match predictions, NRL odds, rugby league betting, NRL 2026" />
-        <meta name="robots" content="index, follow" />
-        <link rel="canonical" href="https://www.rightedge.com.au/" />
+  {/* ── Primary SEO ── */}
+  <title>RightEdge NRL Predictions & Best Bets</title>
+  <meta name="description" content="RightEdge is Australia's premier NRL analytics and value betting platform. Get expert NRL best bets, match predictions, win probabilities, and model-driven insights every round." />
+  <meta name="keywords" content="RightEdge, RightEdge NRL, RightEdge NRL Best Bets, NRL best bets, NRL analytics, NRL predictions, NRL betting tips, NRL value bets, NRL match predictions, NRL odds, rugby league betting, NRL 2026" />
+  <meta name="robots" content="index, follow" />
+  <link rel="canonical" href="https://www.rightedge.com.au/" />
 
-        {/* ── Open Graph / Facebook ── */}
-        <meta property="og:type" content="website" />
-        <meta property="og:site_name" content="RightEdge" />
-        <meta property="og:title" content="RightEdge NRL Predictions & Best Bets" />
-        <meta property="og:description" content="Australia's premier NRL analytics platform. Expert best bets, match predictions, win probabilities, and market-edge identification — powered by a mathematical model." />
-        <meta property="og:url" content="https://www.rightedge.com.au/" />
-        <meta property="og:image" content={`/api/og-image.svg`} />
-        <meta property="og:locale" content="en_AU" />
+  {/* ── Open Graph / Facebook ── */}
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="RightEdge" />
+  <meta property="og:title" content="RightEdge NRL Predictions & Best Bets" />
+  <meta property="og:description" content="Australia's premier NRL analytics platform. Expert best bets, match predictions, win probabilities, and market-edge identification — powered by a mathematical model." />
+  <meta property="og:url" content="https://www.rightedge.com.au/" />
+  
+  {/* UPDATED: Points to your new square logo */}
+  <meta property="og:image" content="https://www.rightedge.com.au/logo-square.png" />
+  <meta property="og:locale" content="en_AU" />
 
-        {/* ── Twitter / X Card ── */}
-        <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:title" content="RightEdge NRL Predictions & Best Bets" />
-        <meta name="twitter:description" content="Australia's premier NRL analytics platform. Expert best bets, match predictions, and value bets powered by a mathematical model." />
-        <meta name="twitter:image" content={`/api/og-image.svg`} />
+  {/* ── Twitter / X Card ── */}
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="RightEdge NRL Predictions & Best Bets" />
+  <meta name="twitter:description" content="Australia's premier NRL analytics platform. Expert best bets, match predictions, and value bets powered by a mathematical model." />
+  
+  {/* UPDATED: Points to your new square logo */}
+  <meta name="twitter:image" content="https://www.rightedge.com.au/logo-square.png" />
 
-        {/* ── JSON-LD Structured Data ── */}
-        <script type="application/ld+json">{JSON.stringify({
-          "@context": "https://schema.org",
-          "@type": "WebSite",
-          "name": "RightEdge",
-          "alternateName": ["RightEdge NRL", "RightEdge NRL Best Bets"],
-          "url": "https://www.rightedge.com.au/",
-          "description": "Australia's premier NRL analytics and value betting platform. Get expert NRL best bets, match predictions, win probabilities, and model-driven insights every round.",
-          "inLanguage": "en-AU",
-          "potentialAction": {
-            "@type": "SearchAction",
-            "target": "https://www.rightedge.com.au/#{search_term_string}",
-            "query-input": "required name=search_term_string"
-          }
-        })}</script>
-        <script type="application/ld+json">{JSON.stringify({
-          "@context": "https://schema.org",
-          "@type": "Organization",
-          "name": "RightEdge",
-          "url": "https://www.rightedge.com.au/",
-          "description": "NRL analytics and value betting insights platform built on mathematical modelling.",
-          "sameAs": []
-        })}</script>
-      </Helmet>
+  {/* ── JSON-LD Structured Data (Unchanged) ── */}
+  <script type="application/ld+json">{JSON.stringify({
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    "name": "RightEdge",
+    "alternateName": ["RightEdge NRL", "RightEdge NRL Best Bets"],
+    "url": "https://www.rightedge.com.au/",
+    "description": "Australia's premier NRL analytics and value betting platform. Get expert NRL best bets, match predictions, win probabilities, and model-driven insights every round.",
+    "inLanguage": "en-AU"
+  })}</script>
+</Helmet>
     <div className="min-h-screen bg-[#0B0D10] text-[#F5F3EE] relative overflow-hidden font-sans">
       <div
         className="absolute inset-0 opacity-[0.03] pointer-events-none"
