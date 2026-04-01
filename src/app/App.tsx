@@ -1437,7 +1437,7 @@ function FeaturedMatchEmailGate({
     try {
       // Save email server-side first — only unlock the match if the save confirms.
       const saveRes = await fetch(
-        '/api/register-free-access`,
+        `/api/register-free-access`,
         {
           method: 'POST',
           headers: {
