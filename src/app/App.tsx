@@ -1866,6 +1866,7 @@ function PublicNav({
   const secondaryItems = [
     { id: "results", label: "Results" },
     { id: "methodology", label: "Methodology" },
+    { id: "articles", label: "Articles" },
   ];
 
   return (
@@ -2759,6 +2760,68 @@ function HomePage({
         />
       </div>
       <HomeMethodology onGoApp={onGoApp} />
+    </div>
+  );
+}
+function ArticlesPage() {
+  const articles = [
+    {
+      hash: "article-round-5-2026",
+      tag: "PREDICTIONS",
+      tagColor: "bg-[#FF2E63]",
+      title: "NRL Round 5 2026 — Model vs Market",
+      excerpt: "Full model output for every Round 5 match. Projected scores, win probabilities, and identified edges across all eight games.",
+      date: "April 2026",
+    },
+    {
+      hash: "article-methodology",
+      tag: "METHODOLOGY",
+      tagColor: "bg-[#0047FF]",
+      title: "How the RightEdge Model Works",
+      excerpt: "A deep dive into how we simulate every NRL match, calculate true win probabilities, and identify where bookmakers are mispricing the market.",
+      date: "April 2026",
+    },
+  ];
+
+  return (
+    <div className="flex flex-col gap-8">
+      <GlassCard className="p-8 border-l-4 border-l-[#0047FF]">
+        <h1 className="text-4xl font-black text-white uppercase tracking-tighter mb-2">
+          Articles
+        </h1>
+        <p className="text-white/50 font-bold uppercase tracking-widest text-sm">
+          Model insights, methodology and round previews
+        </p>
+      </GlassCard>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {articles.map((article) => (
+          <GlassCard
+            key={article.hash}
+            className="p-8 border-l-4 border-l-[#FFEA00] cursor-pointer hover:border-l-[#0047FF] transition-all"
+          >
+            <div className={`inline-flex px-3 py-1 text-xs font-black text-white uppercase tracking-widest mb-4 ${article.tagColor}`}>
+              {article.tag}
+            </div>
+            <h2 className="text-xl font-black text-white uppercase tracking-tighter mb-3">
+              {article.title}
+            </h2>
+            <p className="text-white/60 font-bold text-sm leading-relaxed mb-6">
+              {article.excerpt}
+            </p>
+            <div className="flex items-center justify-between">
+              <span className="text-white/30 text-xs font-bold uppercase tracking-widest">
+                {article.date}
+              </span>
+              <button
+                onClick={() => { window.location.hash = article.hash; }}
+                className="text-[#FFEA00] text-xs font-black uppercase tracking-widest flex items-center gap-1"
+              >
+                Read <ArrowRight className="w-3 h-3" />
+              </button>
+            </div>
+          </GlassCard>
+        ))}
+      </div>
     </div>
   );
 }
@@ -4480,11 +4543,9 @@ export default function App() {
         setShowEmailGate(true);
       }
     } else if (
-      ["results", "methodology", "ad-studio"].includes(hash)
+      ["results", "methodology", "ad-studio", "articles", "article-round-5-2026"].includes(hash)
     ) {
       setSitePage(hash);
-    } else if (hash === "home" || !hash) {
-      setSitePage("home");
     }
   };
 
@@ -4656,6 +4717,8 @@ export default function App() {
           <ResultsPage data={data} />
         )}
         {sitePage === "methodology" && <MethodologyPage />}
+        {sitePage === "articles" && <ArticlesPage />}
+        {sitePage === "article-round-5-2026" && <ArticleRound5 />}
         {sitePage === "ad-studio" && (
           <AdStudio
             onExit={() => {
