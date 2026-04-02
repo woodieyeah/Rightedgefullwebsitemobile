@@ -2795,9 +2795,10 @@ function ArticlesPage() {
       </GlassCard>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {articles.map((article) => (
-          <GlassCard
+          <div
             key={article.hash}
-            className="p-8 border-l-4 border-l-[#FFEA00] cursor-pointer hover:border-l-[#0047FF] transition-all"
+            onClick={() => { window.location.hash = article.hash; }}
+            className="bg-[#111317] border-2 border-white/10 shadow-[8px_8px_0_0_#0047FF] p-8 border-l-4 border-l-[#FFEA00] cursor-pointer hover:border-l-[#0047FF] transition-all"
           >
             <div className={`inline-flex px-3 py-1 text-xs font-black text-white uppercase tracking-widest mb-4 ${article.tagColor}`}>
               {article.tag}
@@ -2812,14 +2813,11 @@ function ArticlesPage() {
               <span className="text-white/30 text-xs font-bold uppercase tracking-widest">
                 {article.date}
               </span>
-              <button
-                onClick={() => { window.location.hash = article.hash; }}
-                className="text-[#FFEA00] text-xs font-black uppercase tracking-widest flex items-center gap-1"
-              >
+              <span className="text-[#FFEA00] text-xs font-black uppercase tracking-widest flex items-center gap-1">
                 Read <ArrowRight className="w-3 h-3" />
-              </button>
+              </span>
             </div>
-          </GlassCard>
+          </div>
         ))}
       </div>
     </div>
