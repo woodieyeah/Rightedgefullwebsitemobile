@@ -1908,10 +1908,17 @@ function PublicNav({
           <div className="flex gap-2 sm:gap-3">
             {secondaryItems.map((item) => {
               const active = page === item.id;
+              const isExternal = item.id === "articles";
               return (
                 <button
                   key={item.id}
-                  onClick={() => setPage(item.id)}
+                  onClick={() => {
+                    if (isExternal) {
+                      window.location.href = "https://articles.rightedge.com.au";
+                    } else {
+                      setPage(item.id);
+                    }
+                  }}
                   className={`shrink-0 px-4 py-2 sm:px-5 sm:py-2.5 text-xs sm:text-sm font-black uppercase tracking-wider transition-colors ${
                     active
                       ? "bg-[#1E232B] text-[#FFEA00] border-2 border-[#FFEA00] shadow-none translate-x-[2px] translate-y-[2px] sm:translate-x-[4px] sm:translate-y-[4px]"
