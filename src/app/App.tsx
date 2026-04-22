@@ -1744,17 +1744,16 @@ function EmailGateModal({
           </div>
           <div>
             <h3 className="text-xl font-black text-white uppercase tracking-tight">
-              Unlock Premium Access
+              Get Round Picks In Your Inbox
             </h3>
             <p className="text-[10px] font-bold text-[#FFEA00] uppercase tracking-widest">
-              $9.00 / WEEK
+              Free — No credit card needed
             </p>
           </div>
         </div>
 
         <p className="text-sm text-white/70 font-bold leading-relaxed mb-6">
-          Drop your email below. If you're already subscribed, we'll email you a secure login code. 
-          Otherwise, subscribe to unlock full, ongoing access to every match prediction and best bets. Cancel anytime.
+          Enter your email to get RightEdge NRL picks and model insights delivered to your inbox each round. Free, no spam, unsubscribe anytime.
         </p>
 
         <form
@@ -1817,7 +1816,7 @@ function EmailGateModal({
               <RefreshCw className="w-5 h-5 animate-spin" />
             ) : step === "email" ? (
               <>
-                Continue to Payment
+                Subscribe — It's Free
                 <ArrowRight className="w-5 h-5 stroke-[3px]" />
               </>
             ) : (
@@ -1839,7 +1838,7 @@ function EmailGateModal({
         {step === "email" && (
           <div className="mt-6 text-center">
             <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest">
-              Secure payment powered by Stripe
+              NRL edges delivered every round
             </p>
           </div>
         )}
@@ -2380,7 +2379,7 @@ function PublicHero({
             </p>
         
             <p className="mt-4 text-white font-semibold">
-              Unlock everything for just $9/week.
+              Free NRL analytics. Data over gut feel.
             </p>
           </ReadMore>
         </div>
@@ -2390,7 +2389,7 @@ function PublicHero({
             onClick={() => onGoApp('hero_unlock_best_bets')}
             className="inline-flex w-full sm:w-auto items-center justify-center gap-2 bg-[#FFEA00] text-black px-8 py-3 text-base font-black hover:bg-[#FFD600] transition-colors uppercase tracking-wide shadow-[3px_3px_0_0_#FF2E63] sm:shadow-[4px_4px_0_0_#FF2E63]"
           >
-            Unlock Best Bets
+            View Predictions
             <ArrowRight className="w-4 h-4 stroke-[3px]" />
           </button>
 
@@ -4526,23 +4525,15 @@ export default function App() {
   }, []);
 
   const navigateToApp = (source: string = 'unknown') => {
-    (window as any).trackAnalyticsEvent?.('unlock_click', { cta_source: source });
-    if (hasEmailAccess()) {
-      setSitePage("app");
-    } else {
-      setShowEmailGate(true);
-      (window as any).trackAnalyticsEvent?.('paywall_view', { cta_source: source });
-    }
-  };
+  (window as any).trackAnalyticsEvent?.('unlock_click', { cta_source: source });
+  setSitePage("app");
+};
 
   const checkHash = () => {
   const hash = window.location.hash.replace("#", "");
   if (["matches", "best-bets", "performance", "admin"].includes(hash)) {
-    if (hasEmailAccess()) {
-      setSitePage("app");
-    } else {
-      setShowEmailGate(true);
-    }
+  setSitePage("app");
+}
   } else if (["results", "methodology", "ad-studio", "articles", "article-round-5-2026", "article-methodology"].includes(hash)) {
     setSitePage(hash);
   } else if (hash === "home" || !hash) {
