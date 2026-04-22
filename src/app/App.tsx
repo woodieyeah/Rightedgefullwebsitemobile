@@ -1615,26 +1615,6 @@ function EmailGateModal({
     setSubmitting(false);
   }
 };
-
-          } catch (leadErr) {
-            // Non-fatal — proceed to checkout regardless
-            console.warn('[RightEdge] checkout lead capture failed:', leadErr);
-          }
-
-          const checkoutRes = await fetch(
-            `/api/create-checkout-session`,
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${publicAnonKey}`,
-              },
-              body: JSON.stringify({ 
-                email: trimmed,
-                returnUrl: window.location.origin + window.location.pathname
-              }),
-            }
-          );
           
           const checkoutData = await checkoutRes.json();
           if (checkoutRes.ok && checkoutData?.url) {
