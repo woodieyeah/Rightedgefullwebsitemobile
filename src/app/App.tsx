@@ -1616,58 +1616,6 @@ function EmailGateModal({
   }
 };
           
-          const checkoutData = await checkoutRes.json();
-          if (checkoutRes.ok && checkoutData?.url) {
-            window.location.href = checkoutData.url;
-          } else {
-            setErrorMsg(checkoutData?.error || "Failed to start checkout. Please try again.");
-            setSubmitting(false);
-          }
-        }
-      } catch (err: any) {
-        console.error("Error during email submit:", err);
-        setErrorMsg("Network error. Check your connection.");
-        setSubmitting(false);
-      }
-    } else {
-      // Handle OTP
-      if (otp.length < 6) {
-        setErrorMsg("Enter the 6-digit code.");
-        return;
-      }
-      
-      setSubmitting(true);
-      setErrorMsg("");
-      
-      try {
-        const res = await fetch(
-          `/api/verify-otp`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${publicAnonKey}`,
-            },
-            body: JSON.stringify({ email: email.trim().toLowerCase(), code: otp }),
-          }
-        );
-
-        const data = await res.json();
-        if (res.ok && data.success) {
-          (window as any).trackAnalyticsEvent?.('login_success');
-          setEmailAccess(email.trim().toLowerCase());
-          onSuccess();
-        } else {
-          setErrorMsg(data.error || "Invalid or expired code.");
-          setSubmitting(false);
-        }
-      } catch (err: any) {
-        setErrorMsg("Network error verifying code.");
-        setSubmitting(false);
-      }
-    }
-  };
-
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       <div
