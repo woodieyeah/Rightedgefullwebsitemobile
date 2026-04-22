@@ -364,11 +364,6 @@ const appPages = [
     label: "Best Bets",
     icon: <Flame className="w-5 h-5" />,
   },
-  {
-    id: "performance",
-    label: "Performance",
-    icon: <BarChart3 className="w-5 h-5" />,
-  },
 ];
 
 function getAppPages(isAdmin: boolean) {
