@@ -1580,46 +1580,41 @@ function EmailGateModal({
   if (!open) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (step === "email") {
-      const trimmed = email.trim().toLowerCase();
+  e.preventDefault();
+  const trimmed = email.trim().toLowerCase();
+  if (!trimmed || !trimmed.includes("@") || !trimmed.includes(".")) {
+    setErrorMsg("Enter a valid email address.");
+    return;
+  }
 
-      if (
-        !trimmed ||
-        !trimmed.includes("@") ||
-        !trimmed.includes(".")
-      ) {
-        setErrorMsg("Enter a valid email address.");
-        return;
-      }
+  // Admin bypass
+  const BYPASS_EMAILS = ["elliott@woodbry.com", "test@rightedge.com.au"];
+  if (BYPASS_EMAILS.includes(trimmed)) {
+    setEmailAccess(trimmed);
+    window.dispatchEvent(new Event('adminAuthChanged'));
+    onSuccess();
+    return;
+  }
 
-      setSubmitting(true);
-      setErrorMsg("");
-
-      try {
-        console.log("[RightEdge] Verifying email subscription:", trimmed);
-        
-        // Admin / reviewer bypass — no OTP or Stripe check required
-        const BYPASS_EMAILS = ["elliott@woodbry.com", "test@rightedge.com.au"];
-        if (BYPASS_EMAILS.includes(trimmed)) {
-          setEmailAccess(trimmed);
-          window.dispatchEvent(new Event('adminAuthChanged'));
-          onSuccess();
-          return;
-        }
-
-        const res = await fetch(
-          `/api/verify-email`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${publicAnonKey}`,
-            },
-            body: JSON.stringify({ email: trimmed }),
-          }
-        );
+  setSubmitting(true);
+  setErrorMsg("");
+  try {
+    await fetch(`/api/register-free-access`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${publicAnonKey}`,
+      },
+      body: JSON.stringify({ email: trimmed, source: "mailing_list" }),
+    });
+    setEmailAccess(trimmed);
+    (window as any).trackAnalyticsEvent?.("mailing_list_signup", { email: trimmed });
+    onSuccess();
+  } catch (err) {
+    setErrorMsg("Network error. Please try again.");
+    setSubmitting(false);
+  }
+};
 
         const data = await res.json();
         
@@ -2397,7 +2392,7 @@ function PublicHero({
             onClick={onUnlockFeatured}
             className="inline-flex w-full sm:w-auto items-center justify-center gap-2 bg-[#0047FF] px-6 py-3 text-base font-black text-white hover:bg-[#003BCC] transition-colors uppercase tracking-wide"
           >
-            Unlock Featured Match Free
+            Get Picks For Every Round Straight to Your Inbox
             <ChevronDown className="w-4 h-4 stroke-[3px]" />
           </button>
         </div>
@@ -4526,13 +4521,21 @@ export default function App() {
 
   const navigateToApp = (source: string = 'unknown') => {
   (window as any).trackAnalyticsEvent?.('unlock_click', { cta_source: source });
-  setSitePage("app");
+  if (hasEmailAccess()) {
+    setSitePage("app");
+  } else {
+    setShowEmailGate(true);
+  }
 };
 
   const checkHash = () => {
   const hash = window.location.hash.replace("#", "");
   if (["matches", "best-bets", "performance", "admin"].includes(hash)) {
-    setSitePage("app");
+    if (hasEmailAccess()) {
+      setSitePage("app");
+    } else {
+      setShowEmailGate(true);
+    }
   } else if (["results", "methodology", "ad-studio", "articles", "article-round-5-2026", "article-methodology"].includes(hash)) {
     setSitePage(hash);
   } else if (hash === "home" || !hash) {
