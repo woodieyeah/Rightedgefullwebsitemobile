@@ -4532,8 +4532,7 @@ export default function App() {
   const checkHash = () => {
   const hash = window.location.hash.replace("#", "");
   if (["matches", "best-bets", "performance", "admin"].includes(hash)) {
-  setSitePage("app");
-}
+    setSitePage("app");
   } else if (["results", "methodology", "ad-studio", "articles", "article-round-5-2026", "article-methodology"].includes(hash)) {
     setSitePage(hash);
   } else if (hash === "home" || !hash) {
