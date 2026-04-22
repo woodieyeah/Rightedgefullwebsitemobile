@@ -1616,37 +1616,6 @@ function EmailGateModal({
   }
 };
 
-        const data = await res.json();
-        
-        if (data.active) {
-          (window as any).trackAnalyticsEvent?.('login_start');
-          setStep("otp");
-          setSuccessMsg("Welcome back! We sent a 6-digit login code to your email.");
-          setSubmitting(false);
-        } else {
-          console.log("[RightEdge] Initiating checkout for email:", trimmed);
-          (window as any).trackAnalyticsEvent?.('checkout_start');
-
-          // Capture the lead server-side before navigating away so the email
-          // is not lost even if the user abandons the Stripe checkout page.
-          const urlParams = new URLSearchParams(window.location.search);
-          try {
-            await fetch(
-              `/api/register-checkout-lead`,
-              {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${publicAnonKey}` },
-                body: JSON.stringify({
-                  email: trimmed,
-                  visitor_id:   localStorage.getItem('rightedge_visitor_id') || '',
-                  session_id:   sessionStorage.getItem('rightedge_session_id') || '',
-                  utm_source:   urlParams.get('utm_source') || '',
-                  utm_medium:   urlParams.get('utm_medium') || '',
-                  utm_campaign: urlParams.get('utm_campaign') || '',
-                  source: 'checkout_start',
-                }),
-              }
-            );
           } catch (leadErr) {
             // Non-fatal — proceed to checkout regardless
             console.warn('[RightEdge] checkout lead capture failed:', leadErr);
