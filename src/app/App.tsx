@@ -1755,7 +1755,6 @@ function PublicNav({
     { id: "app", label: "Predictions" },
   ];
   const secondaryItems = [
-    { id: "results", label: "Results" },
     { id: "methodology", label: "Methodology" },
     { id: "articles", label: "Articles" },
   ];
