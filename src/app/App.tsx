@@ -3551,7 +3551,7 @@ function TryScorersPage({ data }: { data: DashboardData }) {
     <div className="flex flex-col gap-8">
       <div>
         <h2 className="text-xl md:text-3xl font-black text-white uppercase tracking-tight mb-1 md:mb-2">
-          Try Scorer Value
+          Anytime Try Scorer Value
         </h2>
         <div className="text-[10px] md:text-sm font-bold text-[#FFEA00] uppercase tracking-widest">
           Model probability vs market price — value plays only
