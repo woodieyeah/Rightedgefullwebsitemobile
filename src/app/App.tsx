@@ -1116,6 +1116,7 @@ function buildDashboardData(
     fixtures,
   );
   const betLog = parseBetLog(betLogRows);
+  const tryScorers = parseTryScorers(tryScorerRows);
   const trackerValues = parsePerformanceTracker(trackerRows);
 
   const settled = betLog.filter((row) => row.result !== "P");
@@ -1275,6 +1276,7 @@ function buildDashboardData(
     predictions,
     betLog,
     fixtures,
+    tryScorers,
     bankrollData,
     clvData,
     rounds,
