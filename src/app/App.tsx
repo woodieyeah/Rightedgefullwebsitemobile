@@ -4496,11 +4496,13 @@ export default function App() {
         betLogRows,
         trackerRows,
         fixtureRows,
+        tryScorerRows,
       ] = await Promise.all([
         fetchSheetRows(SHEET_GIDS.matchPredictions),
         fetchSheetRows(SHEET_GIDS.betLog),
         fetchSheetRows(SHEET_GIDS.performanceTracker),
         fetchSheetRows(SHEET_GIDS.fixtures2026),
+        fetchSheetRows(SHEET_GIDS.tryScorers),
       ]);
 
       const dashboardData = buildDashboardData(
