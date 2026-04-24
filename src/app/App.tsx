@@ -3562,6 +3562,11 @@ function TryScorersPage({ data }: { data: DashboardData }) {
         </div>
       </div>
 
+      <div className="bg-[#111317] border border-[#0047FF]/25 px-4 py-3 text-xs font-mono text-white/50 leading-relaxed flex items-start gap-2">
+        <span className="text-[#0047FF] font-black shrink-0">ℹ</span>
+        <span><span className="text-white/70 font-bold">Methodology —</span> Probabilities sourced from StatsInsider. Edge calculated against best available bookmaker market price. Only positive edge plays shown.</span>
+      </div>
+
       {valuePlays.length === 0 ? (
         <GlassCard className="p-4 md:p-8 text-center border-l-4 border-l-white/20">
           <div className="text-white/50 font-bold uppercase tracking-widest text-[10px] md:text-base">
@@ -3569,65 +3574,116 @@ function TryScorersPage({ data }: { data: DashboardData }) {
           </div>
         </GlassCard>
       ) : (
-        <div className="flex flex-col gap-6">
-          {Object.entries(matchGroups).map(([match, players]) => (
-            <GlassCard key={match} className="p-4 md:p-6 border-l-4 border-l-[#FFEA00]">
-              <div className="text-xs font-black text-[#FFEA00] uppercase tracking-widest mb-4">
-                {match}
+        <div className="flex flex-col gap-8">
+          {Object.entries(matchGroups).map(([match, players]) => {
+            const teams = match.split(" v ");
+            const homeTeam = teams[0] || "";
+            const awayTeam = teams[1] || "";
+
+            return (
+              <div key={match} className="flex flex-col">
+                {/* Match Header */}
+                <div className="flex items-center gap-4 mb-3 pb-3 border-b-2 border-white/10">
+                  <div className="flex items-center gap-2">
+                    <TeamLogo teamName={homeTeam} className="w-8 h-8" />
+                    <span className="text-sm font-black text-white uppercase tracking-tight">{homeTeam}</span>
+                  </div>
+                  <span className="text-white/30 text-xs font-black">vs</span>
+                  <div className="flex items-center gap-2">
+                    <TeamLogo teamName={awayTeam} className="w-8 h-8" />
+                    <span className="text-sm font-black text-white uppercase tracking-tight">{awayTeam}</span>
+                  </div>
+                </div>
+
+                {/* Desktop Table */}
+                <div className="hidden md:block overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="border-b border-white/10">
+                        {["Player", "Team", "Position", "StatsInsider %", "Best Odds", "Bookmaker", "Market Implied", "Edge"].map((h) => (
+                          <th key={h} className="pb-3 px-3 font-black text-white/40 uppercase tracking-widest text-[10px]">
+                            {h}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5">
+                      {players
+                        .sort((a, b) => b.edgePct - a.edgePct)
+                        .map((row, i) => (
+                          <tr
+                            key={i}
+                            className="hover:bg-white/[0.03] transition-colors group"
+                          >
+                            <td className="py-4 px-3 text-sm font-black text-white">
+                              {row.player}
+                            </td>
+                            <td className="py-4 px-3">
+                              <div className="flex items-center gap-2">
+                                <TeamLogo teamName={row.team} className="w-5 h-5 text-[8px]" />
+                                <span className="text-sm font-bold text-white/70">{row.team}</span>
+                              </div>
+                            </td>
+                            <td className="py-4 px-3 text-sm font-bold text-white/50 uppercase tracking-wider">
+                              {row.position}
+                            </td>
+                            <td className="py-4 px-3 text-sm font-bold text-white">
+                              {formatPercent(row.statsInsiderPct, 1)}
+                            </td>
+                            <td className="py-4 px-3 text-sm font-black text-[#00E676]">
+                              ${row.bestOdds.toFixed(2)}
+                            </td>
+                            <td className="py-4 px-3 text-sm font-bold text-[#FFEA00] uppercase tracking-wider">
+                              {row.bookmaker}
+                            </td>
+                            <td className="py-4 px-3 text-sm font-bold text-white/50">
+                              {formatPercent(row.marketImpliedPct, 1)}
+                            </td>
+                            <td className="py-4 px-3">
+                              <span className={`inline-flex items-center px-2 py-1 text-xs font-black uppercase tracking-widest ${
+                                row.edgePct >= 5
+                                  ? "bg-[#00E676] text-black"
+                                  : row.edgePct >= 2.5
+                                  ? "bg-[#FFEA00] text-black"
+                                  : "bg-white/10 text-white"
+                              }`}>
+                                +{formatPercent(row.edgePct, 1)}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Mobile Cards */}
+                <div className="md:hidden flex flex-col gap-3">
+                  {players
+                    .sort((a, b) => b.edgePct - a.edgePct)
+                    .map((row, i) => (
+                      <div key={i} className="bg-[#1E232B] border border-white/10 p-4 flex items-center justify-between gap-4">
+                        <div className="flex items-center gap-3">
+                          <TeamLogo teamName={row.team} className="w-8 h-8 shrink-0" />
+                          <div>
+                            <div className="text-sm font-black text-white">{row.player}</div>
+                            <div className="text-[10px] font-bold text-white/50 uppercase tracking-wider">{row.position} • ${row.bestOdds.toFixed(2)} {row.bookmaker}</div>
+                          </div>
+                        </div>
+                        <span className={`shrink-0 inline-flex items-center px-2 py-1 text-xs font-black uppercase tracking-widest ${
+                          row.edgePct >= 5
+                            ? "bg-[#00E676] text-black"
+                            : row.edgePct >= 2.5
+                            ? "bg-[#FFEA00] text-black"
+                            : "bg-white/10 text-white"
+                        }`}>
+                          +{formatPercent(row.edgePct, 1)}
+                        </span>
+                      </div>
+                    ))}
+                </div>
               </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="border-b-2 border-white/10">
-                      {["Player", "Team", "Position", "StatsInsider", "Best Odds", "Bookmaker", "Edge"].map((h) => (
-                        <th
-                          key={h}
-                          className="pb-3 px-3 font-black text-white/50 uppercase tracking-widest text-[10px]"
-                        >
-                          {h}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-white/5">
-                    {players
-                      .sort((a, b) => b.edgePct - a.edgePct)
-                      .map((row, i) => (
-                        <tr key={i} className="hover:bg-white/[0.03] transition-colors">
-                          <td className="py-4 px-3 text-sm font-black text-white">
-                            {row.player}
-                          </td>
-                          <td className="py-4 px-3 text-sm font-bold text-white/70">
-                            {row.team}
-                          </td>
-                          <td className="py-4 px-3 text-sm font-bold text-white/50">
-                            {row.position}
-                          </td>
-                          <td className="py-4 px-3 text-sm font-bold text-white">
-                            {formatPercent(row.statsInsiderPct, 1)}
-                          </td>
-                          <td className="py-4 px-3 text-sm font-black text-white">
-                            ${row.bestOdds.toFixed(2)}
-                          </td>
-                          <td className="py-4 px-3 text-sm font-bold text-[#FFEA00]">
-                            {row.bookmaker}
-                          </td>
-                          <td className="py-4 px-3">
-                            <span className={`text-sm font-black ${
-                              row.edgePct >= 5
-                                ? "text-[#00E676]"
-                                : "text-[#FFEA00]"
-                            }`}>
-                              +{formatPercent(row.edgePct, 1)}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                  </tbody>
-                </table>
-              </div>
-            </GlassCard>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
