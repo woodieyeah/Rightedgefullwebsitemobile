@@ -3533,6 +3533,102 @@ function BestBetsPage({ data }: { data: DashboardData }) {
   );
 }
 
+function TryScorersPage({ data }: { data: DashboardData }) {
+  const valuePlays = data.tryScorers.filter(
+    (row) => row.edgePct > 0
+  );
+
+  const matchGroups = valuePlays.reduce((groups, row) => {
+    if (!groups[row.match]) groups[row.match] = [];
+    groups[row.match].push(row);
+    return groups;
+  }, {} as Record<string, TryScorerRow[]>);
+
+  return (
+    <div className="flex flex-col gap-6 md:gap-8">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl md:text-3xl font-black text-white uppercase tracking-tight mb-1 md:mb-2">
+            Try Scorer Value
+          </h2>
+          <div className="text-[10px] md:text-sm font-bold text-[#FFEA00] uppercase tracking-widest">
+            StatsInsider model vs market — positive edge only
+          </div>
+        </div>
+      </div>
+
+      {valuePlays.length === 0 ? (
+        <GlassCard className="p-4 md:p-8 text-center border-l-4 border-l-white/20">
+          <div className="text-white/50 font-bold uppercase tracking-widest text-[10px] md:text-base">
+            No try scorer value plays identified this round yet.
+          </div>
+        </GlassCard>
+      ) : (
+        <div className="flex flex-col gap-6">
+          {Object.entries(matchGroups).map(([match, players]) => (
+            <GlassCard key={match} className="p-4 md:p-6 border-l-4 border-l-[#FFEA00]">
+              <div className="text-xs font-black text-[#FFEA00] uppercase tracking-widest mb-4">
+                {match}
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b-2 border-white/10">
+                      {["Player", "Team", "Position", "StatsInsider", "Best Odds", "Bookmaker", "Edge"].map((h) => (
+                        <th
+                          key={h}
+                          className="pb-3 px-3 font-black text-white/50 uppercase tracking-widest text-[10px]"
+                        >
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {players
+                      .sort((a, b) => b.edgePct - a.edgePct)
+                      .map((row, i) => (
+                        <tr key={i} className="hover:bg-white/[0.03] transition-colors">
+                          <td className="py-4 px-3 text-sm font-black text-white">
+                            {row.player}
+                          </td>
+                          <td className="py-4 px-3 text-sm font-bold text-white/70">
+                            {row.team}
+                          </td>
+                          <td className="py-4 px-3 text-sm font-bold text-white/50">
+                            {row.position}
+                          </td>
+                          <td className="py-4 px-3 text-sm font-bold text-white">
+                            {formatPercent(row.statsInsiderPct, 1)}
+                          </td>
+                          <td className="py-4 px-3 text-sm font-black text-white">
+                            ${row.bestOdds.toFixed(2)}
+                          </td>
+                          <td className="py-4 px-3 text-sm font-bold text-[#FFEA00]">
+                            {row.bookmaker}
+                          </td>
+                          <td className="py-4 px-3">
+                            <span className={`text-sm font-black ${
+                              row.edgePct >= 5
+                                ? "text-[#00E676]"
+                                : "text-[#FFEA00]"
+                            }`}>
+                              +{formatPercent(row.edgePct, 1)}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            </GlassCard>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AnalyticsPage({ data }: { data: DashboardData }) {
   return (
     <div className="flex flex-col gap-6 md:gap-8">
