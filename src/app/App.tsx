@@ -3641,7 +3641,7 @@ function TryScorersPage({ data }: { data: DashboardData }) {
           <div className="flex-1 min-w-0">
             <div className="text-sm font-black text-white mb-1">{row.player}</div>
             <div className="flex items-center gap-1 mb-1">
-              <span className="text-xs font-black" style={{ color: teamColors.secondary === '#FFFFFF' ? teamColors.primary : teamColors.secondary }}>
+              <span className="text-xs font-black" style={{ color: teamColors.secondary === '#FFFFFF' || teamColors.secondary === '#000000' ? '#FFFFFF' : teamColors.secondary }}>
                 {row.team}
               </span>
               <span className="text-xs text-white/40">· {row.position}</span>
@@ -3654,7 +3654,7 @@ function TryScorersPage({ data }: { data: DashboardData }) {
             <span className="text-2xl font-black text-white">${row.bestOdds.toFixed(2)}</span>
             <span className="text-[10px] text-white/40 uppercase tracking-wider">{row.bookmaker}</span>
             <span className={`text-xs font-black ${row.edgePct >= 5 ? 'text-[#00E676]' : 'text-[#FFEA00]'}`}>
-              +{formatPercent(row.edgePct, 1)}
+             Edge +{formatPercent(row.edgePct, 1)}
             </span>
           </div>
         </div>
