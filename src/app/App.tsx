@@ -3645,6 +3645,15 @@ function TryScorersPage({ data }: { data: DashboardData }) {
                             <div className="text-[10px] font-bold text-white/50 uppercase tracking-wider">
                               ${row.bestOdds.toFixed(2)} — {row.bookmaker}
                             </div>
+                            <div className="flex items-center gap-3 mt-1">
+                              <span className="text-[10px] font-bold text-white/40 uppercase tracking-wider">
+                                Model {formatPercent(row.statsInsiderPct, 1)}
+                              </span>
+                              <span className="text-white/20 text-[10px]">vs</span>
+                              <span className="text-[10px] font-bold text-white/40 uppercase tracking-wider">
+                                Market {formatPercent(row.marketImpliedPct, 1)}
+                              </span>
+                            </div>
                           </div>
                         </div>
                         <span className={`shrink-0 px-2 py-1 text-xs font-black uppercase ${
@@ -3652,17 +3661,11 @@ function TryScorersPage({ data }: { data: DashboardData }) {
                             ? "bg-[#00E676] text-black"
                             : "bg-[#FFEA00] text-black"
                         }`}>
-                          +{formatPercent(row.edgePct, 1)}
+                          Edge +{formatPercent(row.edgePct, 1)}
                         </span>
                       </div>
                     ))}
                 </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
   );
 }
 
