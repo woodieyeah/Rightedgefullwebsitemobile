@@ -1075,6 +1075,7 @@ function buildDashboardData(
   betLogRows: RawRow[],
   trackerRows: RawRow[],
   fixtureRows: RawRow[],
+  tryScorerRows: RawRow[],
 ): DashboardData {
   const fixtures = parseFixtures(fixtureRows);
   const predictions = parsePredictions(
@@ -4510,6 +4511,7 @@ export default function App() {
         betLogRows,
         trackerRows,
         fixtureRows,
+        tryScorerRows,
       );
 
       setData(dashboardData);
