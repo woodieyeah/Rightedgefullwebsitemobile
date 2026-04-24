@@ -3574,13 +3574,11 @@ function TryScorersPage({ data }: { data: DashboardData }) {
             return (
               <div key={match}>
                 {/* Match Header */}
-                <div className="flex items-center gap-3 mb-4 pb-3 border-b-2 border-white/10">
-                  <TeamLogo teamName={homeTeam} className="w-7 h-7" />
-                  <span className="text-sm font-black text-white uppercase">{homeTeam}</span>
-                  <span className="text-white/30 text-xs font-black">vs</span>
-                  <TeamLogo teamName={awayTeam} className="w-7 h-7" />
-                  <span className="text-sm font-black text-white uppercase">{awayTeam}</span>
-                </div>
+                <div className="flex items-center gap-2 mb-4 pb-3 border-b border-white/10">
+  <div className="w-3 h-3 rounded-sm shrink-0" style={{ backgroundColor: getTeamColors(homeTeam).primary }} />
+  <div className="w-3 h-3 rounded-sm shrink-0" style={{ backgroundColor: getTeamColors(awayTeam).primary }} />
+  <span className="text-[10px] font-black text-white/50 uppercase tracking-widest">{homeTeam} v {awayTeam}</span>
+</div>
 
                 {/* Desktop */}
                 <div className="hidden md:block">
@@ -3636,36 +3634,32 @@ function TryScorersPage({ data }: { data: DashboardData }) {
 <div className="md:hidden flex flex-col divide-y divide-white/5">
   {players
     .sort((a, b) => b.edgePct - a.edgePct)
-    .map((row, i) => (
-      <div key={i} className="py-4 flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <TeamLogo teamName={row.team} className="w-8 h-8 shrink-0" />
-          <div>
-            <div className="text-sm font-black text-white">{row.player}</div>
-            <div className="flex items-center gap-2 mt-0.5">
-              <span className="text-lg font-black text-[#00E676]">${row.bestOdds.toFixed(2)}</span>
-              <span className="text-[10px] font-bold text-white/40 uppercase tracking-wider">{row.bookmaker}</span>
+    .map((row, i) => {
+      const teamColors = getTeamColors(row.team);
+      return (
+        <div key={i} className="py-4 flex items-center justify-between gap-4">
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-black text-white mb-1">{row.player}</div>
+            <div className="flex items-center gap-1 mb-1">
+              <span className="text-xs font-black" style={{ color: teamColors.secondary === '#FFFFFF' ? teamColors.primary : teamColors.secondary }}>
+                {row.team}
+              </span>
+              <span className="text-xs text-white/40">· {row.position}</span>
             </div>
-            <div className="flex items-center gap-2 mt-0.5">
-              <span className="text-[10px] font-bold text-white/40 uppercase tracking-wider">
-                Model {formatPercent(row.statsInsiderPct, 1)}
-              </span>
-              <span className="text-white/20 text-[10px]">vs</span>
-              <span className="text-[10px] font-bold text-white/40 uppercase tracking-wider">
-                Market {formatPercent(row.marketImpliedPct, 1)}
-              </span>
+            <div className="text-[10px] text-white/30 uppercase tracking-wider">
+              Model {formatPercent(row.statsInsiderPct, 1)} · Market {formatPercent(row.marketImpliedPct, 1)}
             </div>
           </div>
+          <div className="flex flex-col items-end gap-1 shrink-0">
+            <span className="text-2xl font-black text-white">${row.bestOdds.toFixed(2)}</span>
+            <span className="text-[10px] text-white/40 uppercase tracking-wider">{row.bookmaker}</span>
+            <span className={`text-xs font-black ${row.edgePct >= 5 ? 'text-[#00E676]' : 'text-[#FFEA00]'}`}>
+              +{formatPercent(row.edgePct, 1)}
+            </span>
+          </div>
         </div>
-        <span className={`shrink-0 text-sm font-black ${
-          row.edgePct >= 5
-            ? "text-[#00E676]"
-            : "text-[#FFEA00]"
-        }`}>
-          +{formatPercent(row.edgePct, 1)}
-        </span>
-      </div>
-    ))}
+      );
+    })}
 </div>
                </div>
             );
