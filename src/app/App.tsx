@@ -3633,39 +3633,40 @@ function TryScorersPage({ data }: { data: DashboardData }) {
                 </div>
 
                 {/* Mobile */}
-                <div className="md:hidden flex flex-col divide-y divide-white/5">
-                  {players
-                    .sort((a, b) => b.edgePct - a.edgePct)
-                    .map((row, i) => (
-                      <div key={i} className="py-4 flex items-center justify-between gap-4">
-                        <div className="flex items-center gap-3">
-                          <TeamLogo teamName={row.team} className="w-8 h-8 shrink-0" />
-                          <div>
-                            <div className="text-sm font-black text-white">{row.player}</div>
-                            <div className="text-[10px] font-bold text-white/50 uppercase tracking-wider">
-                              ${row.bestOdds.toFixed(2)} — {row.bookmaker}
-                            </div>
-                            <div className="flex items-center gap-3 mt-1">
-                              <span className="text-[10px] font-bold text-white/40 uppercase tracking-wider">
-                                Model {formatPercent(row.statsInsiderPct, 1)}
-                              </span>
-                              <span className="text-white/20 text-[10px]">vs</span>
-                              <span className="text-[10px] font-bold text-white/40 uppercase tracking-wider">
-                                Market {formatPercent(row.marketImpliedPct, 1)}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                        <span className={`shrink-0 px-2 py-1 text-xs font-black uppercase ${
-                          row.edgePct >= 5
-                            ? "bg-[#00E676] text-black"
-                            : "bg-[#FFEA00] text-black"
-                        }`}>
-                          Edge +{formatPercent(row.edgePct, 1)}
-                        </span>
-                      </div>
-                    ))}
-                </div>
+<div className="md:hidden flex flex-col divide-y divide-white/5">
+  {players
+    .sort((a, b) => b.edgePct - a.edgePct)
+    .map((row, i) => (
+      <div key={i} className="py-4 flex items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <TeamLogo teamName={row.team} className="w-8 h-8 shrink-0" />
+          <div>
+            <div className="text-sm font-black text-white">{row.player}</div>
+            <div className="flex items-center gap-2 mt-0.5">
+              <span className="text-lg font-black text-[#00E676]">${row.bestOdds.toFixed(2)}</span>
+              <span className="text-[10px] font-bold text-white/40 uppercase tracking-wider">{row.bookmaker}</span>
+            </div>
+            <div className="flex items-center gap-2 mt-0.5">
+              <span className="text-[10px] font-bold text-white/40 uppercase tracking-wider">
+                Model {formatPercent(row.statsInsiderPct, 1)}
+              </span>
+              <span className="text-white/20 text-[10px]">vs</span>
+              <span className="text-[10px] font-bold text-white/40 uppercase tracking-wider">
+                Market {formatPercent(row.marketImpliedPct, 1)}
+              </span>
+            </div>
+          </div>
+        </div>
+        <span className={`shrink-0 text-sm font-black ${
+          row.edgePct >= 5
+            ? "text-[#00E676]"
+            : "text-[#FFEA00]"
+        }`}>
+          +{formatPercent(row.edgePct, 1)}
+        </span>
+      </div>
+    ))}
+</div>
                </div>
             );
           })}
