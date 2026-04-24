@@ -1043,6 +1043,24 @@ function parseBetLog(rows: RawRow[]): BetLogRow[] {
     .filter((row) => row.match);
 }
 
+function parseTryScorers(rows: RawRow[]): TryScorerRow[] {
+  return rows
+    .map((row) => ({
+      round: toNumber(getValue(row, ["Round"])),
+      match: getValue(row, ["Match"]),
+      player: getValue(row, ["Player"]),
+      team: getValue(row, ["Team"]),
+      position: getValue(row, ["Position"]),
+      statsInsiderPct: toPercentNumber(getValue(row, ["StatsInsider %"])),
+      bestOdds: toNumber(getValue(row, ["Best Odds"])),
+      bookmaker: getValue(row, ["Bookmaker"]),
+      marketImpliedPct: toPercentNumber(getValue(row, ["Market Implied %"])),
+      edgePct: toPercentNumber(getValue(row, ["Edge %"])),
+      value: getValue(row, ["Value"]),
+    }))
+    .filter((row) => row.player && row.match);
+}
+
 function parsePerformanceTracker(rows: RawRow[]) {
   const found: Record<string, number> = {};
 
