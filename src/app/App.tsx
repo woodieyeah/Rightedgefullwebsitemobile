@@ -78,6 +78,7 @@ const SHEET_GIDS = {
   betLog: "555689434",
   performanceTracker: "1881892521",
   fixtures2026: "2096464205",
+  tryScorers: "222068410",
 };
 
 const NRL_COLORS: Record<
