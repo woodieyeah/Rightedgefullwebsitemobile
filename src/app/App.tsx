@@ -380,6 +380,11 @@ const appPages = [
     label: "Best Bets",
     icon: <Flame className="w-5 h-5" />,
   },
+  {
+    id: "try-scorers",
+    label: "Try Scorers",
+    icon: <Trophy className="w-5 h-5" />,
+  },
 ];
 
 function getAppPages(isAdmin: boolean) {
