@@ -4562,7 +4562,7 @@ export default function App() {
 
   const checkHash = () => {
   const hash = window.location.hash.replace("#", "");
-  if (["matches", "best-bets", "performance", "admin"].includes(hash)) {
+  if (["matches", "best-bets", "try-scorers", "performance", "admin"].includes(hash)) {
     if (hasEmailAccess()) {
       setSitePage("app");
     } else {
