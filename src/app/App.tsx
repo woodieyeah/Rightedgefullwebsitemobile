@@ -313,6 +313,20 @@ type BetLogRow = {
   clv: number;
 };
 
+type TryScorerRow = {
+  round: number;
+  match: string;
+  player: string;
+  team: string;
+  position: string;
+  statsInsiderPct: number;
+  bestOdds: number;
+  bookmaker: string;
+  marketImpliedPct: number;
+  edgePct: number;
+  value: string;
+};
+
 type RoundSummary = {
   round: string;
   bets: number;
@@ -352,6 +366,7 @@ type DashboardData = {
   trackerValues: Record<string, number>;
   averageEdge: number;
   strongestBet: string;
+  tryScorers: TryScorerRow[];
 };
 
 const appPages = [
