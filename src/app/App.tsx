@@ -3832,7 +3832,7 @@ function AppDashboard({
   const [page, setPage] = useState(() => {
     const hash = window.location.hash.replace("#", "");
     if (
-      ["matches", "best-bets", "performance", "admin"].includes(
+      ["matches", "best-bets", "try-scorers", "performance", "admin"].includes(
         hash,
       )
     ) {
@@ -4076,6 +4076,9 @@ function AppDashboard({
               )}
               {page === "matches" && (
                 <PredictionsPage data={data} />
+              )}
+              {page === "try-scorers" && (
+                <TryScorersPage data={data} />
               )}
               {page === "admin" && (
                 <AdminDashboard
