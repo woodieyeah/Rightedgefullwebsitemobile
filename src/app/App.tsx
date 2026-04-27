@@ -1420,6 +1420,57 @@ function setEmailAccess(email: string) {
   } catch {}
 }
 
+const PAID_ACCESS_KEY = "rightedge_paid_access";
+
+function hasPaidAccess(): boolean {
+  try {
+    const val = localStorage.getItem(PAID_ACCESS_KEY);
+    if (!val) return false;
+
+    if (val.startsWith("{")) {
+      const data = JSON.parse(val);
+      if (data.email && (data.subscribed || (data.expiresAt && Date.now() < data.expiresAt))) {
+        return true;
+      }
+    }
+
+    localStorage.removeItem(PAID_ACCESS_KEY);
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+function getPaidUserEmail(): string | null {
+  try {
+    const val = localStorage.getItem(PAID_ACCESS_KEY);
+    if (!val) return null;
+    if (val.startsWith("{")) {
+      const data = JSON.parse(val);
+      return data.email || null;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function setPaidAccess(email: string) {
+  try {
+    const normalizedEmail = email.trim().toLowerCase();
+    localStorage.setItem(
+      PAID_ACCESS_KEY,
+      JSON.stringify({ email: normalizedEmail, subscribed: true }),
+    );
+    localStorage.setItem('rightedge_subscriber', 'true');
+
+    const INTERNAL_EMAILS = ['elliott@woodbry.com', 'ewoodbry@gmail.com'];
+    if (INTERNAL_EMAILS.includes(normalizedEmail)) {
+      localStorage.setItem('rightedge_internal_visitor', 'true');
+    }
+  } catch {}
+}
+
 // ── Free Featured Match Email Gate ───────────────────────────────────────────
 // No payment required — just collects email and unlocks the featured match.
 const FEATURED_ACCESS_KEY = 'rightedge_featured_access';
@@ -1593,6 +1644,268 @@ function FeaturedMatchEmailGate({
             </form>
           </>
         )}
+      </div>
+    </div>
+  );
+}
+
+function PaymentGateModal({
+  open,
+  onClose,
+  onSuccess,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const [step, setStep] = useState<"email" | "otp" | "processing">("email");
+  const [email, setEmail] = useState("");
+  const [otp, setOtp] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
+  const [successMsg, setSuccessMsg] = useState("");
+
+  if (!open) return null;
+
+  const trimmedEmail = email.trim().toLowerCase();
+
+  const handleEmailSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!trimmedEmail || !trimmedEmail.includes("@") || !trimmedEmail.includes(".")) {
+      setErrorMsg("Enter a valid email address.");
+      return;
+    }
+
+    setSubmitting(true);
+    setErrorMsg("");
+    setSuccessMsg("");
+
+    try {
+      const verifyRes = await fetch(`/api/verify-email`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${publicAnonKey}`,
+        },
+        body: JSON.stringify({ email: trimmedEmail }),
+      });
+
+      const verifyData = await verifyRes.json().catch(() => ({}));
+      const isActiveSubscriber = Boolean(
+        verifyData.activeSubscriber ||
+        verifyData.active_subscriber ||
+        verifyData.subscribed ||
+        verifyData.active
+      );
+
+      if (verifyRes.ok && isActiveSubscriber) {
+        setSuccessMsg("Active subscription found. Enter the code sent to your email.");
+        setStep("otp");
+        setSubmitting(false);
+        return;
+      }
+
+      setStep("processing");
+      const successUrl = `${window.location.origin}${window.location.pathname}?success=true&email=${encodeURIComponent(trimmedEmail)}#best-bets`;
+      const cancelUrl = `${window.location.origin}${window.location.pathname}#best-bets`;
+
+      const checkoutRes = await fetch(`/api/create-checkout-session`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${publicAnonKey}`,
+        },
+        body: JSON.stringify({
+          email: trimmedEmail,
+          successUrl,
+          success_url: successUrl,
+          cancelUrl,
+          cancel_url: cancelUrl,
+          returnUrl: successUrl,
+        }),
+      });
+
+      const checkoutData = await checkoutRes.json().catch(() => ({}));
+      if (checkoutRes.ok && checkoutData.url) {
+        window.location.href = checkoutData.url;
+        return;
+      }
+
+      setStep("email");
+      setErrorMsg(checkoutData.error || "Could not start checkout. Please try again.");
+      setSubmitting(false);
+    } catch (err) {
+      setStep("email");
+      setErrorMsg("Network error. Please check your connection and try again.");
+      setSubmitting(false);
+    }
+  };
+
+  const handleOtpSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmedOtp = otp.trim();
+    if (!trimmedOtp || trimmedOtp.length < 4) {
+      setErrorMsg("Enter the verification code.");
+      return;
+    }
+
+    setSubmitting(true);
+    setErrorMsg("");
+
+    try {
+      const res = await fetch(`/api/verify-otp`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${publicAnonKey}`,
+        },
+        body: JSON.stringify({ email: trimmedEmail, otp: trimmedOtp }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      const verified = Boolean(data.success || data.verified || data.ok);
+
+      if (res.ok && verified) {
+        setPaidAccess(trimmedEmail);
+        (window as any).trackAnalyticsEvent?.("paid_access_verified", { email: trimmedEmail });
+        onSuccess();
+        return;
+      }
+
+      setErrorMsg(data.error || "Invalid code. Please try again.");
+      setSubmitting(false);
+    } catch (err) {
+      setErrorMsg("Network error. Please try again.");
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+      <div
+        className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+        onClick={onClose}
+      />
+      <div className="relative w-full max-w-md bg-[#111317] border-4 border-[#FF2E63] shadow-[8px_8px_0_0_#FF2E63] p-8 sm:p-10">
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 text-white/40 hover:text-white transition-colors"
+        >
+          <X className="w-5 h-5" />
+        </button>
+
+        <div className="flex items-center gap-3 mb-6">
+          <div className="bg-[#FF2E63] p-2.5">
+            <Lock className="w-6 h-6 text-white stroke-[3px]" />
+          </div>
+          <div>
+            <h3 className="text-xl font-black text-white uppercase tracking-tight">
+              Unlock Best Bets
+            </h3>
+            <p className="text-[10px] font-bold text-[#FFEA00] uppercase tracking-widest">
+              Premium — $5/week
+            </p>
+          </div>
+        </div>
+
+        <p className="text-sm text-white/70 font-bold leading-relaxed mb-6">
+          Get the official RightEdge best bets, staking plan, and model edges for each NRL round.
+        </p>
+
+        {step === "processing" ? (
+          <div className="flex flex-col items-center text-center py-6">
+            <RefreshCw className="w-10 h-10 mb-5 animate-spin text-[#FF2E63]" />
+            <div className="text-white font-black uppercase tracking-tight mb-2">
+              Redirecting to Stripe
+            </div>
+            <p className="text-xs text-white/50 font-bold uppercase tracking-wider">
+              Secure checkout is opening now.
+            </p>
+          </div>
+        ) : (
+          <form
+            onSubmit={step === "email" ? handleEmailSubmit : handleOtpSubmit}
+            className="flex flex-col gap-4"
+          >
+            {step === "email" ? (
+              <div className="relative">
+                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/30" />
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    setErrorMsg("");
+                  }}
+                  placeholder="your@email.com"
+                  autoFocus
+                  disabled={submitting}
+                  className="w-full bg-[#0B0D10] border-2 border-white/10 text-white font-bold text-base pl-12 pr-4 py-4 placeholder:text-white/20 focus:outline-none focus:border-[#FF2E63] transition-colors disabled:opacity-50"
+                />
+              </div>
+            ) : (
+              <>
+                {successMsg && (
+                  <div className="bg-[#00E676]/10 text-[#00E676] border border-[#00E676]/20 p-3 text-xs font-bold uppercase tracking-wider">
+                    {successMsg}
+                  </div>
+                )}
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={otp}
+                    onChange={(e) => {
+                      setOtp(e.target.value);
+                      setErrorMsg("");
+                    }}
+                    placeholder="000000"
+                    maxLength={6}
+                    autoFocus
+                    disabled={submitting}
+                    className="w-full bg-[#0B0D10] border-2 border-white/10 text-white font-black text-2xl text-center tracking-[0.5em] py-4 placeholder:text-white/20 placeholder:tracking-normal focus:outline-none focus:border-[#00E676] transition-colors disabled:opacity-50"
+                  />
+                </div>
+              </>
+            )}
+
+            {errorMsg && (
+              <p className="text-[#FF2E63] text-xs font-bold uppercase tracking-wider">
+                {errorMsg}
+              </p>
+            )}
+
+            <button
+              type="submit"
+              disabled={submitting}
+              className="w-full bg-[#FF2E63] text-white py-4 text-base font-black uppercase tracking-wider hover:bg-[#E62959] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-[4px_4px_0_0_#0047FF]"
+            >
+              {submitting ? (
+                <RefreshCw className="w-5 h-5 animate-spin" />
+              ) : step === "email" ? (
+                <>
+                  Unlock for $5/week
+                  <ArrowRight className="w-5 h-5 stroke-[3px]" />
+                </>
+              ) : (
+                "Verify Code"
+              )}
+            </button>
+
+            {step === "otp" && (
+              <button
+                type="button"
+                onClick={() => { setStep("email"); setOtp(""); setSuccessMsg(""); setErrorMsg(""); }}
+                className="text-white/40 hover:text-white text-xs font-bold uppercase tracking-wider transition-colors mt-2"
+              >
+                Use a different email
+              </button>
+            )}
+          </form>
+        )}
+
+        <p className="text-[10px] text-white/30 font-bold uppercase tracking-wider mt-4 text-center">
+          Secure payment handled by Stripe.
+        </p>
       </div>
     </div>
   );
@@ -3489,7 +3802,13 @@ function PredictionsPage({ data }: { data: DashboardData }) {
   );
 }
 
-function BestBetsPage({ data }: { data: DashboardData }) {
+function BestBetsPage({
+  data,
+  onRequestAccess,
+}: {
+  data: DashboardData;
+  onRequestAccess: () => void;
+}) {
   // Only show pending (unsettled) bets — exclude any match already in the
   // bet log with a W or L result.
   const settledMatchKeys = new Set(
@@ -3504,6 +3823,34 @@ function BestBetsPage({ data }: { data: DashboardData }) {
       row.stake > 0 &&
       !settledMatchKeys.has(row.match.toLowerCase()),
   );
+
+  if (!hasPaidAccess()) {
+    return (
+      <div className="flex flex-col gap-6 md:gap-8">
+        <GlassCard className="p-8 md:p-12 text-center !border-[#FF2E63] !shadow-[8px_8px_0_0_#FF2E63] relative overflow-hidden">
+          <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(255,46,99,0.08),transparent_55%)]" />
+          <div className="relative z-10 flex flex-col items-center max-w-xl mx-auto">
+            <div className="bg-[#FF2E63] p-4 mb-6 shadow-[4px_4px_0_0_#0047FF]">
+              <Lock className="w-10 h-10 text-white stroke-[3px]" />
+            </div>
+            <h2 className="text-3xl md:text-5xl font-black text-white uppercase tracking-tight mb-3">
+              Premium Content
+            </h2>
+            <p className="text-sm md:text-base text-white/70 font-bold leading-relaxed mb-8">
+              Unlock RightEdge official best bets, staking guidance, and model edge breakdowns for this round.
+            </p>
+            <button
+              onClick={onRequestAccess}
+              className="inline-flex items-center justify-center gap-3 bg-[#FF2E63] text-white px-8 py-4 text-base font-black uppercase tracking-wider hover:bg-[#E62959] transition-colors shadow-[4px_4px_0_0_#0047FF]"
+            >
+              Unlock for $5/week
+              <ArrowRight className="w-5 h-5 stroke-[3px]" />
+            </button>
+          </div>
+        </GlassCard>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-6 md:gap-8">
@@ -3847,6 +4194,7 @@ function AppDashboard({
   refreshing,
   loadData,
   onExit,
+  onRequestAccess,
 }: {
   data: DashboardData | null;
   loading: boolean;
@@ -3854,6 +4202,7 @@ function AppDashboard({
   refreshing: boolean;
   loadData: (isRefresh?: boolean) => void;
   onExit: () => void;
+  onRequestAccess: () => void;
 }) {
   const [isAdmin, setIsAdmin] = useState(() => isUserAdmin());
 
@@ -4108,7 +4457,10 @@ function AppDashboard({
           ) : data ? (
             <>
               {page === "best-bets" && (
-                <BestBetsPage data={data} />
+                <BestBetsPage
+                  data={data}
+                  onRequestAccess={onRequestAccess}
+                />
               )}
               {page === "matches" && (
                 <PredictionsPage data={data} />
@@ -4439,6 +4791,8 @@ export default function App() {
   const [error, setError] = useState("");
   const [showEmailGate, setShowEmailGate] = useState(false);
   const [showFeaturedGate, setShowFeaturedGate] = useState(false);
+  const [showPaymentGate, setShowPaymentGate] = useState(false);
+  const [paidAccessState, setPaidAccessState] = useState(() => hasPaidAccess());
   const [featuredAccess, setFeaturedAccess] = useState(() => hasFeaturedMatchAccess());
   const [isAdmin, setIsAdmin] = useState(() => isUserAdmin());
 
@@ -4617,7 +4971,9 @@ export default function App() {
       const emailParam = searchParams.get("email");
       if (emailParam) {
         setEmailAccess(emailParam);
-        const newUrl = window.location.pathname + window.location.hash;
+        setPaidAccess(emailParam);
+        setPaidAccessState(true);
+        const newUrl = `${window.location.pathname}#best-bets`;
         window.history.replaceState({}, document.title, newUrl);
         setSitePage("app");
 
@@ -4802,11 +5158,13 @@ export default function App() {
         )}
         {sitePage === "app" && (
           <AppDashboard
+            key={paidAccessState ? "paid" : "unpaid"}
             data={data}
             loading={loading}
             error={error}
             refreshing={refreshing}
             loadData={loadData}
+            onRequestAccess={() => setShowPaymentGate(true)}
             onExit={() => {
               window.location.hash = "home";
             }}
@@ -4828,6 +5186,17 @@ export default function App() {
           onSuccess={() => {
             setFeaturedAccess(true);
             setShowFeaturedGate(false);
+          }}
+        />
+
+        <PaymentGateModal
+          open={showPaymentGate}
+          onClose={() => setShowPaymentGate(false)}
+          onSuccess={() => {
+            setPaidAccessState(hasPaidAccess());
+            setShowPaymentGate(false);
+            setSitePage("app");
+            window.location.hash = "best-bets";
           }}
         />
 
