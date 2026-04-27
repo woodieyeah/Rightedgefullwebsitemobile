@@ -568,7 +568,7 @@ app.post("/create-checkout-session", async (c) => {
             name: 'RightEdge Premium — NRL Best Bets & Predictions',
             description: `Ongoing access to predictions and best bets`,
           },
-          unit_amount: 900, // $9.00 AUD
+          unit_amount: 500, // $5.00 AUD
           recurring: { interval: 'week' },
         },
         quantity: 1,
