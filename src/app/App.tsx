@@ -3837,13 +3837,13 @@ function BestBetsPage({
               Premium Content
             </h2>
             <p className="text-sm md:text-base text-white/70 font-bold leading-relaxed mb-8">
-              Unlock RightEdge official best bets, staking guidance, and model edge breakdowns for this round.
+              Unlock RightEdge official match & try scorer best bets, staking guidance, and model edge breakdowns for this round.
             </p>
             <button
               onClick={onRequestAccess}
               className="inline-flex items-center justify-center gap-3 bg-[#FF2E63] text-white px-8 py-4 text-base font-black uppercase tracking-wider hover:bg-[#E62959] transition-colors shadow-[4px_4px_0_0_#0047FF]"
             >
-              Unlock for $5/week
+              Unlock for $9/week
               <ArrowRight className="w-5 h-5 stroke-[3px]" />
             </button>
           </div>
