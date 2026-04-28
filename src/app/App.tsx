@@ -667,6 +667,18 @@ function toNumber(value: unknown) {
   return Number.isFinite(num) ? num : 0;
 }
 
+function toRoundNumber(value: unknown) {
+  if (value === null || value === undefined) return 0;
+  const raw = String(value).trim();
+  if (!raw) return 0;
+
+  const direct = toNumber(raw);
+  if (direct > 0) return direct;
+
+  const match = raw.match(/\d+/);
+  return match ? Number(match[0]) : 0;
+}
+
 function toPercentNumber(value: unknown) {
   const raw = String(value ?? "").trim();
   if (!raw) return 0;
@@ -1051,7 +1063,7 @@ function parseBetLog(rows: RawRow[]): BetLogRow[] {
 function parseTryScorers(rows: RawRow[]): TryScorerRow[] {
   return rows
     .map((row) => ({
-      round: toNumber(getValue(row, ["Round"])),
+      round: toRoundNumber(getValue(row, ["Round", "Round Number", "RoundNumber", "NRL Round"])),
       match: getValue(row, ["Match"]),
       player: getValue(row, ["Player"]),
       team: getValue(row, ["Team"]),
@@ -1759,7 +1771,7 @@ function PaymentGateModal({
           "Content-Type": "application/json",
           Authorization: `Bearer ${publicAnonKey}`,
         },
-        body: JSON.stringify({ email: trimmedEmail, otp: trimmedOtp }),
+        body: JSON.stringify({ email: trimmedEmail, code: trimmedOtp, otp: trimmedOtp }),
       });
 
       const data = await res.json().catch(() => ({}));
@@ -1803,7 +1815,7 @@ function PaymentGateModal({
               Unlock Best Bets
             </h3>
             <p className="text-[10px] font-bold text-[#FFEA00] uppercase tracking-widest">
-              Premium — $5/week
+              Premium — $9/week
             </p>
           </div>
         </div>
@@ -1883,7 +1895,7 @@ function PaymentGateModal({
                 <RefreshCw className="w-5 h-5 animate-spin" />
               ) : step === "email" ? (
                 <>
-                  Unlock for $5/week
+                  Unlock for $9/week
                   <ArrowRight className="w-5 h-5 stroke-[3px]" />
                 </>
               ) : (
@@ -3886,7 +3898,44 @@ function BestBetsPage({
 }
 
 function TryScorersPage({ data }: { data: DashboardData }) {
-  const valuePlays = data.tryScorers.filter((row) => row.edgePct > 0);
+  const availableRounds = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          data.tryScorers
+            .map((row) => row.round)
+            .filter((round) => Number.isFinite(round) && round > 0),
+        ),
+      ).sort((a, b) => b - a),
+    [data.tryScorers],
+  );
+
+  const latestRound = availableRounds[0] || 0;
+  const availableRoundKey = availableRounds.join("|");
+  const [selectedRound, setSelectedRound] = useState<number | "all">(
+    latestRound || "all",
+  );
+
+  useEffect(() => {
+    if (!availableRounds.length) {
+      setSelectedRound("all");
+      return;
+    }
+
+    setSelectedRound((current) => {
+      if (current === "all") return latestRound;
+      return availableRounds.includes(current) ? current : latestRound;
+    });
+  }, [availableRoundKey, latestRound]);
+
+  const roundFilteredRows =
+    selectedRound === "all"
+      ? data.tryScorers
+      : data.tryScorers.filter((row) => row.round === selectedRound);
+
+  const valuePlays = roundFilteredRows.filter((row) => row.edgePct > 0);
+  const roundLabel =
+    selectedRound === "all" ? "All rounds" : `Round ${selectedRound}`;
 
   const matchGroups = valuePlays.reduce((groups, row) => {
     if (!groups[row.match]) groups[row.match] = [];
@@ -3894,22 +3943,66 @@ function TryScorersPage({ data }: { data: DashboardData }) {
     return groups;
   }, {} as Record<string, TryScorerRow[]>);
 
+  const matchCount = Object.keys(matchGroups).length;
+
   return (
     <div className="flex flex-col gap-8">
-      <div>
-        <h2 className="text-xl md:text-3xl font-black text-white uppercase tracking-tight mb-1 md:mb-2">
-          Anytime Try Scorer Value
-        </h2>
-        <div className="text-[10px] md:text-sm font-bold text-[#FFEA00] uppercase tracking-widest">
-          Model probability vs market price — value plays only
+      <div className="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-4">
+        <div>
+          <h2 className="text-xl md:text-3xl font-black text-white uppercase tracking-tight mb-1 md:mb-2">
+            Anytime Try Scorer Value
+          </h2>
+          <div className="text-[10px] md:text-sm font-bold text-[#FFEA00] uppercase tracking-widest">
+            Model probability vs market price — value plays only
+          </div>
+        </div>
+
+        <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
+          <div className="bg-[#1E232B] border-2 border-white/10 px-4 py-3 shadow-[4px_4px_0_0_#0047FF]">
+            <div className="text-[9px] font-black text-white/40 uppercase tracking-widest mb-1">
+              Showing
+            </div>
+            <div className="text-sm font-black text-white uppercase tracking-wider">
+              {roundLabel} · {valuePlays.length} plays · {matchCount} matches
+            </div>
+          </div>
+
+          <div className="relative min-w-[180px]">
+            <select
+              value={selectedRound === "all" ? "all" : String(selectedRound)}
+              onChange={(e) => {
+                const value = e.target.value;
+                setSelectedRound(value === "all" ? "all" : Number(value));
+              }}
+              className="w-full appearance-none bg-[#111317] border-2 border-[#FFEA00] text-white px-4 py-3 pr-10 text-xs font-black uppercase tracking-widest focus:outline-none focus:border-[#00E676] shadow-[4px_4px_0_0_#FF2E63]"
+            >
+              {availableRounds.map((round) => (
+                <option key={round} value={round}>
+                  Round {round}
+                </option>
+              ))}
+              {availableRounds.length > 1 && <option value="all">All rounds</option>}
+            </select>
+            <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#FFEA00]" />
+          </div>
         </div>
       </div>
 
       {valuePlays.length === 0 ? (
         <GlassCard className="p-8 text-center border-l-4 border-l-white/20">
           <div className="text-white/50 font-bold uppercase tracking-widest text-sm">
-            No value plays identified this round yet.
+            No value plays identified for {roundLabel.toLowerCase()} yet.
           </div>
+          {availableRounds.length > 0 && selectedRound !== latestRound && (
+            <button
+              type="button"
+              onClick={() => setSelectedRound(latestRound)}
+              className="mt-5 inline-flex items-center justify-center gap-2 bg-[#FFEA00] text-black px-5 py-3 text-xs font-black uppercase tracking-wider hover:bg-[#FFD600] transition-colors shadow-[4px_4px_0_0_#FF2E63]"
+            >
+              Show latest round
+              <ArrowRight className="w-4 h-4 stroke-[3px]" />
+            </button>
+          )}
         </GlassCard>
       ) : (
         <div className="flex flex-col gap-10">
@@ -3917,22 +4010,23 @@ function TryScorersPage({ data }: { data: DashboardData }) {
             const teams = match.split(" v ");
             const homeTeam = teams[0] || "";
             const awayTeam = teams[1] || "";
+            const sortedPlayers = [...players].sort((a, b) => b.edgePct - a.edgePct);
 
             return (
               <div key={match}>
                 {/* Match Header */}
                 <div className="flex items-center gap-2 mb-4 pb-3 border-b border-white/10">
-  <div className="w-3 h-3 rounded-sm shrink-0" style={{ backgroundColor: getTeamColors(homeTeam).primary }} />
-  <div className="w-3 h-3 rounded-sm shrink-0" style={{ backgroundColor: getTeamColors(awayTeam).primary }} />
-  <span className="text-[10px] font-black text-white/50 uppercase tracking-widest">{homeTeam} v {awayTeam}</span>
-</div>
+                  <div className="w-3 h-3 rounded-sm shrink-0" style={{ backgroundColor: getTeamColors(homeTeam).primary }} />
+                  <div className="w-3 h-3 rounded-sm shrink-0" style={{ backgroundColor: getTeamColors(awayTeam).primary }} />
+                  <span className="text-[10px] font-black text-white/50 uppercase tracking-widest">{homeTeam} v {awayTeam}</span>
+                </div>
 
                 {/* Desktop */}
                 <div className="hidden md:block">
                   <table className="w-full text-left border-collapse">
                     <thead>
                       <tr className="border-b border-white/10">
-                        {["Player", "Model %", "Market %", "Best Odds", "Bookmaker", "Edge"].map((h) => (
+                        {["Player", "Round", "Model %", "Market %", "Best Odds", "Bookmaker", "Edge"].map((h) => (
                           <th key={h} className="pb-3 px-3 font-black text-white/40 uppercase tracking-widest text-[10px]">
                             {h}
                           </th>
@@ -3940,74 +4034,74 @@ function TryScorersPage({ data }: { data: DashboardData }) {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-white/5">
-                      {players
-                        .sort((a, b) => b.edgePct - a.edgePct)
-                        .map((row, i) => (
-                          <tr key={i} className="hover:bg-white/[0.03] transition-colors">
-                            <td className="py-4 px-3">
-                              <div className="flex items-center gap-2">
-                                <TeamLogo teamName={row.team} className="w-5 h-5 text-[8px]" />
-                                <span className="text-sm font-black text-white">{row.player}</span>
-                              </div>
-                            </td>
-                            <td className="py-4 px-3 text-sm font-bold text-white">
-                              {formatPercent(row.statsInsiderPct, 1)}
-                            </td>
-                            <td className="py-4 px-3 text-sm font-bold text-white/50">
-                              {formatPercent(row.marketImpliedPct, 1)}
-                            </td>
-                            <td className="py-4 px-3 text-sm font-black text-[#00E676]">
-                              ${row.bestOdds.toFixed(2)}
-                            </td>
-                            <td className="py-4 px-3 text-xs font-bold text-[#FFEA00] uppercase tracking-wider">
-                              {row.bookmaker}
-                            </td>
-                            <td className="py-4 px-3">
-                              <span className={`inline-flex px-2 py-1 text-xs font-black uppercase tracking-widest ${
-                                row.edgePct >= 5
-                                  ? "bg-[#00E676] text-black"
-                                  : "bg-[#FFEA00] text-black"
-                              }`}>
-                                +{formatPercent(row.edgePct, 1)}
-                              </span>
-                            </td>
-                          </tr>
-                        ))}
+                      {sortedPlayers.map((row, i) => (
+                        <tr key={i} className="hover:bg-white/[0.03] transition-colors">
+                          <td className="py-4 px-3">
+                            <div className="flex items-center gap-2">
+                              <TeamLogo teamName={row.team} className="w-5 h-5 text-[8px]" />
+                              <span className="text-sm font-black text-white">{row.player}</span>
+                            </div>
+                          </td>
+                          <td className="py-4 px-3 text-xs font-black text-white/40 uppercase tracking-widest">
+                            {row.round ? `R${row.round}` : "—"}
+                          </td>
+                          <td className="py-4 px-3 text-sm font-bold text-white">
+                            {formatPercent(row.statsInsiderPct, 1)}
+                          </td>
+                          <td className="py-4 px-3 text-sm font-bold text-white/50">
+                            {formatPercent(row.marketImpliedPct, 1)}
+                          </td>
+                          <td className="py-4 px-3 text-sm font-black text-[#00E676]">
+                            ${row.bestOdds.toFixed(2)}
+                          </td>
+                          <td className="py-4 px-3 text-xs font-bold text-[#FFEA00] uppercase tracking-wider">
+                            {row.bookmaker}
+                          </td>
+                          <td className="py-4 px-3">
+                            <span className={`inline-flex px-2 py-1 text-xs font-black uppercase tracking-widest ${
+                              row.edgePct >= 5
+                                ? "bg-[#00E676] text-black"
+                                : "bg-[#FFEA00] text-black"
+                            }`}>
+                              +{formatPercent(row.edgePct, 1)}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
                     </tbody>
                   </table>
                 </div>
 
                 {/* Mobile */}
-<div className="md:hidden flex flex-col divide-y divide-white/5">
-  {players
-    .sort((a, b) => b.edgePct - a.edgePct)
-    .map((row, i) => {
-      const teamColors = getTeamColors(row.team);
-      return (
-        <div key={i} className="py-4 flex items-center justify-between gap-4">
-          <div className="flex-1 min-w-0">
-            <div className="text-sm font-black text-white mb-1">{row.player}</div>
-            <div className="flex items-center gap-1 mb-1">
-              <span className="text-xs font-black" style={{ color: teamColors.secondary === '#FFFFFF' || teamColors.secondary === '#000000' ? '#FFFFFF' : teamColors.secondary }}>
-                {row.team}
-              </span>
-              <span className="text-xs text-white/40">· {row.position}</span>
-            </div>
-            <div className="text-[10px] text-white/30 uppercase tracking-wider">
-              Model {formatPercent(row.statsInsiderPct, 1)} · Market {formatPercent(row.marketImpliedPct, 1)}
-            </div>
-          </div>
-          <div className="flex flex-col items-end gap-1 shrink-0">
-            <span className="text-2xl font-black text-white">${row.bestOdds.toFixed(2)}</span>
-            <span className="text-[10px] text-white/40 uppercase tracking-wider">{row.bookmaker}</span>
-            <span className={`text-xs font-black ${row.edgePct >= 5 ? 'text-[#00E676]' : 'text-[#FFEA00]'}`}>
-             Edge +{formatPercent(row.edgePct, 1)}
-            </span>
-          </div>
-        </div>
-      );
-    })}
-</div>
+                <div className="md:hidden flex flex-col divide-y divide-white/5">
+                  {sortedPlayers.map((row, i) => {
+                    const teamColors = getTeamColors(row.team);
+                    return (
+                      <div key={i} className="py-4 flex items-center justify-between gap-4">
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-black text-white mb-1">{row.player}</div>
+                          <div className="flex items-center gap-1 mb-1">
+                            <span className="text-xs font-black" style={{ color: teamColors.secondary === '#FFFFFF' || teamColors.secondary === '#000000' ? '#FFFFFF' : teamColors.secondary }}>
+                              {row.team}
+                            </span>
+                            <span className="text-xs text-white/40">· {row.position}</span>
+                            {row.round > 0 && <span className="text-xs text-white/40">· R{row.round}</span>}
+                          </div>
+                          <div className="text-[10px] text-white/30 uppercase tracking-wider">
+                            Model {formatPercent(row.statsInsiderPct, 1)} · Market {formatPercent(row.marketImpliedPct, 1)}
+                          </div>
+                        </div>
+                        <div className="flex flex-col items-end gap-1 shrink-0">
+                          <span className="text-2xl font-black text-white">${row.bestOdds.toFixed(2)}</span>
+                          <span className="text-[10px] text-white/40 uppercase tracking-wider">{row.bookmaker}</span>
+                          <span className={`text-xs font-black ${row.edgePct >= 5 ? 'text-[#00E676]' : 'text-[#FFEA00]'}`}>
+                            Edge +{formatPercent(row.edgePct, 1)}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
                </div>
             );
           })}
