@@ -4561,8 +4561,6 @@ function AppDashboard({
               Active
             </div>
             <div className="mt-4 text-sm text-white/70 leading-relaxed font-bold">
-              Connected to your published Google Sheets tabs.
-              Refresh after you update the sheet.
             </div>
             <button 
               onClick={handleManageSubscription}
