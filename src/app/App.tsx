@@ -504,11 +504,13 @@ function SidebarItem({
   icon,
   label,
   onClick,
+  premium = false,
 }: {
   active: boolean;
   icon: React.ReactNode;
   label: string;
   onClick: () => void;
+  premium?: boolean;
 }) {
   return (
     <button
@@ -519,20 +521,33 @@ function SidebarItem({
           : "bg-transparent border-transparent text-white/50 hover:text-white hover:bg-white/[0.03]"
       }`}
     >
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-4 min-w-0">
         <div
-          className={`w-8 h-8 flex items-center justify-center ${active ? "text-[#FFEA00]" : "text-white/50"}`}
+          className={`w-8 h-8 flex items-center justify-center shrink-0 ${active ? "text-[#FFEA00]" : "text-white/50"}`}
         >
           {icon}
         </div>
-        <span
-          className={`text-base tracking-wide uppercase ${active ? "font-black" : "font-bold"}`}
-        >
-          {label}
-        </span>
+        <div className="flex items-center gap-2 min-w-0">
+          <span
+            className={`text-base tracking-wide uppercase truncate ${active ? "font-black" : "font-bold"}`}
+          >
+            {label}
+          </span>
+          {premium && (
+            <span
+              className={`inline-flex px-2 py-0.5 text-[8px] font-black uppercase tracking-widest border ${
+                active
+                  ? "bg-[#FFEA00] text-black border-[#FFEA00]"
+                  : "bg-[#FF2E63]/10 text-[#FF2E63] border-[#FF2E63]/40"
+              }`}
+            >
+              Premium
+            </span>
+          )}
+        </div>
       </div>
       <ChevronRight
-        className={`w-5 h-5 ${active ? "opacity-100 text-[#FFEA00]" : "opacity-0"}`}
+        className={`w-5 h-5 shrink-0 ${active ? "opacity-100 text-[#FFEA00]" : "opacity-0"}`}
       />
     </button>
   );
@@ -1718,8 +1733,12 @@ function PaymentGateModal({
       }
 
       setStep("processing");
-      const successUrl = `${window.location.origin}${window.location.pathname}?success=true&email=${encodeURIComponent(trimmedEmail)}#best-bets`;
-      const cancelUrl = `${window.location.origin}${window.location.pathname}#best-bets`;
+      const currentPremiumHash = window.location.hash.replace("#", "");
+      const returnHash = ["best-bets", "try-scorers"].includes(currentPremiumHash)
+        ? currentPremiumHash
+        : "best-bets";
+      const successUrl = `${window.location.origin}${window.location.pathname}?success=true&email=${encodeURIComponent(trimmedEmail)}#${returnHash}`;
+      const cancelUrl = `${window.location.origin}${window.location.pathname}#${returnHash}`;
 
       const checkoutRes = await fetch(`/api/create-checkout-session`, {
         method: "POST",
@@ -1812,16 +1831,16 @@ function PaymentGateModal({
           </div>
           <div>
             <h3 className="text-xl font-black text-white uppercase tracking-tight">
-              Unlock Best Bets
+              Unlock RightEdge Premium
             </h3>
             <p className="text-[10px] font-bold text-[#FFEA00] uppercase tracking-widest">
-              Premium — $9/week
+              Full Round Card — $9/week
             </p>
           </div>
         </div>
 
         <p className="text-sm text-white/70 font-bold leading-relaxed mb-6">
-          Get the official RightEdge best bets, staking plan, and model edges for each NRL round.
+          Unlock the full round card: official Best Bets, Try Scorer value plays, staking guidance and model edges.
         </p>
 
         {step === "processing" ? (
@@ -1895,7 +1914,7 @@ function PaymentGateModal({
                 <RefreshCw className="w-5 h-5 animate-spin" />
               ) : step === "email" ? (
                 <>
-                  Unlock for $9/week
+                  Unlock Full Round Card — $9/week
                   <ArrowRight className="w-5 h-5 stroke-[3px]" />
                 </>
               ) : (
@@ -3819,7 +3838,7 @@ function BestBetsPage({
   onRequestAccess,
 }: {
   data: DashboardData;
-  onRequestAccess: () => void;
+  onRequestAccess: (targetHash?: string) => void;
 }) {
   // Only show pending (unsettled) bets — exclude any match already in the
   // bet log with a W or L result.
@@ -3849,13 +3868,13 @@ function BestBetsPage({
               Premium Content
             </h2>
             <p className="text-sm md:text-base text-white/70 font-bold leading-relaxed mb-8">
-              Unlock RightEdge official match & try scorer best bets, staking guidance, and model edge breakdowns for this round.
+              Unlock the full RightEdge round card: official Best Bets, Try Scorer value plays, staking guidance and model edges.
             </p>
             <button
-              onClick={onRequestAccess}
+              onClick={() => onRequestAccess("best-bets")}
               className="inline-flex items-center justify-center gap-3 bg-[#FF2E63] text-white px-8 py-4 text-base font-black uppercase tracking-wider hover:bg-[#E62959] transition-colors shadow-[4px_4px_0_0_#0047FF]"
             >
-              Unlock for $9/week
+              Unlock Full Round Card — $9/week
               <ArrowRight className="w-5 h-5 stroke-[3px]" />
             </button>
           </div>
@@ -3897,7 +3916,13 @@ function BestBetsPage({
   );
 }
 
-function TryScorersPage({ data }: { data: DashboardData }) {
+function TryScorersPage({
+  data,
+  onRequestAccess,
+}: {
+  data: DashboardData;
+  onRequestAccess: (targetHash?: string) => void;
+}) {
   const availableRounds = useMemo(
     () =>
       Array.from(
@@ -3945,15 +3970,43 @@ function TryScorersPage({ data }: { data: DashboardData }) {
 
   const matchCount = Object.keys(matchGroups).length;
 
+  if (!hasPaidAccess()) {
+    return (
+      <div className="flex flex-col gap-6 md:gap-8">
+        <GlassCard className="p-8 md:p-12 text-center !border-[#FF2E63] !shadow-[8px_8px_0_0_#FF2E63] relative overflow-hidden">
+          <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(255,46,99,0.08),transparent_55%)]" />
+          <div className="relative z-10 flex flex-col items-center max-w-xl mx-auto">
+            <div className="bg-[#FF2E63] p-4 mb-6 shadow-[4px_4px_0_0_#0047FF]">
+              <Lock className="w-10 h-10 text-white stroke-[3px]" />
+            </div>
+            <h2 className="text-3xl md:text-5xl font-black text-white uppercase tracking-tight mb-3">
+              Premium Content
+            </h2>
+            <p className="text-sm md:text-base text-white/70 font-bold leading-relaxed mb-8">
+              Try Scorer value plays are included with RightEdge Premium. Unlock the full round card to see Best Bets, Try Scorer plays, staking guidance and model edges.
+            </p>
+            <button
+              onClick={() => onRequestAccess("try-scorers")}
+              className="inline-flex items-center justify-center gap-3 bg-[#FF2E63] text-white px-8 py-4 text-base font-black uppercase tracking-wider hover:bg-[#E62959] transition-colors shadow-[4px_4px_0_0_#0047FF]"
+            >
+              Unlock Full Round Card — $9/week
+              <ArrowRight className="w-5 h-5 stroke-[3px]" />
+            </button>
+          </div>
+        </GlassCard>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-8">
       <div className="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-4">
         <div>
           <h2 className="text-xl md:text-3xl font-black text-white uppercase tracking-tight mb-1 md:mb-2">
-            Anytime Try Scorer Value
+            Try Scorer Value Plays
           </h2>
           <div className="text-[10px] md:text-sm font-bold text-[#FFEA00] uppercase tracking-widest">
-            Model probability vs market price — value plays only
+            Included with RightEdge Premium — value plays only
           </div>
         </div>
 
@@ -4296,7 +4349,7 @@ function AppDashboard({
   refreshing: boolean;
   loadData: (isRefresh?: boolean) => void;
   onExit: () => void;
-  onRequestAccess: () => void;
+  onRequestAccess: (targetHash?: string) => void;
 }) {
   const [isAdmin, setIsAdmin] = useState(() => isUserAdmin());
 
@@ -4327,6 +4380,7 @@ function AppDashboard({
         [
           "matches",
           "best-bets",
+          "try-scorers",
           "performance",
           "admin",
         ].includes(hash)
@@ -4389,6 +4443,11 @@ function AppDashboard({
           title: "",
           subtitle: "What to Bet This Round",
         };
+      case "try-scorers":
+        return {
+          title: "Premium",
+          subtitle: "Try Scorer Value Plays",
+        };
       case "performance":
         return {
           subtitle: "Performance",
@@ -4428,6 +4487,7 @@ function AppDashboard({
                 active={page === item.id}
                 icon={item.icon}
                 label={item.label}
+                premium={item.id === "best-bets" || item.id === "try-scorers"}
                 onClick={() => {
                   handlePageChange(item.id);
                   window.scrollTo({
@@ -4560,7 +4620,10 @@ function AppDashboard({
                 <PredictionsPage data={data} />
               )}
               {page === "try-scorers" && (
-                <TryScorersPage data={data} />
+                <TryScorersPage
+                  data={data}
+                  onRequestAccess={onRequestAccess}
+                />
               )}
               {page === "admin" && (
                 <AdminDashboard
@@ -5067,7 +5130,11 @@ export default function App() {
         setEmailAccess(emailParam);
         setPaidAccess(emailParam);
         setPaidAccessState(true);
-        const newUrl = `${window.location.pathname}#best-bets`;
+        const currentPremiumHash = window.location.hash.replace("#", "");
+        const returnHash = ["best-bets", "try-scorers"].includes(currentPremiumHash)
+          ? currentPremiumHash
+          : "best-bets";
+        const newUrl = `${window.location.pathname}#${returnHash}`;
         window.history.replaceState({}, document.title, newUrl);
         setSitePage("app");
 
@@ -5258,7 +5325,11 @@ export default function App() {
             error={error}
             refreshing={refreshing}
             loadData={loadData}
-            onRequestAccess={() => setShowPaymentGate(true)}
+            onRequestAccess={(targetHash = "best-bets") => {
+              setSitePage("app");
+              window.location.hash = targetHash;
+              setShowPaymentGate(true);
+            }}
             onExit={() => {
               window.location.hash = "home";
             }}
@@ -5290,7 +5361,11 @@ export default function App() {
             setPaidAccessState(hasPaidAccess());
             setShowPaymentGate(false);
             setSitePage("app");
-            window.location.hash = "best-bets";
+            const currentPremiumHash = window.location.hash.replace("#", "");
+            const returnHash = ["best-bets", "try-scorers"].includes(currentPremiumHash)
+              ? currentPremiumHash
+              : "best-bets";
+            window.location.hash = returnHash;
           }}
         />
 
