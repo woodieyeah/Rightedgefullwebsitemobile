@@ -545,6 +545,10 @@ app.post("/create-checkout-session", async (c) => {
     const body = await c.req.json();
     const email = body?.email?.trim()?.toLowerCase();
     const returnUrl = body?.returnUrl || "http://localhost:5173";
+    const returnHash = ["best-bets", "try-scorers"].includes(body?.returnHash)
+      ? body.returnHash
+      : "best-bets";
+    const cancelUrl = body?.cancelUrl || `${returnUrl}#${returnHash}`;
 
     if (!email || !email.includes('@') || !email.includes('.')) {
       return c.json({ error: "Please enter a valid email address." }, 400);
@@ -558,149 +562,235 @@ app.post("/create-checkout-session", async (c) => {
 
     const stripe = new Stripe(stripeKey, { apiVersion: "2023-10-16" });
 
+    await kv.set(`checkout_lead:${email}`, JSON.stringify({
+      email,
+      returnHash,
+      source: body?.source || `premium_${returnHash}`,
+      created_at: new Date().toISOString(),
+      last_seen_at: new Date().toISOString(),
+      completed_subscription: false,
+      attempt_count: 1,
+    }));
+
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
       customer_email: email,
+      client_reference_id: email,
+      metadata: {
+        email,
+        returnHash,
+        source: body?.source || `premium_${returnHash}`,
+      },
+      subscription_data: {
+        metadata: {
+          email,
+          returnHash,
+          source: body?.source || `premium_${returnHash}`,
+        },
+      },
       line_items: [{
         price_data: {
           currency: 'aud',
           product_data: {
-            name: 'RightEdge Premium — NRL Best Bets & Predictions',
-            description: `Ongoing access to predictions and best bets`,
+            name: 'RightEdge Premium — Full Round Card',
+            description: `Best Bets, Try Scorer value plays, staking guidance and model edges`,
           },
-          unit_amount: 500, // $5.00 AUD
+          unit_amount: 900, // $9.00 AUD
           recurring: { interval: 'week' },
         },
         quantity: 1,
       }],
       mode: 'subscription',
-      success_url: `${returnUrl}?success=true&email=${encodeURIComponent(email)}`,
-      cancel_url: `${returnUrl}?canceled=true`,
+      success_url: `${returnUrl}?success=true&session_id={CHECKOUT_SESSION_ID}&return_hash=${encodeURIComponent(returnHash)}#${returnHash}`,
+      cancel_url: `${returnUrl}?canceled=true&return_hash=${encodeURIComponent(returnHash)}#${returnHash}`,
     });
 
-    return c.json({ url: session.url });
+    console.log(`[Stripe] Created checkout session for ${email} returning to #${returnHash}`);
+    return c.json({ url: session.url, sessionId: session.id });
   } catch (err: any) {
     console.error("[Stripe] Error creating checkout session:", err);
     return c.json({ error: "Failed to create checkout session." }, 500);
   }
 });
 
+async function saveVerifiedSubscriber(email: string, source = 'stripe_verified', stripeData: any = {}) {
+  const normalizedEmail = email.trim().toLowerCase();
+  const key = `subscriber:${normalizedEmail}`;
+  const existingSubscriber = await kv.get(key);
+  const isNewSubscriber = !existingSubscriber;
+
+  const payload = {
+    email: normalizedEmail,
+    subscribedAt: existingSubscriber
+      ? (() => { try { return JSON.parse(String(existingSubscriber)).subscribedAt; } catch { return new Date().toISOString(); } })()
+      : new Date().toISOString(),
+    source,
+    stripeCustomerId: stripeData.customerId || '',
+    stripeSubscriptionId: stripeData.subscriptionId || '',
+    stripeCheckoutSessionId: stripeData.checkoutSessionId || '',
+    verifiedAt: new Date().toISOString(),
+  };
+
+  await kv.set(key, JSON.stringify(payload));
+
+  try {
+    const leadKey = `checkout_lead:${normalizedEmail}`;
+    const existingLead = await kv.get(leadKey);
+    if (existingLead) {
+      const lead: any = typeof existingLead === 'string' ? JSON.parse(existingLead) : existingLead;
+      lead.completed_subscription = true;
+      lead.subscribed_at = new Date().toISOString();
+      lead.stripe_checkout_session_id = stripeData.checkoutSessionId || '';
+      lead.stripe_customer_id = stripeData.customerId || '';
+      lead.stripe_subscription_id = stripeData.subscriptionId || '';
+      await kv.set(leadKey, JSON.stringify(lead));
+    }
+  } catch (leadErr) {
+    console.error('[saveVerifiedSubscriber] Failed to update checkout_lead:', leadErr);
+  }
+
+  return { payload, isNewSubscriber };
+}
+
+app.post("/confirm-checkout-session", async (c) => {
+  try {
+    const body = await c.req.json();
+    const sessionId = body?.session_id || body?.sessionId;
+
+    if (!sessionId || !String(sessionId).startsWith("cs_")) {
+      return c.json({ error: "Valid Stripe checkout session_id is required." }, 400);
+    }
+
+    const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
+    if (!stripeKey) {
+      console.error("[Stripe] Missing STRIPE_SECRET_KEY");
+      return c.json({ error: "Payment system not configured properly." }, 500);
+    }
+
+    const stripe = new Stripe(stripeKey, { apiVersion: "2023-10-16" });
+    const session = await stripe.checkout.sessions.retrieve(sessionId, {
+      expand: ["subscription", "customer"],
+    });
+
+    const paymentPaid = session.payment_status === "paid";
+    const subscription: any = session.subscription;
+    const subscriptionActive =
+      typeof subscription === "object" &&
+      ["active", "trialing"].includes(subscription.status);
+
+    if (session.mode !== "subscription" || (!paymentPaid && !subscriptionActive)) {
+      console.warn(`[Stripe] Checkout confirmation rejected for ${sessionId}:`, {
+        mode: session.mode,
+        payment_status: session.payment_status,
+        subscription_status: typeof subscription === "object" ? subscription.status : null,
+      });
+      return c.json({ error: "Stripe session is not a paid active subscription." }, 402);
+    }
+
+    const email =
+      session.customer_details?.email?.trim()?.toLowerCase() ||
+      session.customer_email?.trim()?.toLowerCase() ||
+      session.metadata?.email?.trim()?.toLowerCase();
+
+    if (!email || !email.includes("@")) {
+      return c.json({ error: "Could not determine subscriber email from Stripe session." }, 400);
+    }
+
+    const returnHash = ["best-bets", "try-scorers"].includes(session.metadata?.returnHash || "")
+      ? session.metadata?.returnHash
+      : "best-bets";
+
+    const customerId =
+      typeof session.customer === "string"
+        ? session.customer
+        : (session.customer as any)?.id || "";
+
+    const subscriptionId =
+      typeof session.subscription === "string"
+        ? session.subscription
+        : (session.subscription as any)?.id || "";
+
+    await saveVerifiedSubscriber(email, "stripe_checkout_confirmed", {
+      customerId,
+      subscriptionId,
+      checkoutSessionId: session.id,
+    });
+
+    await kv.set(`analytics:conversion:${new Date().toISOString()}:${crypto.randomUUID()}`, JSON.stringify({
+      type: "premium_checkout_confirmed",
+      email,
+      returnHash,
+      stripeCustomerId: customerId,
+      stripeSubscriptionId: subscriptionId,
+      stripeCheckoutSessionId: session.id,
+      timestamp: new Date().toISOString(),
+    }));
+
+    console.log(`[Stripe] Confirmed paid subscription for ${email}`);
+    return c.json({
+      success: true,
+      email,
+      returnHash,
+      customerId,
+      subscriptionId,
+    });
+  } catch (err: any) {
+    console.error("[Stripe] Error confirming checkout session:", err);
+    return c.json({ error: "Failed to confirm checkout session." }, 500);
+  }
+});
+
 app.post("/subscribe", async (c) => {
   try {
-    console.log("[Subscribe] Received subscribe request");
     const body = await c.req.json();
-    console.log("[Subscribe] Request body:", JSON.stringify(body));
     const email = body?.email?.trim()?.toLowerCase();
-    
+
     if (!email || !email.includes('@') || !email.includes('.')) {
-      console.log("[Subscribe] Invalid email rejected:", email);
       return c.json({ error: "Please enter a valid email address." }, 400);
     }
 
-    const key = `subscriber:${email}`;
-
-    // Idempotency check — if this email is already a subscriber don't send
-    // another welcome email, but do still confirm success to the caller.
-    const existingSubscriber = await kv.get(key);
-    const isNewSubscriber = !existingSubscriber;
-
-    const payload = {
-      email,
-      subscribedAt: existingSubscriber
-        ? (() => { try { return JSON.parse(String(existingSubscriber)).subscribedAt; } catch { return new Date().toISOString(); } })()
-        : new Date().toISOString(),
-      source: body?.source || 'stripe_success',
-    };
-    
-    console.log("[Subscribe] Saving to KV:", key, JSON.stringify(payload));
-    await kv.set(key, JSON.stringify(payload));
-    console.log("[Subscribe] Successfully saved subscriber:", email, isNewSubscriber ? "(new)" : "(idempotent update)");
-
-    // Mark the checkout_lead record as completed so abandoned vs converted is clear
-    try {
-      const leadKey = `checkout_lead:${email}`;
-      const existingLead = await kv.get(leadKey);
-      if (existingLead) {
-        const lead: any = typeof existingLead === 'string' ? JSON.parse(existingLead) : existingLead;
-        lead.completed_subscription = true;
-        lead.subscribed_at = new Date().toISOString();
-        await kv.set(leadKey, JSON.stringify(lead));
-        console.log(`[Subscribe] checkout_lead updated to completed_subscription=true for ${email}`);
-      }
-    } catch (leadErr) {
-      console.error('[Subscribe] Failed to update checkout_lead:', leadErr);
-      // Non-fatal — don't fail the subscription response
+    const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
+    if (!stripeKey) {
+      return c.json({ error: "Payment system not configured properly." }, 500);
     }
 
-    // Send welcome email only for genuinely new subscribers
-    if (isNewSubscriber) {
-      const resendApiKey = Deno.env.get("RESEND_API_KEY");
-      let fromEmail = Deno.env.get("RESEND_FROM_EMAIL");
-      if (!fromEmail || !fromEmail.includes("@")) {
-        fromEmail = 'RightEdge <noreply@rightedge.com.au>';
+    const stripe = new Stripe(stripeKey, { apiVersion: "2023-10-16" });
+    const customers = await stripe.customers.list({ email, limit: 10 });
+
+    let activeSubscription: any = null;
+    let customerId = "";
+
+    for (const customer of customers.data) {
+      const subscriptions = await stripe.subscriptions.list({
+        customer: customer.id,
+        status: "active",
+        limit: 1,
+      });
+
+      if (subscriptions.data.length > 0) {
+        activeSubscription = subscriptions.data[0];
+        customerId = customer.id;
+        break;
       }
-      
-      if (resendApiKey) {
-        try {
-          const resend = new Resend(resendApiKey);
-          await resend.emails.send({
-            from: fromEmail,
-            to: [email],
-            subject: 'Welcome to RightEdge 📈',
-            html: `
-              <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background-color: #0B0E14; padding: 40px 20px; color: #ffffff;">
-                <div style="max-width: 600px; margin: 0 auto; background-color: #111317; border: 1px solid #1A1D24;">
-                  
-                  <div style="text-align: center; padding: 30px; border-bottom: 1px solid #1A1D24;">
-                    <h1 style="font-size: 28px; font-family: 'Arial Black', Impact, sans-serif; font-weight: 900; letter-spacing: -1px; margin: 0; text-transform: uppercase; color: #fff;">RIGHTEDGE</h1>
-                    <div style="color: #00E676; font-size: 11px; font-weight: bold; letter-spacing: 2px; margin-top: 5px; text-transform: uppercase; font-family: monospace;">NRL Analytics & Value Betting</div>
-                  </div>
-                  
-                  <div style="padding: 30px;">
-                    <h2 style="font-family: 'Arial Black', Impact, sans-serif; font-size: 22px; text-transform: uppercase; margin-top: 0; margin-bottom: 15px; color: #fff;">You're In.</h2>
-                    <p style="color: #A1A1AA; font-size: 15px; line-height: 1.6; margin-bottom: 0;">
-                      Welcome to RightEdge. You now have full access to our NRL Model predictions and live odds comparison.
-                    </p>
-                  </div>
-
-                  <div style="background-color: #1A1D24; padding: 30px; border-left: 4px solid #00E676;">
-                    <h3 style="margin-top: 0; color: #fff; font-family: 'Arial Black', sans-serif; font-size: 16px; text-transform: uppercase; letter-spacing: 0.5px;">What to expect</h3>
-                    <p style="color: #A1A1AA; font-size: 15px; line-height: 1.6; margin-bottom: 25px;">Every Thursday afternoon, we'll send you our Best Bets and Model Projections for the upcoming round. Every Sunday night, we'll send a full ledger review covering exactly how the model performed.</p>
-                    
-                    <table width="100%" cellpadding="0" cellspacing="0">
-                      <tr>
-                        <td align="center">
-                          <a href="https://www.rightedge.com.au/#matches" style="display: block; background-color: #00E676; color: #000; padding: 16px 24px; text-decoration: none; font-weight: 900; font-size: 14px; font-family: 'Arial Black', sans-serif; text-transform: uppercase; letter-spacing: 1px;">VIEW DASHBOARD ➔</a>
-                        </td>
-                      </tr>
-                    </table>
-                  </div>
-
-                  <div style="padding: 30px; text-align: center; border-top: 1px solid #1A1D24;">
-                    <p style="margin: 0 0 10px 0; font-size: 12px; color: #64748B; font-family: monospace; text-transform: uppercase; letter-spacing: 1px;">No fluff. Just the edge.</p>
-                    <p style="margin: 0; font-size: 10px; color: #475569; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;">&copy; RightEdge Analytics</p>
-                  </div>
-
-                </div>
-              </div>
-            `
-          });
-          console.log("[Subscribe] Welcome email sent to:", email);
-        } catch (emailErr) {
-          console.error("[Subscribe] Error sending welcome email:", emailErr);
-          // Don't fail the subscription if email fails
-        }
-      }
-    } else {
-      console.log("[Subscribe] Skipping welcome email — already subscribed:", email);
     }
+
+    if (!activeSubscription) {
+      console.warn(`[Subscribe] Rejected unverified subscriber write for ${email}`);
+      return c.json({ error: "No active Stripe subscription found for this email." }, 402);
+    }
+
+    const { isNewSubscriber } = await saveVerifiedSubscriber(email, body?.source || "stripe_active_verified", {
+      customerId,
+      subscriptionId: activeSubscription.id,
+    });
 
     return c.json({ success: true, message: "You're in!", isNew: isNewSubscriber });
   } catch (err: any) {
-    console.error("[Subscribe] ERROR saving subscriber:", err?.message, err?.stack);
+    console.error("[Subscribe] ERROR verifying subscriber:", err?.message, err?.stack);
     return c.json({ error: "Something went wrong. Please try again.", message: err.message }, 500);
   }
 });
+
 
 // Admin endpoint to send mass emails
 app.post("/admin/broadcast", async (c) => {
