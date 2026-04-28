@@ -515,7 +515,7 @@ function SidebarItem({
   return (
     <button
       onClick={onClick}
-      className={`w-full flex items-center justify-between px-4 py-4 transition-all border-l-4 ${
+      className={`w-full flex items-center justify-between px-4 py-4 min-h-[64px] transition-all border-l-4 ${
         active
           ? "bg-[#1E232B] border-[#FFEA00] text-white shadow-[4px_4px_0_0_#FF2E63]"
           : "bg-transparent border-transparent text-white/50 hover:text-white hover:bg-white/[0.03]"
@@ -527,15 +527,15 @@ function SidebarItem({
         >
           {icon}
         </div>
-        <div className="flex items-center gap-2 min-w-0">
+        <div className="flex flex-col items-start gap-1 min-w-0">
           <span
-            className={`text-base tracking-wide uppercase truncate ${active ? "font-black" : "font-bold"}`}
+            className={`text-base tracking-wide uppercase whitespace-nowrap ${active ? "font-black" : "font-bold"}`}
           >
             {label}
           </span>
           {premium && (
             <span
-              className={`inline-flex px-2 py-0.5 text-[8px] font-black uppercase tracking-widest border ${
+              className={`inline-flex w-fit px-2 py-0.5 text-[8px] font-black uppercase tracking-widest border leading-none ${
                 active
                   ? "bg-[#FFEA00] text-black border-[#FFEA00]"
                   : "bg-[#FF2E63]/10 text-[#FF2E63] border-[#FF2E63]/40"
