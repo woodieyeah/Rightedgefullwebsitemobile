@@ -1692,9 +1692,21 @@ function PaymentGateModal({
   const [errorMsg, setErrorMsg] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
 
-  if (!open) return null;
-
   const trimmedEmail = email.trim().toLowerCase();
+
+  useEffect(() => {
+    if (!open) return;
+    const currentPremiumHash = window.location.hash.replace("#", "");
+    const section = ["best-bets", "try-scorers"].includes(currentPremiumHash)
+      ? currentPremiumHash
+      : "best-bets";
+    (window as any).trackAnalyticsEvent?.("premium_paywall_view", {
+      section,
+      cta_source: section,
+    });
+  }, [open]);
+
+  if (!open) return null;
 
   const handleEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1737,8 +1749,35 @@ function PaymentGateModal({
       const returnHash = ["best-bets", "try-scorers"].includes(currentPremiumHash)
         ? currentPremiumHash
         : "best-bets";
-      const successUrl = `${window.location.origin}${window.location.pathname}?success=true&email=${encodeURIComponent(trimmedEmail)}#${returnHash}`;
+      const returnUrl = `${window.location.origin}${window.location.pathname}`;
       const cancelUrl = `${window.location.origin}${window.location.pathname}#${returnHash}`;
+
+      (window as any).trackAnalyticsEvent?.("premium_email_submit", {
+        email: trimmedEmail,
+        section: returnHash,
+      });
+
+      try {
+        await fetch(`/api/register-checkout-lead`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${publicAnonKey}`,
+          },
+          body: JSON.stringify({
+            email: trimmedEmail,
+            source: `premium_${returnHash}`,
+            return_hash: returnHash,
+          }),
+        });
+      } catch (leadErr) {
+        console.warn("[RightEdge] Failed to save checkout lead:", leadErr);
+      }
+
+      (window as any).trackAnalyticsEvent?.("premium_checkout_start", {
+        email: trimmedEmail,
+        section: returnHash,
+      });
 
       const checkoutRes = await fetch(`/api/create-checkout-session`, {
         method: "POST",
@@ -1748,16 +1787,19 @@ function PaymentGateModal({
         },
         body: JSON.stringify({
           email: trimmedEmail,
-          successUrl,
-          success_url: successUrl,
+          returnUrl,
+          returnHash,
           cancelUrl,
           cancel_url: cancelUrl,
-          returnUrl: successUrl,
         }),
       });
 
       const checkoutData = await checkoutRes.json().catch(() => ({}));
       if (checkoutRes.ok && checkoutData.url) {
+        (window as any).trackAnalyticsEvent?.("premium_checkout_redirect", {
+          email: trimmedEmail,
+          section: returnHash,
+        });
         window.location.href = checkoutData.url;
         return;
       }
@@ -5098,59 +5140,111 @@ export default function App() {
     return () => window.removeEventListener('adminAuthChanged', handleAdminAuth);
   }, []);
 
-  const navigateToApp = (source: string = 'unknown') => {
-  (window as any).trackAnalyticsEvent?.('unlock_click', { cta_source: source });
-  if (hasEmailAccess()) {
-    setSitePage("app");
-  } else {
-    setShowEmailGate(true);
-  }
-};
+  const trackHashPageView = (hashValue?: string) => {
+    const rawHash = (hashValue ?? window.location.hash.replace("#", "")) || "home";
+    const analyticsName = rawHash.replace(/-/g, "_");
+    (window as any).trackAnalyticsEvent?.(`${analyticsName}_view`, {
+      section: rawHash,
+      app_section: ["matches", "best-bets", "try-scorers", "performance", "admin"].includes(rawHash),
+    });
+  };
 
-  const checkHash = () => {
-  const hash = window.location.hash.replace("#", "");
-  if (["matches", "best-bets", "try-scorers", "performance", "admin"].includes(hash)) {
+  const navigateToApp = (source: string = 'unknown') => {
+    (window as any).trackAnalyticsEvent?.('unlock_click', { cta_source: source });
     if (hasEmailAccess()) {
       setSitePage("app");
+      window.location.hash = "matches";
     } else {
       setShowEmailGate(true);
     }
-  } else if (["results", "methodology", "ad-studio", "articles", "article-round-5-2026", "article-methodology"].includes(hash)) {
-    setSitePage(hash);
-  } else if (hash === "home" || !hash) {
-    setSitePage("home");
-  }
-};
+  };
+
+  const checkHash = () => {
+    const hash = window.location.hash.replace("#", "");
+    const appHashes = ["matches", "best-bets", "try-scorers", "performance", "admin"];
+    const publicHashes = ["results", "methodology", "ad-studio", "articles", "article-round-5-2026", "article-methodology"];
+
+    if (appHashes.includes(hash)) {
+      trackHashPageView(hash);
+      if (hasEmailAccess()) {
+        setSitePage("app");
+      } else {
+        setShowEmailGate(true);
+      }
+    } else if (publicHashes.includes(hash)) {
+      trackHashPageView(hash);
+      setSitePage(hash);
+    } else if (hash === "home" || !hash) {
+      trackHashPageView("home");
+      setSitePage("home");
+    }
+  };
 
   useEffect(() => {
-    const searchParams = new URLSearchParams(window.location.search);
-    if (searchParams.get("success") === "true") {
-      const emailParam = searchParams.get("email");
-      if (emailParam) {
-        setEmailAccess(emailParam);
-        setPaidAccess(emailParam);
-        setPaidAccessState(true);
-        const currentPremiumHash = window.location.hash.replace("#", "");
-        const returnHash = ["best-bets", "try-scorers"].includes(currentPremiumHash)
-          ? currentPremiumHash
-          : "best-bets";
-        const newUrl = `${window.location.pathname}#${returnHash}`;
-        window.history.replaceState({}, document.title, newUrl);
-        setSitePage("app");
+    const confirmStripeSuccess = async () => {
+      const searchParams = new URLSearchParams(window.location.search);
+      if (searchParams.get("success") !== "true") return;
 
-        // Persist the subscriber server-side (writes subscriber: KV record,
-        // sends welcome email once, and flips checkout_lead.completed_subscription=true)
-        fetch(
-          `/api/subscribe`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${publicAnonKey}` },
-            body: JSON.stringify({ email: emailParam, source: 'stripe_success' }),
-          }
-        ).catch(err => console.error('[RightEdge] Failed to save subscriber server-side:', err));
+      const sessionId = searchParams.get("session_id");
+      const fallbackReturnHash = searchParams.get("return_hash") || window.location.hash.replace("#", "") || "best-bets";
+      const returnHash = ["best-bets", "try-scorers"].includes(fallbackReturnHash)
+        ? fallbackReturnHash
+        : "best-bets";
+
+      if (!sessionId) {
+        (window as any).trackAnalyticsEvent?.("premium_checkout_missing_session", { return_hash: returnHash });
+        window.history.replaceState({}, document.title, `${window.location.pathname}#${returnHash}`);
+        setSitePage("app");
+        return;
       }
-    }
-    
+
+      try {
+        const res = await fetch(`/api/confirm-checkout-session`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${publicAnonKey}`,
+          },
+          body: JSON.stringify({ session_id: sessionId }),
+        });
+
+        const data = await res.json().catch(() => ({}));
+
+        if (res.ok && data.success && data.email) {
+          setEmailAccess(data.email);
+          setPaidAccess(data.email);
+          setPaidAccessState(true);
+
+          const confirmedReturnHash = ["best-bets", "try-scorers"].includes(data.returnHash)
+            ? data.returnHash
+            : returnHash;
+
+          (window as any).trackAnalyticsEvent?.("premium_checkout_confirmed", {
+            email: data.email,
+            section: confirmedReturnHash,
+            session_id: sessionId,
+          });
+
+          window.history.replaceState({}, document.title, `${window.location.pathname}#${confirmedReturnHash}`);
+          setSitePage("app");
+          return;
+        }
+
+        (window as any).trackAnalyticsEvent?.("premium_checkout_confirm_failed", {
+          session_id: sessionId,
+          error: data.error || "unknown",
+        });
+        window.history.replaceState({}, document.title, `${window.location.pathname}#${returnHash}`);
+        setSitePage("app");
+      } catch (err) {
+        console.error("[RightEdge] Failed to confirm checkout session:", err);
+        (window as any).trackAnalyticsEvent?.("premium_checkout_confirm_error", { session_id: sessionId });
+        window.history.replaceState({}, document.title, `${window.location.pathname}#${returnHash}`);
+        setSitePage("app");
+      }
+    };
+
+    confirmStripeSuccess();
     checkHash();
     window.addEventListener("hashchange", checkHash);
     return () =>
@@ -5328,6 +5422,10 @@ export default function App() {
             onRequestAccess={(targetHash = "best-bets") => {
               setSitePage("app");
               window.location.hash = targetHash;
+              (window as any).trackAnalyticsEvent?.("premium_paywall_open", {
+                section: targetHash,
+                cta_source: targetHash,
+              });
               setShowPaymentGate(true);
             }}
             onExit={() => {
@@ -5356,7 +5454,12 @@ export default function App() {
 
         <PaymentGateModal
           open={showPaymentGate}
-          onClose={() => setShowPaymentGate(false)}
+          onClose={() => {
+            (window as any).trackAnalyticsEvent?.("premium_paywall_close", {
+              section: window.location.hash.replace("#", "") || "unknown",
+            });
+            setShowPaymentGate(false);
+          }}
           onSuccess={() => {
             setPaidAccessState(hasPaidAccess());
             setShowPaymentGate(false);
