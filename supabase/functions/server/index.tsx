@@ -108,6 +108,131 @@ app.post("/track-event", async (c) => {
   }
 });
 
+
+
+function getFromEmail() {
+  const envFrom = Deno.env.get("RESEND_FROM_EMAIL");
+  if (envFrom && envFrom.includes("@")) return envFrom;
+  return "RightEdge <support@rightedge.com.au>";
+}
+
+function getResendClient() {
+  const resendApiKey = Deno.env.get("RESEND_API_KEY");
+  if (!resendApiKey) throw new Error("RESEND_API_KEY not configured");
+  return new Resend(resendApiKey);
+}
+
+function freeWelcomeHtml() {
+  return `
+  <div style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;background:#0B0E14;padding:40px 20px;color:#fff;">
+    <div style="max-width:600px;margin:0 auto;background:#111317;border:1px solid #1A1D24;">
+      <div style="text-align:center;padding:30px;border-bottom:1px solid #1A1D24;">
+        <h1 style="font-size:28px;font-family:'Arial Black',Impact,sans-serif;font-weight:900;letter-spacing:-1px;margin:0;text-transform:uppercase;color:#fff;">RIGHTEDGE</h1>
+        <div style="color:#00E676;font-size:11px;font-weight:bold;letter-spacing:2px;margin-top:5px;text-transform:uppercase;font-family:monospace;">NRL Analytics & Value Insights</div>
+      </div>
+
+      <div style="padding:30px;">
+        <h2 style="font-family:'Arial Black',Impact,sans-serif;font-size:22px;text-transform:uppercase;margin-top:0;margin-bottom:15px;color:#fff;">Welcome to RightEdge</h2>
+        <p style="color:#A1A1AA;font-size:15px;line-height:1.6;">You’re in.</p>
+        <p style="color:#A1A1AA;font-size:15px;line-height:1.6;">
+          You’ll now get the free match predictions — projected scores, predicted winners and the model read across the round.
+        </p>
+        <p style="color:#A1A1AA;font-size:15px;line-height:1.6;">
+          That’s the good stuff for following the round and sorting out your tipping comp.
+        </p>
+        <p style="color:#A1A1AA;font-size:15px;line-height:1.6;">
+          Premium is where the actual bets are: Best Bets, Try Scorer value, live odds, edge % and suggested stakes.
+        </p>
+
+        <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:25px;">
+          <tr>
+            <td align="center">
+              <a href="https://www.rightedge.com.au/#matches" style="display:block;background:#111317;border:2px solid #0047FF;color:#fff;padding:14px 24px;text-decoration:none;font-weight:900;font-size:13px;font-family:'Arial Black',sans-serif;text-transform:uppercase;letter-spacing:1px;">VIEW MATCHES ➔</a>
+            </td>
+          </tr>
+        </table>
+      </div>
+
+      <div style="padding:30px;text-align:center;border-top:1px solid #1A1D24;">
+        <p style="margin:0 0 10px 0;font-size:12px;color:#64748B;font-family:monospace;text-transform:uppercase;letter-spacing:1px;">Backed by Data, Not Guesswork.</p>
+</div>
+    </div>
+  </div>`;
+}
+
+function premiumWelcomeHtml() {
+  return `
+  <div style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;background:#0B0E14;padding:40px 20px;color:#fff;">
+    <div style="max-width:600px;margin:0 auto;background:#111317;border:1px solid #1A1D24;">
+      <div style="text-align:center;padding:30px;border-bottom:1px solid #1A1D24;">
+        <h1 style="font-size:28px;font-family:'Arial Black',Impact,sans-serif;font-weight:900;letter-spacing:-1px;margin:0;text-transform:uppercase;color:#fff;">RIGHTEDGE</h1>
+        <div style="color:#00E676;font-size:11px;font-weight:bold;letter-spacing:2px;margin-top:5px;text-transform:uppercase;font-family:monospace;">NRL Analytics & Value Insights</div>
+      </div>
+
+      <div style="padding:30px;">
+        <h2 style="font-family:'Arial Black',Impact,sans-serif;font-size:22px;text-transform:uppercase;margin-top:0;margin-bottom:15px;color:#fff;">You’re in — RightEdge Premium is live</h2>
+        <p style="color:#A1A1AA;font-size:15px;line-height:1.6;">
+          Your Premium access is now active.
+        </p>
+        <p style="color:#A1A1AA;font-size:15px;line-height:1.6;">
+          Premium includes:
+        </p>
+        <ul style="color:#A1A1AA;font-size:15px;line-height:1.8;padding-left:20px;">
+          <li>H2H Best Bets</li>
+          <li>Try Scorer value plays</li>
+          <li>Live bookmaker odds</li>
+          <li>Edge %</li>
+          <li>Suggested stakes</li>
+        </ul>
+        <p style="color:#A1A1AA;font-size:15px;line-height:1.6;">
+          Head to the site and use your email to request your login code.
+        </p>
+
+        <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:25px;">
+          <tr>
+            <td align="center">
+              <a href="https://www.rightedge.com.au/#best-bets" style="display:block;background:#00E676;color:#000;padding:16px 24px;text-decoration:none;font-weight:900;font-size:14px;font-family:'Arial Black',sans-serif;text-transform:uppercase;letter-spacing:1px;">VIEW BEST BETS AND TRY SCORERS ➔</a>
+            </td>
+          </tr>
+        </table>
+      </div>
+
+      <div style="padding:30px;text-align:center;border-top:1px solid #1A1D24;">
+        <p style="margin:0 0 10px 0;font-size:12px;color:#64748B;font-family:monospace;text-transform:uppercase;letter-spacing:1px;">Backed by Data, Not Guesswork.</p>
+</div>
+    </div>
+  </div>`;
+}
+
+async function sendWelcomeEmail(type: "free" | "premium", email: string) {
+  const resend = getResendClient();
+  const from = getFromEmail();
+
+  const subject =
+    type === "free"
+      ? "Welcome to RightEdge"
+      : "You’re in — RightEdge Premium is live";
+
+  const html =
+    type === "free"
+      ? freeWelcomeHtml()
+      : premiumWelcomeHtml();
+
+  const { error } = await resend.emails.send({
+    from,
+    to: [email],
+    subject,
+    html,
+  });
+
+  if (error) {
+    console.error(`[WelcomeEmail] Failed sending ${type} welcome to ${email}`, error);
+  } else {
+    console.log(`[WelcomeEmail] Sent ${type} welcome to ${email}`);
+  }
+}
+
+
 // Register a free featured-match email (no payment, just collects the address)
 app.post("/register-free-access", async (c) => {
   try {
@@ -128,6 +253,12 @@ app.post("/register-free-access", async (c) => {
         registeredAt: new Date().toISOString(),
       }));
       console.log(`[register-free-access] New free registration: ${email} via ${source}`);
+
+      try {
+        await sendWelcomeEmail("free", email);
+      } catch (emailErr) {
+        console.error("[register-free-access] Welcome email failed:", emailErr);
+      }
     }
 
     return c.json({ success: true });
@@ -710,11 +841,19 @@ app.post("/confirm-checkout-session", async (c) => {
         ? session.subscription
         : (session.subscription as any)?.id || "";
 
-    await saveVerifiedSubscriber(email, "stripe_checkout_confirmed", {
+    const { isNewSubscriber } = await saveVerifiedSubscriber(email, "stripe_checkout_confirmed", {
       customerId,
       subscriptionId,
       checkoutSessionId: session.id,
     });
+
+    if (isNewSubscriber) {
+      try {
+        await sendWelcomeEmail("premium", email);
+      } catch (emailErr) {
+        console.error("[confirm-checkout-session] Premium welcome email failed:", emailErr);
+      }
+    }
 
     await kv.set(`analytics:conversion:${new Date().toISOString()}:${crypto.randomUUID()}`, JSON.stringify({
       type: "premium_checkout_confirmed",
@@ -783,6 +922,14 @@ app.post("/subscribe", async (c) => {
       customerId,
       subscriptionId: activeSubscription.id,
     });
+
+    if (isNewSubscriber) {
+      try {
+        await sendWelcomeEmail("premium", email);
+      } catch (emailErr) {
+        console.error("[subscribe] Premium welcome email failed:", emailErr);
+      }
+    }
 
     return c.json({ success: true, message: "You're in!", isNew: isNewSubscriber });
   } catch (err: any) {
@@ -1055,9 +1202,8 @@ if (typeof Deno.cron === "function") {
 
           <!-- FOOTER -->
           <div style="padding: 30px; text-align: center; border-top: 1px solid #1A1D24;">
-            <p style="margin: 0 0 10px 0; font-size: 12px; color: #64748B; font-family: monospace; text-transform: uppercase; letter-spacing: 1px;">No fluff. Just the edge.</p>
-            <p style="margin: 0; font-size: 10px; color: #475569; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;">&copy; RightEdge Analytics</p>
-          </div>
+            <p style="margin: 0 0 10px 0; font-size: 12px; color: #64748B; font-family: monospace; text-transform: uppercase; letter-spacing: 1px;">Backed by Data, Not Guesswork.</p>
+</div>
 
         </div>
       </div>
@@ -1158,9 +1304,8 @@ Deno.cron("Sunday Ledger Review", "0 8 * * 0", async () => {
           </div>
 
           <div style="padding: 30px; text-align: center; border-top: 1px solid #1A1D24;">
-            <p style="margin: 0 0 10px 0; font-size: 12px; color: #64748B; font-family: monospace; text-transform: uppercase; letter-spacing: 1px;">No fluff. Just the edge.</p>
-            <p style="margin: 0; font-size: 10px; color: #475569; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;">&copy; RightEdge Analytics</p>
-          </div>
+            <p style="margin: 0 0 10px 0; font-size: 12px; color: #64748B; font-family: monospace; text-transform: uppercase; letter-spacing: 1px;">Backed by Data, Not Guesswork.</p>
+</div>
 
         </div>
       </div>
