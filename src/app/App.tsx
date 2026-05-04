@@ -2679,7 +2679,7 @@ function PublicHero({
         </div>
 
         <h1 className="text-3xl sm:text-4xl md:text-5xl font-black tracking-tighter text-white leading-[1.05] mb-4">
-          What to Bet This NRL Round
+          What to Bet This NRL Round - Backed by Data, Not Guesswork.
         </h1>
         
         <div className="text-sm sm:text-base md:text-lg text-white/70 leading-relaxed mb-6 font-medium">
@@ -2692,7 +2692,6 @@ function PublicHero({
             </p>
         
             <p className="mt-4 text-white font-semibold">
-              Backed by Data, Not Guesswork.
             </p>
           </ReadMore>
         </div>
@@ -2702,7 +2701,7 @@ function PublicHero({
             onClick={() => onGoApp('hero_unlock_best_bets')}
             className="inline-flex w-full sm:w-auto items-center justify-center gap-2 bg-[#FFEA00] text-black px-8 py-3 text-base font-black hover:bg-[#FFD600] transition-colors uppercase tracking-wide shadow-[3px_3px_0_0_#FF2E63] sm:shadow-[4px_4px_0_0_#FF2E63]"
           >
-            View Predictions
+            View Match Predictions
             <ArrowRight className="w-4 h-4 stroke-[3px]" />
           </button>
 
