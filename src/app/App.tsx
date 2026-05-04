@@ -2685,7 +2685,6 @@ function PublicHero({
         <div className="text-sm sm:text-base md:text-lg text-white/70 leading-relaxed mb-6 font-medium">
           <ReadMore>
             <p>
-              RightEdge is a premium NRL sports betting analytics platform. We run a proprietary mathematical model that simulates matches to find where bookmakers are mispricing the market. Members get direct access to our projected scores, true win probabilities, identified mathematical edges, and officially staked plays.
             </p>
         
             <p className="mt-4">
