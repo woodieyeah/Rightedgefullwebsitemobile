@@ -2679,7 +2679,7 @@ function PublicHero({
         </div>
 
         <h1 className="text-3xl sm:text-4xl md:text-5xl font-black tracking-tighter text-white leading-[1.05] mb-4">
-          What to Bet This NRL Round - Backed by Data, Not Guesswork.
+          What to Bet This NRL Round – Backed by Data, Not Guesswork.
         </h1>
         
         <div className="text-sm sm:text-base md:text-lg text-white/70 leading-relaxed mb-6 font-medium">
