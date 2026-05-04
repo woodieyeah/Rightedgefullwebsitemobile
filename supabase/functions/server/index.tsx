@@ -169,7 +169,7 @@ function freeWelcomeHtml() {
           </table>
 
           <div style="font-size:14px;line-height:1.7;color:#9aa7bd;">
-            Premium is just <span style="color:#ffffff;font-weight:800;">$9 a week</span> — and one good number can cover that quickly.
+          <span style="color:#ffffff;font-weight:800;">$9/Week</span> — Limited Offer.
           </div>
         </div>
 
@@ -179,30 +179,26 @@ function freeWelcomeHtml() {
               <div style="background:#0a0d14;border-top:4px solid #0a4dff;padding:22px 18px;height:100%;">
                 <div style="font-size:13px;color:#0a4dff;font-weight:900;text-transform:uppercase;letter-spacing:0.7px;">01</div>
                 <div style="margin-top:10px;font-family:Arial Black,Impact,Helvetica,sans-serif;font-size:19px;line-height:1.1;color:#ffffff;text-transform:uppercase;">Model Probability</div>
-                <div style="margin-top:10px;font-size:14px;line-height:1.6;color:#c9cfdb;">We price each matchup ourselves instead of following public opinion.</div>
+                <div style="margin-top:10px;font-size:14px;line-height:1.6;color:#c9cfdb;">Each matchup is assigned a model-based probability and converted into fair odds.</div>
               </div>
             </td>
             <td width="33.33%" style="padding:0 5px 10px 5px;vertical-align:top;">
               <div style="background:#0a0d14;border-top:4px solid #ffe600;padding:22px 18px;height:100%;">
                 <div style="font-size:13px;color:#ffe600;font-weight:900;text-transform:uppercase;letter-spacing:0.7px;">02</div>
                 <div style="margin-top:10px;font-family:Arial Black,Impact,Helvetica,sans-serif;font-size:19px;line-height:1.1;color:#ffffff;text-transform:uppercase;">Market Comparison</div>
-                <div style="margin-top:10px;font-size:14px;line-height:1.6;color:#c9cfdb;">The edge only exists when the bookmaker price is still off.</div>
+                <div style="margin-top:10px;font-size:14px;line-height:1.6;color:#c9cfdb;">Market prices are pulled alongside model odds so edges can be evaluated in real time.</div>
               </div>
             </td>
             <td width="33.33%" style="padding-left:10px;padding-bottom:10px;vertical-align:top;">
               <div style="background:#0a0d14;border-top:4px solid #ff2f7d;padding:22px 18px;height:100%;">
                 <div style="font-size:13px;color:#ff2f7d;font-weight:900;text-transform:uppercase;letter-spacing:0.7px;">03</div>
-                <div style="margin-top:10px;font-family:Arial Black,Impact,Helvetica,sans-serif;font-size:19px;line-height:1.1;color:#ffffff;text-transform:uppercase;">Value Staking</div>
-                <div style="margin-top:10px;font-size:14px;line-height:1.6;color:#c9cfdb;">Premium tells you which numbers are worth attacking before the edge disappears.</div>
+                <div style="margin-top:10px;font-family:Arial Black,Impact,Helvetica,sans-serif;font-size:19px;line-height:1.1;color:#ffffff;text-transform:uppercase;">Value Detection</div>
+                <div style="margin-top:10px;font-size:14px;line-height:1.6;color:#c9cfdb;">Premium shows you what to bet so you get the edge on the bookies.</div>
               </div>
             </td>
           </tr>
         </table>
 
-        <div style="margin-top:8px;background:#0a0d14;border-left:4px solid #00f0a8;padding:20px 22px;">
-          <div style="font-size:11px;color:#00f0a8;font-weight:900;letter-spacing:1.2px;text-transform:uppercase;">The shift</div>
-          <div style="margin-top:8px;font-size:16px;line-height:1.7;color:#ffffff;">Stop asking <span style="color:#ffe600;font-weight:800;">who wins?</span> and start asking <span style="color:#00f0a8;font-weight:800;">is this price wrong?</span></div>
-        </div>
 
         <div style="margin-top:24px;text-align:center;font-size:12px;color:#6f7f99;font-weight:700;letter-spacing:2px;text-transform:uppercase;">Backed by data, not guesswork.</div>
       </div>
