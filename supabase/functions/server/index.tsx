@@ -122,62 +122,134 @@ function getResendClient() {
   return new Resend(resendApiKey);
 }
 
-function getResendPropertyValue(value: unknown) {
-  if (value === null || value === undefined) return "";
-  if (typeof value === "string") return value;
-  if (typeof value === "number" || typeof value === "boolean") return String(value);
-  try {
-    return JSON.stringify(value);
-  } catch {
-    return String(value);
+
+type ResendLifecycleStage = "free" | "lead" | "premium";
+
+const RESEND_SEGMENT_NAMES = {
+  free: "Free",
+  lead: "Checkout Leads",
+  premium: "Premium",
+} as const;
+
+const resendSegmentCache = new Map<string, string>();
+
+async function getOrCreateResendSegmentId(name: string) {
+  if (resendSegmentCache.has(name)) return resendSegmentCache.get(name)!;
+
+  const resend = getResendClient();
+  const listResult = await resend.segments.list();
+  if (listResult.error) {
+    throw new Error(`Failed listing Resend segments: ${JSON.stringify(listResult.error)}`);
+  }
+
+  const existing = listResult.data?.data?.find((segment: any) =>
+    (segment?.name || "").toLowerCase() === name.toLowerCase()
+  );
+
+  if (existing?.id) {
+    resendSegmentCache.set(name, existing.id);
+    return existing.id;
+  }
+
+  const createResult = await resend.segments.create({ name });
+  if (createResult.error || !createResult.data?.id) {
+    throw new Error(`Failed creating Resend segment ${name}: ${JSON.stringify(createResult.error)}`);
+  }
+
+  resendSegmentCache.set(name, createResult.data.id);
+  return createResult.data.id;
+}
+
+async function ensureResendContact(email: string) {
+  const resend = getResendClient();
+  const cleanEmail = email.trim().toLowerCase();
+
+  const createResult = await resend.contacts.create({
+    email: cleanEmail,
+    unsubscribed: false,
+  });
+
+  if (!createResult.error) {
+    console.log(`[ResendContact] Created contact ${cleanEmail}`);
+    return true;
+  }
+
+  const updateResult = await resend.contacts.update({
+    email: cleanEmail,
+    unsubscribed: false,
+  });
+
+  if (updateResult.error) {
+    console.error(`[ResendContact] Failed to create/update contact ${cleanEmail}`, {
+      createError: createResult.error,
+      updateError: updateResult.error,
+    });
+    return false;
+  }
+
+  console.log(`[ResendContact] Updated contact ${cleanEmail}`);
+  return true;
+}
+
+async function addContactToSegment(email: string, segmentId: string, segmentName: string) {
+  const resend = getResendClient();
+  const result = await resend.contacts.segments.add({
+    email: email.trim().toLowerCase(),
+    segmentId,
+  });
+
+  if (result.error) {
+    console.error(`[ResendContact] Failed adding ${email} to segment ${segmentName}`, result.error);
+  } else {
+    console.log(`[ResendContact] Added ${email} to segment ${segmentName}`);
   }
 }
 
-async function upsertResendContact(
-  email: string,
-  properties: Record<string, unknown> = {},
-) {
+async function removeContactFromSegment(email: string, segmentId: string, segmentName: string) {
+  const resend = getResendClient();
+  const result = await resend.contacts.segments.remove({
+    email: email.trim().toLowerCase(),
+    segmentId,
+  });
+
+  if (result.error) {
+    console.warn(`[ResendContact] Could not remove ${email} from segment ${segmentName}`, result.error);
+  } else {
+    console.log(`[ResendContact] Removed ${email} from segment ${segmentName}`);
+  }
+}
+
+async function syncResendLifecycle(email: string, stage: ResendLifecycleStage) {
   try {
-    const resend = getResendClient();
     const cleanEmail = email.trim().toLowerCase();
-    const cleanProperties = Object.fromEntries(
-      Object.entries({
-        ...properties,
-        email: cleanEmail,
-        last_synced_at: new Date().toISOString(),
-      }).map(([key, value]) => [key, getResendPropertyValue(value)]),
-    );
+    const ok = await ensureResendContact(cleanEmail);
+    if (!ok) return;
 
-    const createResult = await resend.contacts.create({
-      email: cleanEmail,
-      unsubscribed: false,
-      properties: cleanProperties,
-    });
+    const freeSegmentId = await getOrCreateResendSegmentId(RESEND_SEGMENT_NAMES.free);
+    const leadSegmentId = await getOrCreateResendSegmentId(RESEND_SEGMENT_NAMES.lead);
+    const premiumSegmentId = await getOrCreateResendSegmentId(RESEND_SEGMENT_NAMES.premium);
 
-    if (!createResult.error) {
-      console.log(`[ResendContact] Created contact ${cleanEmail}`);
+    if (stage === "free") {
+      await addContactToSegment(cleanEmail, freeSegmentId, RESEND_SEGMENT_NAMES.free);
+      await removeContactFromSegment(cleanEmail, premiumSegmentId, RESEND_SEGMENT_NAMES.premium);
+      await removeContactFromSegment(cleanEmail, leadSegmentId, RESEND_SEGMENT_NAMES.lead);
       return;
     }
 
-    const updateResult = await resend.contacts.update({
-      email: cleanEmail,
-      unsubscribed: false,
-      properties: cleanProperties,
-    });
+    if (stage === "lead") {
+      await addContactToSegment(cleanEmail, leadSegmentId, RESEND_SEGMENT_NAMES.lead);
+      return;
+    }
 
-    if (updateResult.error) {
-      console.error(`[ResendContact] Failed to create/update contact ${cleanEmail}`, {
-        createError: createResult.error,
-        updateError: updateResult.error,
-      });
-    } else {
-      console.log(`[ResendContact] Updated contact ${cleanEmail}`);
+    if (stage === "premium") {
+      await addContactToSegment(cleanEmail, premiumSegmentId, RESEND_SEGMENT_NAMES.premium);
+      await removeContactFromSegment(cleanEmail, freeSegmentId, RESEND_SEGMENT_NAMES.free);
+      await removeContactFromSegment(cleanEmail, leadSegmentId, RESEND_SEGMENT_NAMES.lead);
     }
   } catch (err) {
-    console.error(`[ResendContact] Unexpected error syncing contact ${email}`, err);
+    console.error(`[ResendContact] Unexpected error syncing ${email} as ${stage}`, err);
   }
 }
-
 
 function freeWelcomeHtml() {
   return `
@@ -395,14 +467,7 @@ app.post("/register-free-access", async (c) => {
       console.log(`[register-free-access] New free registration: ${email} via ${source}`);
     }
 
-    await upsertResendContact(email, {
-      plan: "free",
-      lifecycle_stage: "free_signup",
-      signup_source: source,
-      free_access: "true",
-      premium_status: "not_active",
-      free_registered_at: new Date().toISOString(),
-    });
+    await syncResendLifecycle(email, "free");
 
     if (isNewFreeRegistration) {
       try {
@@ -457,17 +522,10 @@ app.post("/register-checkout-lead", async (c) => {
     }
 
     await kv.set(key, JSON.stringify(record));
-
-    await upsertResendContact(email, {
-      plan: "lead",
-      lifecycle_stage: "checkout_lead",
-      signup_source: record.source || "checkout_start",
-      premium_status: "pending",
-      checkout_attempt_count: record.attempt_count || 1,
-      checkout_last_seen_at: record.last_seen_at || new Date().toISOString(),
-    });
-
     console.log(`[register-checkout-lead] Lead saved: ${email} (attempt ${record.attempt_count})`);
+
+    await syncResendLifecycle(email, "lead");
+
     return c.json({ success: true });
   } catch (e) {
     console.error('[register-checkout-lead] Error:', e);
@@ -925,18 +983,6 @@ async function saveVerifiedSubscriber(email: string, source = 'stripe_verified',
 
   await kv.set(key, JSON.stringify(payload));
 
-  await upsertResendContact(normalizedEmail, {
-    plan: "premium",
-    lifecycle_stage: "premium_subscriber",
-    signup_source: source,
-    premium_status: "active",
-    stripe_customer_id: stripeData.customerId || "",
-    stripe_subscription_id: stripeData.subscriptionId || "",
-    stripe_checkout_session_id: stripeData.checkoutSessionId || "",
-    premium_verified_at: payload.verifiedAt,
-    premium_subscribed_at: payload.subscribedAt,
-  });
-
   try {
     const leadKey = `checkout_lead:${normalizedEmail}`;
     const existingLead = await kv.get(leadKey);
@@ -1020,6 +1066,8 @@ app.post("/confirm-checkout-session", async (c) => {
       checkoutSessionId: session.id,
     });
 
+    await syncResendLifecycle(email, "premium");
+
     if (isNewSubscriber) {
       try {
         await sendWelcomeEmail("premium", email);
@@ -1095,6 +1143,8 @@ app.post("/subscribe", async (c) => {
       customerId,
       subscriptionId: activeSubscription.id,
     });
+
+    await syncResendLifecycle(email, "premium");
 
     if (isNewSubscriber) {
       try {
