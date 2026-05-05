@@ -122,6 +122,63 @@ function getResendClient() {
   return new Resend(resendApiKey);
 }
 
+function getResendPropertyValue(value: unknown) {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+async function upsertResendContact(
+  email: string,
+  properties: Record<string, unknown> = {},
+) {
+  try {
+    const resend = getResendClient();
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanProperties = Object.fromEntries(
+      Object.entries({
+        ...properties,
+        email: cleanEmail,
+        last_synced_at: new Date().toISOString(),
+      }).map(([key, value]) => [key, getResendPropertyValue(value)]),
+    );
+
+    const createResult = await resend.contacts.create({
+      email: cleanEmail,
+      unsubscribed: false,
+      properties: cleanProperties,
+    });
+
+    if (!createResult.error) {
+      console.log(`[ResendContact] Created contact ${cleanEmail}`);
+      return;
+    }
+
+    const updateResult = await resend.contacts.update({
+      email: cleanEmail,
+      unsubscribed: false,
+      properties: cleanProperties,
+    });
+
+    if (updateResult.error) {
+      console.error(`[ResendContact] Failed to create/update contact ${cleanEmail}`, {
+        createError: createResult.error,
+        updateError: updateResult.error,
+      });
+    } else {
+      console.log(`[ResendContact] Updated contact ${cleanEmail}`);
+    }
+  } catch (err) {
+    console.error(`[ResendContact] Unexpected error syncing contact ${email}`, err);
+  }
+}
+
+
 function freeWelcomeHtml() {
   return `
   <div style="margin:0;padding:0;background:#05070b;">
@@ -327,6 +384,8 @@ app.post("/register-free-access", async (c) => {
 
     const key = `free_access:${email}`;
     const existing = await kv.get(key);
+    const isNewFreeRegistration = !existing;
+
     if (!existing) {
       await kv.set(key, JSON.stringify({
         email,
@@ -334,7 +393,18 @@ app.post("/register-free-access", async (c) => {
         registeredAt: new Date().toISOString(),
       }));
       console.log(`[register-free-access] New free registration: ${email} via ${source}`);
+    }
 
+    await upsertResendContact(email, {
+      plan: "free",
+      lifecycle_stage: "free_signup",
+      signup_source: source,
+      free_access: "true",
+      premium_status: "not_active",
+      free_registered_at: new Date().toISOString(),
+    });
+
+    if (isNewFreeRegistration) {
       try {
         await sendWelcomeEmail("free", email);
       } catch (emailErr) {
@@ -387,6 +457,16 @@ app.post("/register-checkout-lead", async (c) => {
     }
 
     await kv.set(key, JSON.stringify(record));
+
+    await upsertResendContact(email, {
+      plan: "lead",
+      lifecycle_stage: "checkout_lead",
+      signup_source: record.source || "checkout_start",
+      premium_status: "pending",
+      checkout_attempt_count: record.attempt_count || 1,
+      checkout_last_seen_at: record.last_seen_at || new Date().toISOString(),
+    });
+
     console.log(`[register-checkout-lead] Lead saved: ${email} (attempt ${record.attempt_count})`);
     return c.json({ success: true });
   } catch (e) {
@@ -844,6 +924,18 @@ async function saveVerifiedSubscriber(email: string, source = 'stripe_verified',
   };
 
   await kv.set(key, JSON.stringify(payload));
+
+  await upsertResendContact(normalizedEmail, {
+    plan: "premium",
+    lifecycle_stage: "premium_subscriber",
+    signup_source: source,
+    premium_status: "active",
+    stripe_customer_id: stripeData.customerId || "",
+    stripe_subscription_id: stripeData.subscriptionId || "",
+    stripe_checkout_session_id: stripeData.checkoutSessionId || "",
+    premium_verified_at: payload.verifiedAt,
+    premium_subscribed_at: payload.subscribedAt,
+  });
 
   try {
     const leadKey = `checkout_lead:${normalizedEmail}`;
