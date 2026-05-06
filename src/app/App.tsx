@@ -2159,7 +2159,7 @@ function PublicNav({
                 <button
                   key={item.id}
                   onClick={() => setPage(item.id)}
-                  className={`hidden sm:inline-flex shrink-0 items-center justify-center px-3 py-2 sm:px-5 sm:py-2.5 text-[11px] sm:text-sm font-black uppercase tracking-wider transition-colors ${
+                  className={`${item.id === "home" ? "hidden sm:inline-flex" : "inline-flex flex-1 sm:flex-none"} shrink-0 items-center justify-center px-3 py-2 sm:px-5 sm:py-2.5 text-[11px] sm:text-sm font-black uppercase tracking-wider transition-colors ${
                     active && isPredictions
                       ? "bg-[#1E232B] text-[#FFEA00] border border-[#FFEA00]/60 sm:bg-[#FFEA00] sm:text-black sm:border-0 sm:shadow-[4px_4px_0_0_#FF2E63]"
                       : active
@@ -2175,7 +2175,7 @@ function PublicNav({
             })}
             <button
               onClick={onPremiumLogin}
-              className="shrink-0 inline-flex w-full sm:w-auto items-center justify-center gap-2 px-3 py-2.5 sm:px-5 sm:py-2.5 text-[11px] sm:text-sm font-black uppercase tracking-wider transition-colors bg-[#FF2E63] text-white hover:bg-[#E62959] shadow-[2px_2px_0_0_#0047FF] sm:shadow-[4px_4px_0_0_#0047FF]"
+              className="shrink-0 inline-flex flex-1 sm:flex-none items-center justify-center gap-2 px-3 py-2 sm:px-5 sm:py-2.5 text-[11px] sm:text-sm font-black uppercase tracking-wider transition-colors bg-[#FF2E63] text-white hover:bg-[#E62959] shadow-[2px_2px_0_0_#0047FF] sm:shadow-[4px_4px_0_0_#0047FF]"
             >
               Premium Login
               <Crown className="w-4 h-4 stroke-[3px]" />
@@ -2635,18 +2635,18 @@ function PublicHero({
   onRequestPremium: (source: string) => void;
 }) {
   return (
-    <HomeCard className="p-5 sm:p-6 md:p-8 md:py-10 relative overflow-hidden !border-[#FF2E63]">
+    <HomeCard className="p-6 md:p-8 md:py-10 relative overflow-hidden !border-[#FF2E63]">
       <div className="absolute inset-0 bg-[#111317]" />
-      <div className="absolute -top-16 -left-16 h-[210px] w-[58%] rounded-br-[170px] bg-[#FF2E63]/58 sm:bg-[#FF2E63]/38" />
-      <div className="absolute -right-24 bottom-0 h-[190px] w-[56%] rounded-tl-[160px] bg-[#0047FF]/28 sm:bg-[#0047FF]/24" />
-      <div className="absolute inset-0 bg-[linear-gradient(100deg,rgba(17,19,23,0.18)_0%,rgba(17,19,23,0.58)_38%,rgba(17,19,23,0.94)_76%)] sm:bg-[linear-gradient(100deg,rgba(17,19,23,0.08),rgba(17,19,23,0.9)_74%)]" />
+      <div className="absolute -top-10 -left-8 h-[230px] w-[62%] rounded-br-[190px] bg-[#FF2E63]/95 sm:bg-[#FF2E63]/38" />
+      <div className="absolute -right-24 bottom-0 h-[210px] w-[58%] rounded-tl-[180px] bg-[#0047FF]/65 sm:bg-[#0047FF]/24" />
+      <div className="absolute inset-0 bg-[linear-gradient(100deg,rgba(17,19,23,0)_0%,rgba(17,19,23,0.08)_34%,rgba(17,19,23,0.92)_76%)] sm:bg-[linear-gradient(100deg,rgba(17,19,23,0.08),rgba(17,19,23,0.9)_74%)]" />
       <div className="relative z-10 max-w-[800px]">
         <div className="inline-flex items-center gap-2 bg-[#FF2E63]/15 border border-[#FF2E63]/50 px-3 py-1.5 text-[10px] sm:text-xs font-bold text-[#FFEA00] sm:text-white mb-4 uppercase tracking-wider">
           <Sparkles className="w-3.5 h-3.5" />
           Value Betting Intelligence
         </div>
 
-        <h1 className="text-[30px] sm:text-4xl md:text-5xl font-black tracking-tighter text-white leading-[1.03] mb-4">
+        <h1 className="text-3xl sm:text-4xl md:text-5xl font-black tracking-tighter text-white leading-[1.05] mb-4">
           What to Bet This NRL Round – Backed by Data, Not Guesswork.
         </h1>
         
@@ -2664,10 +2664,10 @@ function PublicHero({
           </button>
 
           <button
-            onClick={onUnlockFeatured}
+            onClick={() => onGoApp('hero_unlock_best_bets')}
             className="order-2 sm:order-1 inline-flex w-full sm:w-auto items-center justify-center gap-2 bg-[#1E232B] sm:bg-[#FFEA00] text-white sm:text-black border-2 border-[#FFEA00]/70 sm:border-0 px-8 py-3 text-base font-black hover:border-[#FFEA00] sm:hover:bg-[#FFD600] transition-colors uppercase tracking-wide sm:shadow-[4px_4px_0_0_#FF2E63]"
           >
-            View Free Match Preview
+            View Match Predictions
             <ArrowRight className="w-4 h-4 stroke-[3px]" />
           </button>
         </div>
@@ -2769,8 +2769,8 @@ function FeaturedMatchPreview({
       </h2>
       <HomeCard className="p-8 md:p-12 relative overflow-hidden !border-[#0047FF]">
         <div className="absolute inset-0 bg-[#111317]" />
-        <div className="absolute top-0 right-0 h-[360px] w-[76%] bg-[#0047FF]/82 sm:bg-[#0047FF]/58" />
-        <div className="absolute -left-52 top-0 h-[520px] w-[520px] rounded-full bg-[#111317]/96" />
+        <div className="absolute top-0 right-0 h-[390px] w-[82%] bg-[#0047FF]/95 sm:bg-[#0047FF]/58" />
+        <div className="absolute -left-48 top-0 h-[520px] w-[520px] rounded-full bg-[#111317]/95" />
         <div className="absolute inset-x-0 bottom-0 h-2/5 bg-[linear-gradient(180deg,rgba(17,19,23,0),#111317_62%)]" />
         <div className="relative z-10 flex flex-col md:flex-row md:items-start justify-between gap-10">
           <div className="flex-1">
