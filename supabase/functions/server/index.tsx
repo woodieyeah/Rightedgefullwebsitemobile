@@ -779,26 +779,7 @@ app.post("/verify-email", async (c) => {
     
     const stripe = new Stripe(stripeKey, { apiVersion: "2023-10-16" });
     
-    const customers = await stripe.customers.list({ email, limit: 10 });
-    let activeSubscription: any = null;
-    let customerId = "";
-    
-    for (const customer of customers.data) {
-      const subscriptions = await stripe.subscriptions.list({
-        customer: customer.id,
-        status: "all",
-        limit: 10,
-      });
-
-      activeSubscription = subscriptions.data.find((subscription: any) =>
-        ["active", "trialing"].includes(subscription.status)
-      );
-
-      if (activeSubscription) {
-        customerId = customer.id;
-        break;
-      }
-    }
+    const { activeSubscription, customerId } = await findActiveStripeSubscription(stripe, email);
     
     if (!activeSubscription) {
       return c.json({ active: false });
@@ -810,9 +791,13 @@ app.post("/verify-email", async (c) => {
     });
     await syncResendLifecycle(email, "premium");
 
+    // Keep compatibility with the currently deployed frontend, which sends
+    // users with active=true into the old OTP screen. Returning active=false
+    // lets it continue to create-checkout-session, where existing subscribers
+    // are bounced straight back into confirmed access without paying again.
     return c.json({
-      active: true,
-      activeSubscriber: true,
+      active: false,
+      instantAccess: true,
       email,
       subscriptionId: activeSubscription.id,
       status: activeSubscription.status,
@@ -823,6 +808,44 @@ app.post("/verify-email", async (c) => {
     return c.json({ error: "Failed to verify email" }, 500);
   }
 });
+
+async function findActiveStripeSubscription(stripe: Stripe, email: string) {
+  const customers = await stripe.customers.list({ email, limit: 10 });
+  let activeSubscription: any = null;
+  let customerId = "";
+
+  for (const customer of customers.data) {
+    const subscriptions = await stripe.subscriptions.list({
+      customer: customer.id,
+      status: "all",
+      limit: 10,
+    });
+
+    activeSubscription = subscriptions.data.find((subscription: any) =>
+      ["active", "trialing"].includes(subscription.status)
+    );
+
+    if (activeSubscription) {
+      customerId = customer.id;
+      break;
+    }
+  }
+
+  return { activeSubscription, customerId };
+}
+
+async function createInstantAccessUrl(email: string, returnUrl: string, returnHash: string, customerId: string, subscriptionId: string) {
+  const token = crypto.randomUUID();
+  await kv.set(`instant_access:${token}`, JSON.stringify({
+    email,
+    returnHash,
+    customerId,
+    subscriptionId,
+    createdAt: new Date().toISOString(),
+  }));
+
+  return `${returnUrl}?success=true&session_id=cs_rightedge_${token}&return_hash=${encodeURIComponent(returnHash)}#${returnHash}`;
+}
 
 app.post("/verify-otp", async (c) => {
   try {
@@ -895,6 +918,17 @@ app.post("/create-checkout-session", async (c) => {
     }
 
     const stripe = new Stripe(stripeKey, { apiVersion: "2023-10-16" });
+    const { activeSubscription, customerId } = await findActiveStripeSubscription(stripe, email);
+
+    if (activeSubscription) {
+      const url = await createInstantAccessUrl(email, returnUrl, returnHash, customerId, activeSubscription.id);
+      console.log(`[Stripe] Existing subscriber ${email} given instant premium access for #${returnHash}`);
+      return c.json({
+        url,
+        instantAccess: true,
+        subscriptionId: activeSubscription.id,
+      });
+    }
 
     await kv.set(`checkout_lead:${email}`, JSON.stringify({
       email,
@@ -993,6 +1027,41 @@ app.post("/confirm-checkout-session", async (c) => {
 
     if (!sessionId || !String(sessionId).startsWith("cs_")) {
       return c.json({ error: "Valid Stripe checkout session_id is required." }, 400);
+    }
+
+    if (String(sessionId).startsWith("cs_rightedge_")) {
+      const token = String(sessionId).replace("cs_rightedge_", "");
+      const instantAccess = await kv.get(`instant_access:${token}`);
+
+      if (!instantAccess) {
+        return c.json({ error: "Instant access session expired." }, 404);
+      }
+
+      const data: any = typeof instantAccess === "string" ? JSON.parse(instantAccess) : instantAccess;
+      const email = data?.email?.trim()?.toLowerCase();
+      if (!email || !email.includes("@")) {
+        return c.json({ error: "Invalid instant access session." }, 400);
+      }
+
+      const returnHash = ["best-bets", "try-scorers"].includes(data.returnHash)
+        ? data.returnHash
+        : "best-bets";
+
+      await saveVerifiedSubscriber(email, "stripe_existing_subscriber_instant_access", {
+        customerId: data.customerId || "",
+        subscriptionId: data.subscriptionId || "",
+      });
+      await syncResendLifecycle(email, "premium");
+      await kv.del(`instant_access:${token}`);
+
+      console.log(`[Stripe] Confirmed instant premium access for existing subscriber ${email}`);
+      return c.json({
+        success: true,
+        email,
+        returnHash,
+        customerId: data.customerId || "",
+        subscriptionId: data.subscriptionId || "",
+      });
     }
 
     const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
