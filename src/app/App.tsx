@@ -2636,7 +2636,10 @@ function PublicHero({
 }) {
   return (
     <HomeCard className="p-6 md:p-8 md:py-10 relative overflow-hidden !border-[#FF2E63]">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,46,99,0.12),transparent_60%)]" />
+      <div className="absolute inset-0 bg-[#111317]" />
+      <div className="absolute -top-24 -left-24 h-[260px] w-[300px] rounded-br-[180px] bg-[#FF2E63]/95 sm:bg-[#FF2E63]/35" />
+      <div className="absolute -right-20 bottom-0 h-[220px] w-[260px] rounded-tl-[160px] bg-[#0047FF]/45 sm:bg-[#0047FF]/20" />
+      <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(17,19,23,0.14),rgba(17,19,23,0.94)_72%)] sm:bg-[linear-gradient(90deg,rgba(17,19,23,0.2),rgba(17,19,23,0.92)_70%)]" />
       <div className="relative z-10 max-w-[800px]">
         <div className="inline-flex items-center gap-2 bg-[#FF2E63]/15 border border-[#FF2E63]/50 px-3 py-1.5 text-[10px] sm:text-xs font-bold text-[#FFEA00] sm:text-white mb-4 uppercase tracking-wider">
           <Sparkles className="w-3.5 h-3.5" />
@@ -2765,7 +2768,10 @@ function FeaturedMatchPreview({
         Featured Match
       </h2>
       <HomeCard className="p-8 md:p-12 relative overflow-hidden !border-[#0047FF]">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(0,71,255,0.1),transparent_40%)]" />
+        <div className="absolute inset-0 bg-[#111317]" />
+        <div className="absolute -top-20 -right-24 h-[360px] w-[360px] rounded-bl-[240px] bg-[#0047FF]/95 sm:bg-[#0047FF]/55" />
+        <div className="absolute left-0 top-0 h-full w-1/3 bg-[#0047FF]/20" />
+        <div className="absolute inset-0 bg-[linear-gradient(120deg,rgba(17,19,23,0.12)_0%,rgba(17,19,23,0.12)_38%,rgba(17,19,23,0.92)_74%)]" />
         <div className="relative z-10 flex flex-col md:flex-row md:items-start justify-between gap-10">
           <div className="flex-1">
             <div className="flex flex-wrap items-center gap-4 mb-8">
