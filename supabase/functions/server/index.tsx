@@ -779,61 +779,45 @@ app.post("/verify-email", async (c) => {
     
     const stripe = new Stripe(stripeKey, { apiVersion: "2023-10-16" });
     
-    const customers = await stripe.customers.list({ email, limit: 1 });
-    let isActive = false;
+    const customers = await stripe.customers.list({ email, limit: 10 });
+    let activeSubscription: any = null;
+    let customerId = "";
     
-    if (customers.data.length > 0) {
+    for (const customer of customers.data) {
       const subscriptions = await stripe.subscriptions.list({
-        customer: customers.data[0].id,
-        status: 'active',
-        limit: 1
+        customer: customer.id,
+        status: "all",
+        limit: 10,
       });
-      if (subscriptions.data.length > 0) {
-        isActive = true;
+
+      activeSubscription = subscriptions.data.find((subscription: any) =>
+        ["active", "trialing"].includes(subscription.status)
+      );
+
+      if (activeSubscription) {
+        customerId = customer.id;
+        break;
       }
     }
     
-    if (isActive) {
-      const otp = Math.floor(100000 + Math.random() * 900000).toString();
-      await kv.set(`otp:${email}`, otp);
-      
-      console.log(`\n\n=== LOGIN CODE FOR ${email} ===\n${otp}\n=================================\n\n`);
-      
-      const resendApiKey = Deno.env.get("RESEND_API_KEY");
-      let fromEmail = Deno.env.get("RESEND_FROM_EMAIL");
-      if (!fromEmail || !fromEmail.includes("@")) {
-        fromEmail = 'RightEdge Support <elliott@rightedge.com.au>';
-      }
-
-      if (resendApiKey) {
-        try {
-          const resend = new Resend(resendApiKey);
-          const { data, error } = await resend.emails.send({
-            from: fromEmail,
-            to: [email],
-            subject: 'Your RightEdge Login Code',
-            html: `<div style="font-family: sans-serif; padding: 20px;">
-              <h2>Welcome back!</h2>
-              <p>Your 6-digit login code is:</p>
-              <h1 style="letter-spacing: 5px; color: #00E676; background: #111; padding: 20px; display: inline-block; border-radius: 8px;">${otp}</h1>
-              <p>Enter this code to access your RightEdge account.</p>
-            </div>`
-          });
-          if (error) {
-            console.error("[Resend] Error sending email. This is usually because the domain is not verified or the recipient is not authorized in Resend testing mode.", error);
-          } else {
-            console.log("[Resend] OTP email successfully sent.");
-          }
-        } catch (emailErr) {
-          console.error("[Resend] Exception while sending email:", emailErr);
-        }
-      } else {
-        console.warn("[Resend] No API key found. Email not sent.");
-      }
-      return c.json({ active: true, message: "We sent a 6-digit login code to your email." });
-    } else {
+    if (!activeSubscription) {
       return c.json({ active: false });
     }
+
+    await saveVerifiedSubscriber(email, "stripe_login_verified", {
+      customerId,
+      subscriptionId: activeSubscription.id,
+    });
+    await syncResendLifecycle(email, "premium");
+
+    return c.json({
+      active: true,
+      activeSubscriber: true,
+      email,
+      subscriptionId: activeSubscription.id,
+      status: activeSubscription.status,
+      message: "Active subscription verified.",
+    });
   } catch (err: any) {
     console.error("[Verify Email] Error:", err);
     return c.json({ error: "Failed to verify email" }, 500);
