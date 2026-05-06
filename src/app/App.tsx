@@ -1685,12 +1685,10 @@ function PaymentGateModal({
   onClose: () => void;
   onSuccess: () => void;
 }) {
-  const [step, setStep] = useState<"email" | "otp" | "processing">("email");
+  const [step, setStep] = useState<"email" | "processing">("email");
   const [email, setEmail] = useState("");
-  const [otp, setOtp] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
-  const [successMsg, setSuccessMsg] = useState("");
 
   const trimmedEmail = email.trim().toLowerCase();
 
@@ -1717,7 +1715,6 @@ function PaymentGateModal({
 
     setSubmitting(true);
     setErrorMsg("");
-    setSuccessMsg("");
 
     try {
       const verifyRes = await fetch(`/api/verify-email`, {
@@ -1738,9 +1735,11 @@ function PaymentGateModal({
       );
 
       if (verifyRes.ok && isActiveSubscriber) {
-        setSuccessMsg("Active subscription found. Enter the code sent to your email.");
-        setStep("otp");
-        setSubmitting(false);
+        const verifiedEmail = (verifyData.email || trimmedEmail).trim().toLowerCase();
+        setEmailAccess(verifiedEmail);
+        setPaidAccess(verifiedEmail);
+        (window as any).trackAnalyticsEvent?.("paid_access_verified", { email: verifiedEmail });
+        onSuccess();
         return;
       }
 
@@ -1814,45 +1813,6 @@ function PaymentGateModal({
     }
   };
 
-  const handleOtpSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const trimmedOtp = otp.trim();
-    if (!trimmedOtp || trimmedOtp.length < 4) {
-      setErrorMsg("Enter the verification code.");
-      return;
-    }
-
-    setSubmitting(true);
-    setErrorMsg("");
-
-    try {
-      const res = await fetch(`/api/verify-otp`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${publicAnonKey}`,
-        },
-        body: JSON.stringify({ email: trimmedEmail, code: trimmedOtp, otp: trimmedOtp }),
-      });
-
-      const data = await res.json().catch(() => ({}));
-      const verified = Boolean(data.success || data.verified || data.ok);
-
-      if (res.ok && verified) {
-        setPaidAccess(trimmedEmail);
-        (window as any).trackAnalyticsEvent?.("paid_access_verified", { email: trimmedEmail });
-        onSuccess();
-        return;
-      }
-
-      setErrorMsg(data.error || "Invalid code. Please try again.");
-      setSubmitting(false);
-    } catch (err) {
-      setErrorMsg("Network error. Please try again.");
-      setSubmitting(false);
-    }
-  };
-
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       <div
@@ -1897,49 +1857,24 @@ function PaymentGateModal({
           </div>
         ) : (
           <form
-            onSubmit={step === "email" ? handleEmailSubmit : handleOtpSubmit}
+            onSubmit={handleEmailSubmit}
             className="flex flex-col gap-4"
           >
-            {step === "email" ? (
-              <div className="relative">
-                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/30" />
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => {
-                    setEmail(e.target.value);
-                    setErrorMsg("");
-                  }}
-                  placeholder="your@email.com"
-                  autoFocus
-                  disabled={submitting}
-                  className="w-full bg-[#0B0D10] border-2 border-white/10 text-white font-bold text-base pl-12 pr-4 py-4 placeholder:text-white/20 focus:outline-none focus:border-[#FF2E63] transition-colors disabled:opacity-50"
-                />
-              </div>
-            ) : (
-              <>
-                {successMsg && (
-                  <div className="bg-[#00E676]/10 text-[#00E676] border border-[#00E676]/20 p-3 text-xs font-bold uppercase tracking-wider">
-                    {successMsg}
-                  </div>
-                )}
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={otp}
-                    onChange={(e) => {
-                      setOtp(e.target.value);
-                      setErrorMsg("");
-                    }}
-                    placeholder="000000"
-                    maxLength={6}
-                    autoFocus
-                    disabled={submitting}
-                    className="w-full bg-[#0B0D10] border-2 border-white/10 text-white font-black text-2xl text-center tracking-[0.5em] py-4 placeholder:text-white/20 placeholder:tracking-normal focus:outline-none focus:border-[#00E676] transition-colors disabled:opacity-50"
-                  />
-                </div>
-              </>
-            )}
+            <div className="relative">
+              <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/30" />
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  setErrorMsg("");
+                }}
+                placeholder="your@email.com"
+                autoFocus
+                disabled={submitting}
+                className="w-full bg-[#0B0D10] border-2 border-white/10 text-white font-bold text-base pl-12 pr-4 py-4 placeholder:text-white/20 focus:outline-none focus:border-[#FF2E63] transition-colors disabled:opacity-50"
+              />
+            </div>
 
             {errorMsg && (
               <p className="text-[#FF2E63] text-xs font-bold uppercase tracking-wider">
@@ -1959,20 +1894,8 @@ function PaymentGateModal({
                   Unlock Full Round Card — $9/week
                   <ArrowRight className="w-5 h-5 stroke-[3px]" />
                 </>
-              ) : (
-                "Verify Code"
-              )}
+              ) : null}
             </button>
-
-            {step === "otp" && (
-              <button
-                type="button"
-                onClick={() => { setStep("email"); setOtp(""); setSuccessMsg(""); setErrorMsg(""); }}
-                className="text-white/40 hover:text-white text-xs font-bold uppercase tracking-wider transition-colors mt-2"
-              >
-                Use a different email
-              </button>
-            )}
           </form>
         )}
 
