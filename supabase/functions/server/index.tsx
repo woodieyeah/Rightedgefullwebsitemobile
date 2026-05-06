@@ -406,7 +406,7 @@ function premiumWelcomeHtml() {
 
         <div style="margin-top:18px;background:#11151f;padding:18px 22px;border-left:4px solid #ffe600;">
           <div style="font-size:12px;color:#ffe600;font-weight:900;letter-spacing:1.2px;text-transform:uppercase;">How premium works</div>
-          <div style="margin-top:8px;font-size:15px;line-height:1.7;color:#d4dae5;">Use your email on the site anytime to request a login code and access the full premium card for the round.</div>
+          <div style="margin-top:8px;font-size:15px;line-height:1.7;color:#d4dae5;">Use the Premium Login button anytime. Enter your subscriber email and RightEdge will take you straight to the full premium card — no code needed.</div>
         </div>
 
         <div style="margin-top:24px;text-align:center;font-size:12px;color:#6f7f99;font-weight:700;letter-spacing:2px;text-transform:uppercase;">Backed by data, not guesswork.</div>
