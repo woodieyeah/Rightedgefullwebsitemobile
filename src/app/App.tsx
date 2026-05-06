@@ -2139,19 +2139,19 @@ function PublicNav({
   ];
 
   return (
-    <div className="px-4 py-4 sm:px-6 sm:py-5 sticky top-2 sm:top-6 z-40 bg-[#111317] border-4 border-white shadow-[4px_4px_0_0_#0047FF] sm:shadow-[8px_8px_0_0_#0047FF]">
-      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 sm:gap-6">
+    <div className="px-4 py-3 sm:px-6 sm:py-5 sticky top-2 sm:top-6 z-40 bg-[#111317] border-4 border-white shadow-[4px_4px_0_0_#0047FF] sm:shadow-[8px_8px_0_0_#0047FF]">
+      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3 sm:gap-6">
         <div>
-          <div className="text-3xl sm:text-4xl font-black tracking-tighter text-white uppercase">
+          <div className="text-2xl sm:text-4xl font-black tracking-tighter text-white uppercase">
             RightEdge
           </div>
-          <div className="text-[10px] sm:text-xs text-[#00E676] font-bold tracking-widest uppercase mt-1">
+          <div className="text-[9px] sm:text-xs text-[#00E676] font-bold tracking-widest uppercase mt-1">
             NRL analytics and value insights
           </div>
         </div>
 
-        <div className="flex flex-col items-start lg:items-end gap-2 sm:gap-3 overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] pb-1">
-          <div className="flex gap-2 sm:gap-3">
+        <div className="flex flex-col items-start lg:items-end gap-2 sm:gap-3 overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] pb-1 w-full lg:w-auto">
+          <div className="flex gap-2 sm:gap-3 w-full sm:w-auto">
             {primaryItems.map((item) => {
               const active = page === item.id;
               const isPredictions = item.id === "app";
@@ -2159,7 +2159,7 @@ function PublicNav({
                 <button
                   key={item.id}
                   onClick={() => setPage(item.id)}
-                  className={`shrink-0 px-4 py-2 sm:px-5 sm:py-2.5 text-xs sm:text-sm font-black uppercase tracking-wider transition-colors ${
+                  className={`${item.id === "home" ? "hidden sm:inline-flex" : "inline-flex flex-1 sm:flex-none"} shrink-0 items-center justify-center px-3 py-2 sm:px-5 sm:py-2.5 text-[11px] sm:text-sm font-black uppercase tracking-wider transition-colors ${
                     active && isPredictions
                       ? "bg-[#FFEA00] text-black shadow-[2px_2px_0_0_#FF2E63] sm:shadow-[4px_4px_0_0_#FF2E63]"
                       : active
@@ -2175,13 +2175,13 @@ function PublicNav({
             })}
             <button
               onClick={onPremiumLogin}
-              className="shrink-0 inline-flex items-center gap-2 px-4 py-2 sm:px-5 sm:py-2.5 text-xs sm:text-sm font-black uppercase tracking-wider transition-colors bg-[#FF2E63] text-white hover:bg-[#E62959] shadow-[2px_2px_0_0_#0047FF] sm:shadow-[4px_4px_0_0_#0047FF]"
+              className="shrink-0 inline-flex flex-1 sm:flex-none items-center justify-center gap-2 px-3 py-2 sm:px-5 sm:py-2.5 text-[11px] sm:text-sm font-black uppercase tracking-wider transition-colors bg-[#FF2E63] text-white hover:bg-[#E62959] shadow-[2px_2px_0_0_#0047FF] sm:shadow-[4px_4px_0_0_#0047FF]"
             >
               Premium Login
               <Crown className="w-4 h-4 stroke-[3px]" />
             </button>
           </div>
-          <div className="flex gap-2 sm:gap-3">
+          <div className="hidden sm:flex gap-2 sm:gap-3">
             {secondaryItems.map((item) => {
               const active = page === item.id;
               const isExternal = item.id === "articles";
@@ -2647,19 +2647,9 @@ function PublicHero({
           What to Bet This NRL Round – Backed by Data, Not Guesswork.
         </h1>
         
-        <div className="text-sm sm:text-base md:text-lg text-white/70 leading-relaxed mb-6 font-medium">
-          <ReadMore>
-            <p>
-            </p>
-        
-            <p className="mt-4">
-              
-            </p>
-        
-            <p className="mt-4 text-white font-semibold">
-            </p>
-          </ReadMore>
-        </div>
+        <p className="text-sm sm:text-base md:text-lg text-white/70 leading-relaxed mb-6 font-bold max-w-[680px]">
+          See projected scores, model odds, market edges and official premium plays for every NRL round.
+        </p>
 
         <div className="flex flex-col sm:flex-row flex-wrap gap-3">
           <button
