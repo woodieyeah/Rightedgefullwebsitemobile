@@ -1864,16 +1864,16 @@ function PaymentGateModal({
           </div>
           <div>
             <h3 className="text-xl font-black text-white uppercase tracking-tight">
-              Unlock RightEdge Premium
+              Premium Access
             </h3>
             <p className="text-[10px] font-bold text-[#FFEA00] uppercase tracking-widest">
-              Full Round Card — $9/week
+              Subscriber login or $9/week
             </p>
           </div>
         </div>
 
         <p className="text-sm text-white/70 font-bold leading-relaxed mb-6">
-          Unlock the full round card: official Best Bets, Try Scorer value plays, staking guidance and model edges.
+          Already Premium? Enter your subscriber email and we’ll unlock access instantly. New here? Use the same email to continue to secure Stripe checkout.
         </p>
 
         {step === "processing" ? (
@@ -1931,7 +1931,7 @@ function PaymentGateModal({
         )}
 
         <p className="text-[10px] text-white/30 font-bold uppercase tracking-wider mt-4 text-center">
-          Secure payment handled by Stripe.
+          Existing subscribers will not be charged again. Secure payment handled by Stripe.
         </p>
       </div>
     </div>
@@ -2123,9 +2123,11 @@ function EmailGateModal({
 function PublicNav({
   page,
   setPage,
+  onPremiumLogin,
 }: {
   page: string;
   setPage: (value: string) => void;
+  onPremiumLogin: () => void;
 }) {
   const primaryItems = [
     { id: "home", label: "Home" },
@@ -2171,6 +2173,13 @@ function PublicNav({
                 </button>
               );
             })}
+            <button
+              onClick={onPremiumLogin}
+              className="shrink-0 inline-flex items-center gap-2 px-4 py-2 sm:px-5 sm:py-2.5 text-xs sm:text-sm font-black uppercase tracking-wider transition-colors bg-[#FF2E63] text-white hover:bg-[#E62959] shadow-[2px_2px_0_0_#0047FF] sm:shadow-[4px_4px_0_0_#0047FF]"
+            >
+              Premium Login
+              <Crown className="w-4 h-4 stroke-[3px]" />
+            </button>
           </div>
           <div className="flex gap-2 sm:gap-3">
             {secondaryItems.map((item) => {
@@ -5348,7 +5357,11 @@ export default function App() {
             sitePage === "app" ? "hidden xl:block" : "block"
           }
         >
-          <PublicNav page={sitePage} setPage={handleSetPage} />
+          <PublicNav
+            page={sitePage}
+            setPage={handleSetPage}
+            onPremiumLogin={() => requestPremiumAccess("nav_premium_login")}
+          />
         </div>
 
         {sitePage === "home" && (
