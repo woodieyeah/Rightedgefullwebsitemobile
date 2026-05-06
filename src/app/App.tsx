@@ -2637,9 +2637,9 @@ function PublicHero({
   return (
     <HomeCard className="p-6 md:p-8 md:py-10 relative overflow-hidden !border-[#FF2E63]">
       <div className="absolute inset-0 bg-[#111317]" />
-      <div className="absolute -top-24 -left-24 h-[260px] w-[300px] rounded-br-[180px] bg-[#FF2E63]/95 sm:bg-[#FF2E63]/35" />
-      <div className="absolute -right-20 bottom-0 h-[220px] w-[260px] rounded-tl-[160px] bg-[#0047FF]/45 sm:bg-[#0047FF]/20" />
-      <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(17,19,23,0.14),rgba(17,19,23,0.94)_72%)] sm:bg-[linear-gradient(90deg,rgba(17,19,23,0.2),rgba(17,19,23,0.92)_70%)]" />
+      <div className="absolute -top-10 -left-8 h-[230px] w-[62%] rounded-br-[190px] bg-[#FF2E63]/95 sm:bg-[#FF2E63]/38" />
+      <div className="absolute -right-24 bottom-0 h-[210px] w-[58%] rounded-tl-[180px] bg-[#0047FF]/65 sm:bg-[#0047FF]/24" />
+      <div className="absolute inset-0 bg-[linear-gradient(100deg,rgba(17,19,23,0)_0%,rgba(17,19,23,0.08)_34%,rgba(17,19,23,0.92)_76%)] sm:bg-[linear-gradient(100deg,rgba(17,19,23,0.08),rgba(17,19,23,0.9)_74%)]" />
       <div className="relative z-10 max-w-[800px]">
         <div className="inline-flex items-center gap-2 bg-[#FF2E63]/15 border border-[#FF2E63]/50 px-3 py-1.5 text-[10px] sm:text-xs font-bold text-[#FFEA00] sm:text-white mb-4 uppercase tracking-wider">
           <Sparkles className="w-3.5 h-3.5" />
@@ -2769,9 +2769,9 @@ function FeaturedMatchPreview({
       </h2>
       <HomeCard className="p-8 md:p-12 relative overflow-hidden !border-[#0047FF]">
         <div className="absolute inset-0 bg-[#111317]" />
-        <div className="absolute -top-20 -right-24 h-[360px] w-[360px] rounded-bl-[240px] bg-[#0047FF]/95 sm:bg-[#0047FF]/55" />
-        <div className="absolute left-0 top-0 h-full w-1/3 bg-[#0047FF]/20" />
-        <div className="absolute inset-0 bg-[linear-gradient(120deg,rgba(17,19,23,0.12)_0%,rgba(17,19,23,0.12)_38%,rgba(17,19,23,0.92)_74%)]" />
+        <div className="absolute top-0 right-0 h-[390px] w-[82%] bg-[#0047FF]/95 sm:bg-[#0047FF]/58" />
+        <div className="absolute -left-48 top-0 h-[520px] w-[520px] rounded-full bg-[#111317]/95" />
+        <div className="absolute inset-x-0 bottom-0 h-2/5 bg-[linear-gradient(180deg,rgba(17,19,23,0),#111317_62%)]" />
         <div className="relative z-10 flex flex-col md:flex-row md:items-start justify-between gap-10">
           <div className="flex-1">
             <div className="flex flex-wrap items-center gap-4 mb-8">
