@@ -2161,11 +2161,11 @@ function PublicNav({
                   onClick={() => setPage(item.id)}
                   className={`${item.id === "home" ? "hidden sm:inline-flex" : "inline-flex flex-1 sm:flex-none"} shrink-0 items-center justify-center px-3 py-2 sm:px-5 sm:py-2.5 text-[11px] sm:text-sm font-black uppercase tracking-wider transition-colors ${
                     active && isPredictions
-                      ? "bg-[#FFEA00] text-black shadow-[2px_2px_0_0_#FF2E63] sm:shadow-[4px_4px_0_0_#FF2E63]"
+                      ? "bg-[#1E232B] text-[#FFEA00] border border-[#FFEA00]/60 sm:bg-[#FFEA00] sm:text-black sm:border-0 sm:shadow-[4px_4px_0_0_#FF2E63]"
                       : active
                         ? "bg-[#1E232B] text-[#FFEA00] border-2 border-[#FFEA00] shadow-none translate-x-[2px] translate-y-[2px] sm:translate-x-[4px] sm:translate-y-[4px]"
                         : isPredictions
-                          ? "bg-[#FFEA00] text-black hover:bg-[#FFD600] shadow-[2px_2px_0_0_#FF2E63] sm:shadow-[4px_4px_0_0_#FF2E63]"
+                          ? "bg-[#1E232B] text-white border border-white/15 hover:border-[#FFEA00]/70 sm:bg-[#FFEA00] sm:text-black sm:hover:bg-[#FFD600] sm:border-0 sm:shadow-[4px_4px_0_0_#FF2E63]"
                           : "bg-[#1E232B] text-white hover:bg-white hover:text-black border border-white/10 hover:border-white"
                   }`}
                 >
@@ -2638,7 +2638,7 @@ function PublicHero({
     <HomeCard className="p-6 md:p-8 md:py-10 relative overflow-hidden !border-[#FF2E63]">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,46,99,0.12),transparent_60%)]" />
       <div className="relative z-10 max-w-[800px]">
-        <div className="inline-flex items-center gap-2 bg-[#FF2E63] px-3 py-1.5 text-xs font-bold text-white mb-4 uppercase tracking-wider">
+        <div className="inline-flex items-center gap-2 bg-[#FF2E63]/15 border border-[#FF2E63]/50 px-3 py-1.5 text-[10px] sm:text-xs font-bold text-[#FFEA00] sm:text-white mb-4 uppercase tracking-wider">
           <Sparkles className="w-3.5 h-3.5" />
           Value Betting Intelligence
         </div>
@@ -2653,19 +2653,19 @@ function PublicHero({
 
         <div className="flex flex-col sm:flex-row flex-wrap gap-3">
           <button
-            onClick={() => onGoApp('hero_unlock_best_bets')}
-            className="inline-flex w-full sm:w-auto items-center justify-center gap-2 bg-[#FFEA00] text-black px-8 py-3 text-base font-black hover:bg-[#FFD600] transition-colors uppercase tracking-wide shadow-[3px_3px_0_0_#FF2E63] sm:shadow-[4px_4px_0_0_#FF2E63]"
-          >
-            View Match Predictions
-            <ArrowRight className="w-4 h-4 stroke-[3px]" />
-          </button>
-
-          <button
             onClick={() => onRequestPremium('hero_unlock_premium_picks')}
-            className="inline-flex w-full sm:w-auto items-center justify-center gap-2 bg-[#0047FF] px-6 py-3 text-base font-black text-white hover:bg-[#003BCC] transition-colors uppercase tracking-wide"
+            className="order-1 sm:order-2 inline-flex w-full sm:w-auto items-center justify-center gap-2 bg-[#FF2E63] sm:bg-[#0047FF] px-6 py-3 text-base font-black text-white hover:bg-[#E62959] sm:hover:bg-[#003BCC] transition-colors uppercase tracking-wide shadow-[3px_3px_0_0_#0047FF] sm:shadow-none"
           >
             Unlock Premium Picks
             <Crown className="w-4 h-4 stroke-[3px]" />
+          </button>
+
+          <button
+            onClick={() => onGoApp('hero_unlock_best_bets')}
+            className="order-2 sm:order-1 inline-flex w-full sm:w-auto items-center justify-center gap-2 bg-[#1E232B] sm:bg-[#FFEA00] text-white sm:text-black border-2 border-[#FFEA00]/70 sm:border-0 px-8 py-3 text-base font-black hover:border-[#FFEA00] sm:hover:bg-[#FFD600] transition-colors uppercase tracking-wide sm:shadow-[4px_4px_0_0_#FF2E63]"
+          >
+            View Match Predictions
+            <ArrowRight className="w-4 h-4 stroke-[3px]" />
           </button>
         </div>
       </div>
