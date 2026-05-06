@@ -1526,10 +1526,12 @@ function FeaturedMatchEmailGate({
   open,
   onClose,
   onSuccess,
+  onPremiumSuccess,
 }: {
   open: boolean;
   onClose: () => void;
   onSuccess: () => void;
+  onPremiumSuccess: () => void;
 }) {
   const [email, setEmail] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -1550,6 +1552,34 @@ function FeaturedMatchEmailGate({
     setErrorMsg('');
 
     try {
+      const verifyRes = await fetch(`/api/verify-email`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${publicAnonKey}`,
+        },
+        body: JSON.stringify({ email: trimmed }),
+      });
+
+      const verifyData = await verifyRes.json().catch(() => ({}));
+      const isPremiumSubscriber = Boolean(
+        verifyData.instantAccess ||
+        verifyData.activeSubscriber ||
+        verifyData.active_subscriber ||
+        verifyData.subscribed ||
+        verifyData.active
+      );
+
+      if (verifyRes.ok && isPremiumSubscriber) {
+        const verifiedEmail = (verifyData.email || trimmed).trim().toLowerCase();
+        setEmailAccess(verifiedEmail);
+        setPaidAccess(verifiedEmail);
+        setFeaturedMatchAccess(verifiedEmail);
+        (window as any).trackAnalyticsEvent?.('premium_access_from_free_gate', { email: verifiedEmail });
+        onPremiumSuccess();
+        return;
+      }
+
       // Save email server-side first — only unlock the match if the save confirms.
       const saveRes = await fetch(
         `/api/register-free-access`,
@@ -1628,7 +1658,7 @@ function FeaturedMatchEmailGate({
             </div>
 
             <p className="text-sm text-white/70 font-bold leading-relaxed mb-6">
-              Enter your email to instantly unlock the projected scores, win probability, best bet, and model analysis for this match.
+              Enter your email to unlock the free preview. Premium members go straight to the full round card.
             </p>
 
             <form onSubmit={handleSubmit} className="flex flex-col gap-4">
@@ -1728,6 +1758,7 @@ function PaymentGateModal({
 
       const verifyData = await verifyRes.json().catch(() => ({}));
       const isActiveSubscriber = Boolean(
+        verifyData.instantAccess ||
         verifyData.activeSubscriber ||
         verifyData.active_subscriber ||
         verifyData.subscribed ||
@@ -2587,10 +2618,12 @@ function PublicHero({
   data,
   onGoApp,
   onUnlockFeatured,
+  onRequestPremium,
 }: {
   data: DashboardData | null;
   onGoApp: (source: string) => void;
   onUnlockFeatured: () => void;
+  onRequestPremium: (source: string) => void;
 }) {
   return (
     <HomeCard className="p-6 md:p-8 md:py-10 relative overflow-hidden !border-[#FF2E63]">
@@ -2629,11 +2662,11 @@ function PublicHero({
           </button>
 
           <button
-            onClick={onUnlockFeatured}
+            onClick={() => onRequestPremium('hero_unlock_premium_picks')}
             className="inline-flex w-full sm:w-auto items-center justify-center gap-2 bg-[#0047FF] px-6 py-3 text-base font-black text-white hover:bg-[#003BCC] transition-colors uppercase tracking-wide"
           >
-            Get Picks For Every Round Straight to Your Inbox
-            <ChevronDown className="w-4 h-4 stroke-[3px]" />
+            Unlock Premium Picks
+            <Crown className="w-4 h-4 stroke-[3px]" />
           </button>
         </div>
       </div>
@@ -2979,11 +3012,13 @@ function HomePage({
   onGoApp,
   hasFeaturedAccess,
   onUnlockFeatured,
+  onRequestPremium,
 }: {
   data: DashboardData | null;
   onGoApp: (source: string) => void;
   hasFeaturedAccess: boolean;
   onUnlockFeatured: () => void;
+  onRequestPremium: (source: string) => void;
 }) {
   const featured = getFeaturedPrediction(
     data?.predictions || [],
@@ -2991,7 +3026,12 @@ function HomePage({
 
   return (
     <div className="flex flex-col gap-6 sm:gap-8">
-      <PublicHero data={data} onGoApp={onGoApp} onUnlockFeatured={onUnlockFeatured} />
+      <PublicHero
+        data={data}
+        onGoApp={onGoApp}
+        onUnlockFeatured={onUnlockFeatured}
+        onRequestPremium={onRequestPremium}
+      />
       <div id="featured-match-section">
         <FeaturedMatchPreview
           row={featured}
@@ -5078,6 +5118,21 @@ export default function App() {
     }
   };
 
+  const requestPremiumAccess = (source: string = 'unknown') => {
+    setSitePage("app");
+    window.location.hash = "best-bets";
+    if (hasPaidAccess()) {
+      setPaidAccessState(true);
+      return;
+    }
+
+    (window as any).trackAnalyticsEvent?.("premium_paywall_open", {
+      section: "best-bets",
+      cta_source: source,
+    });
+    setShowPaymentGate(true);
+  };
+
   const checkHash = () => {
     const hash = window.location.hash.replace("#", "");
     const appHashes = ["matches", "best-bets", "try-scorers", "performance", "admin"];
@@ -5301,6 +5356,7 @@ export default function App() {
             data={data}
             onGoApp={navigateToApp}
             hasFeaturedAccess={featuredAccess}
+            onRequestPremium={requestPremiumAccess}
             onUnlockFeatured={() => {
               document.getElementById('featured-match-section')?.scrollIntoView({ behavior: 'smooth' });
               setTimeout(() => setShowFeaturedGate(true), 300);
@@ -5368,6 +5424,13 @@ export default function App() {
           onSuccess={() => {
             setFeaturedAccess(true);
             setShowFeaturedGate(false);
+          }}
+          onPremiumSuccess={() => {
+            setFeaturedAccess(true);
+            setPaidAccessState(hasPaidAccess());
+            setShowFeaturedGate(false);
+            setSitePage("app");
+            window.location.hash = "best-bets";
           }}
         />
 
