@@ -3945,7 +3945,49 @@ function TryScorersPage({
   data: DashboardData;
   onRequestAccess: (targetHash?: string) => void;
 }) {
-  const getTryScorerSignal = (row: TryScorerRow) => {
+  const getTryScorerKey = (row: TryScorerRow) =>
+    `${row.match}::${row.team}::${row.player}`.toLowerCase();
+
+  const isTryScorerBestBetCandidate = (row: TryScorerRow) => {
+    const wholeNumberModelMarketGap = Math.abs(
+      Math.round(row.statsInsiderPct) - Math.round(row.marketImpliedPct),
+    );
+
+    return (
+      row.statsInsiderPct >= 40 &&
+      row.bestOdds >= 1.9 &&
+      row.edgePct >= -1.25 &&
+      wholeNumberModelMarketGap <= 1
+    );
+  };
+
+  const getMatchBestBetKeys = (players: TryScorerRow[]) => {
+    const usedTeams = new Set<string>();
+    const selected = new Set<string>();
+
+    [...players]
+      .filter(isTryScorerBestBetCandidate)
+      .sort((a, b) => {
+        const aGap = Math.abs(Math.round(a.statsInsiderPct) - Math.round(a.marketImpliedPct));
+        const bGap = Math.abs(Math.round(b.statsInsiderPct) - Math.round(b.marketImpliedPct));
+        return (
+          b.statsInsiderPct - a.statsInsiderPct ||
+          aGap - bGap ||
+          b.edgePct - a.edgePct ||
+          b.bestOdds - a.bestOdds
+        );
+      })
+      .forEach((row) => {
+        const teamKey = normalizeTeamName(row.team);
+        if (selected.size >= 2 || usedTeams.has(teamKey)) return;
+        usedTeams.add(teamKey);
+        selected.add(getTryScorerKey(row));
+      });
+
+    return selected;
+  };
+
+  const getTryScorerSignal = (row: TryScorerRow, bestBetKeys?: Set<string>) => {
     const highProbabilityNearFair =
       row.statsInsiderPct >= 42 &&
       row.edgePct >= -3 &&
@@ -3955,7 +3997,7 @@ function TryScorersPage({
       (row.edgePct >= 0 && row.bestOdds >= 2.5) ||
       (row.edgePct >= -0.5 && row.bestOdds >= 3);
 
-    if (highProbabilityNearFair && clearValue) {
+    if (bestBetKeys?.has(getTryScorerKey(row))) {
       return {
         label: "Best Bet",
         className: "bg-[#00E676] text-black",
@@ -4017,7 +4059,9 @@ function TryScorersPage({
       ? data.tryScorers
       : data.tryScorers.filter((row) => row.round === selectedRound);
 
-  const valuePlays = roundFilteredRows.filter((row) => getTryScorerSignal(row));
+  const valuePlays = roundFilteredRows.filter(
+    (row) => getTryScorerSignal(row) || isTryScorerBestBetCandidate(row),
+  );
   const roundLabel =
     selectedRound === "all" ? "All rounds" : `Round ${selectedRound}`;
 
@@ -4122,9 +4166,10 @@ function TryScorersPage({
             const teams = match.split(" v ");
             const homeTeam = teams[0] || "";
             const awayTeam = teams[1] || "";
+            const bestBetKeys = getMatchBestBetKeys(players);
             const sortedPlayers = [...players].sort((a, b) => {
-              const aSignal = getTryScorerSignal(a);
-              const bSignal = getTryScorerSignal(b);
+              const aSignal = getTryScorerSignal(a, bestBetKeys);
+              const bSignal = getTryScorerSignal(b, bestBetKeys);
               return (
                 (bSignal?.sortRank || 0) - (aSignal?.sortRank || 0) ||
                 b.statsInsiderPct - a.statsInsiderPct ||
@@ -4155,7 +4200,7 @@ function TryScorersPage({
                     </thead>
                     <tbody className="divide-y divide-white/5">
                       {sortedPlayers.map((row, i) => {
-                        const signal = getTryScorerSignal(row);
+                        const signal = getTryScorerSignal(row, bestBetKeys);
                         return (
                         <tr key={i} className="hover:bg-white/[0.03] transition-colors">
                           <td className="py-4 px-3">
@@ -4195,7 +4240,7 @@ function TryScorersPage({
                 <div className="md:hidden flex flex-col divide-y divide-white/5">
                   {sortedPlayers.map((row, i) => {
                     const teamColors = getTeamColors(row.team);
-                    const signal = getTryScorerSignal(row);
+                    const signal = getTryScorerSignal(row, bestBetKeys);
                     return (
                       <div key={i} className="py-4 flex items-center justify-between gap-4">
                         <div className="flex-1 min-w-0">
