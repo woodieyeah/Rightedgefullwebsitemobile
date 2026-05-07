@@ -4191,84 +4191,167 @@ function TryScorersPage({
   );
 }
 
-type SameGameMultiIdea = {
-  match: string;
-  teams: string[];
-  confidence: "Core" | "Balanced" | "Long Shot";
-  legs: string[];
-  reason: string;
-  projectedTotal: number;
-  edgePct: number;
-  modelHitPct: number;
-  h2hModelPct: number;
-  tryScorerModelPct: number;
-  gameScriptPct: number;
-  topTryScorer?: TryScorerRow;
+type SgmLeg = {
+  label: string;
+  modelPct: number;
+  odds: number;
 };
 
-function getSgmSideModelPct(match: PredictionRow, selection: string) {
-  const normalizedSelection = normalizeTeamName(selection);
-  if (normalizedSelection === normalizeTeamName(match.homeTeam)) {
-    return getImpliedWinPctFromOdds(match.modelHomeOdds);
-  }
-  if (normalizedSelection === normalizeTeamName(match.awayTeam)) {
-    return getImpliedWinPctFromOdds(match.modelAwayOdds);
-  }
-  return getPredictedWinnerWinPct(match);
+type SgmCombo = {
+  id: string;
+  title: string;
+  confidence: "High Prob" | "Attack Stack" | "Scorer Pair";
+  bookmaker: string;
+  estimatedOdds: number;
+  modelHitPct: number;
+  legs: SgmLeg[];
+  note: string;
+};
+
+type SgmMatchGroup = {
+  key: string;
+  match: string;
+  homeTeam: string;
+  awayTeam: string;
+  selectedTeam: string;
+  selectedTeamModelPct: number;
+  projectedMargin: number;
+  combos: SgmCombo[];
+};
+
+type H2hBookmakerOddsMap = Record<string, Record<string, number>>;
+
+function normalizeBookmakerName(name: string) {
+  const key = String(name || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  if (key.includes("pointsbet")) return "pointsbet";
+  if (key.includes("betright")) return "betright";
+  if (key.includes("ladbrokes")) return "ladbrokes";
+  if (key.includes("sportsbet")) return "sportsbet";
+  if (key.includes("bet365")) return "bet365";
+  if (key.includes("dabble")) return "dabble";
+  if (key.includes("neds")) return "neds";
+  if (key.includes("tab")) return "tab";
+  return key;
 }
 
-function getSgmGameScriptPct(projectedTotal: number) {
-  if (!projectedTotal) return 52;
-  if (projectedTotal >= 48) return Math.min(66, 54 + ((projectedTotal - 48) * 1.6));
-  if (projectedTotal <= 42) return Math.min(64, 54 + ((42 - projectedTotal) * 1.4));
-  return 56;
+function displayBookmakerName(name: string) {
+  const normalized = normalizeBookmakerName(name);
+  const labels: Record<string, string> = {
+    pointsbet: "PointsBet",
+    betright: "BetRight",
+    ladbrokes: "Ladbrokes",
+    sportsbet: "Sportsbet",
+    bet365: "Bet365",
+    dabble: "Dabble",
+    neds: "Neds",
+    tab: "TAB",
+  };
+  return labels[normalized] || name || "Same bookie";
 }
 
-function getSgmCorrelationMultiplier(
-  selection: string,
-  topTryScorer: TryScorerRow | undefined,
-  projectedTotal: number,
+function buildH2hBookmakerOddsMap(rawOdds: any[]): H2hBookmakerOddsMap {
+  const prices: H2hBookmakerOddsMap = {};
+
+  for (const event of rawOdds || []) {
+    const homeTeam = normalizeTeamName(event.home_team || "");
+    const awayTeam = normalizeTeamName(event.away_team || "");
+    if (!homeTeam || !awayTeam) continue;
+
+    const matchKey = buildMatchKey(homeTeam, awayTeam);
+    for (const bookmaker of event.bookmakers || []) {
+      const bookKey = normalizeBookmakerName(bookmaker.title || bookmaker.key || "");
+      const h2hMarket = (bookmaker.markets || []).find((market: any) => market.key === "h2h");
+      if (!bookKey || !h2hMarket) continue;
+
+      for (const outcome of h2hMarket.outcomes || []) {
+        const team = normalizeTeamName(outcome.name || "");
+        const price = Number(outcome.price) || 0;
+        if (!team || price <= 1) continue;
+        const key = `${matchKey}|${team}`;
+        if (!prices[key]) prices[key] = {};
+        prices[key][bookKey] = price;
+      }
+    }
+  }
+
+  return prices;
+}
+
+function getPredictionSide(match: PredictionRow) {
+  const homePct = getImpliedWinPctFromOdds(match.modelHomeOdds);
+  const awayPct = getImpliedWinPctFromOdds(match.modelAwayOdds);
+  const homeIsSelected = homePct >= awayPct;
+  return {
+    team: homeIsSelected ? match.homeTeam : match.awayTeam,
+    modelPct: homeIsSelected ? homePct : awayPct,
+    odds: homeIsSelected ? match.marketHomeOdds : match.marketAwayOdds,
+  };
+}
+
+function getH2hOddsForBookmaker(
+  h2hOdds: H2hBookmakerOddsMap,
+  match: PredictionRow,
+  team: string,
+  bookmaker: string,
+  fallbackOdds: number,
 ) {
-  let multiplier = 1;
-  if (topTryScorer && normalizeTeamName(topTryScorer.team) === normalizeTeamName(selection)) {
-    multiplier += 0.08;
-  }
-  if (topTryScorer && projectedTotal >= 48) {
-    multiplier += 0.06;
-  }
-  if (projectedTotal <= 42 && topTryScorer) {
-    multiplier -= 0.05;
-  }
-  return Math.max(0.88, Math.min(1.18, multiplier));
+  const matchKey = buildMatchLabelKey(match.match);
+  const teamKey = normalizeTeamName(team);
+  const bookKey = normalizeBookmakerName(bookmaker);
+  return h2hOdds[`${matchKey}|${teamKey}`]?.[bookKey] || fallbackOdds || 0;
 }
 
-function buildSgmModelHitPct({
-  h2hModelPct,
-  tryScorerModelPct,
-  gameScriptPct,
+function buildSgmHitPct(legs: SgmLeg[], correlationMultiplier: number) {
+  const independent = legs.reduce(
+    (product, leg) => product * (Math.max(leg.modelPct, 1) / 100),
+    1,
+  );
+  return Math.max(1, Math.min(55, independent * correlationMultiplier * 100));
+}
+
+function makeSgmCombo({
+  id,
+  title,
+  confidence,
+  bookmaker,
+  legs,
   correlationMultiplier,
+  note,
 }: {
-  h2hModelPct: number;
-  tryScorerModelPct: number;
-  gameScriptPct: number;
+  id: string;
+  title: string;
+  confidence: SgmCombo["confidence"];
+  bookmaker: string;
+  legs: SgmLeg[];
   correlationMultiplier: number;
-}) {
-  const independentHit =
-    (Math.max(h2hModelPct, 1) / 100) *
-    (Math.max(tryScorerModelPct, 1) / 100) *
-    (Math.max(gameScriptPct, 1) / 100);
-  return Math.max(1, Math.min(45, independentHit * correlationMultiplier * 100));
+  note: string;
+}): SgmCombo | null {
+  if (legs.length < 2 || legs.some((leg) => !leg.modelPct || !leg.odds)) return null;
+
+  return {
+    id,
+    title,
+    confidence,
+    bookmaker: displayBookmakerName(bookmaker),
+    estimatedOdds: legs.reduce((product, leg) => product * leg.odds, 1),
+    modelHitPct: buildSgmHitPct(legs, correlationMultiplier),
+    legs,
+    note,
+  };
 }
 
-function buildSameGameMultiIdeas(data: DashboardData): SameGameMultiIdea[] {
+function buildSgmMatchGroups(
+  data: DashboardData,
+  h2hOdds: H2hBookmakerOddsMap = {},
+): SgmMatchGroup[] {
   const settledMatchKeys = new Set(
     data.betLog
       .filter((b) => b.result === "W" || b.result === "L")
-      .map((b) => b.match.toLowerCase()),
+      .map((b) => buildMatchLabelKey(b.match)),
   );
 
   const tryScorersByMatch = data.tryScorers
-    .filter((row) => row.edgePct > 0 && row.bestOdds > 1)
+    .filter((row) => row.statsInsiderPct >= 45 && row.bestOdds > 1)
     .reduce((groups, row) => {
       const key = buildMatchLabelKey(row.match);
       if (!groups[key]) groups[key] = [];
@@ -4276,80 +4359,201 @@ function buildSameGameMultiIdeas(data: DashboardData): SameGameMultiIdea[] {
       return groups;
     }, {} as Record<string, TryScorerRow[]>);
 
-  const activeMatches = data.predictions
-    .filter((row) => !settledMatchKeys.has(row.match.toLowerCase()))
-    .filter((row) => row.predictedWinner || row.bestBet)
-    .sort((a, b) => {
-      const aTryEdge = Math.max(...(tryScorersByMatch[buildMatchLabelKey(a.match)] || []).map((p) => p.edgePct), 0);
-      const bTryEdge = Math.max(...(tryScorersByMatch[buildMatchLabelKey(b.match)] || []).map((p) => p.edgePct), 0);
-      return (b.bestEdge + bTryEdge) - (a.bestEdge + aTryEdge);
-    });
-
-  return activeMatches
+  return data.predictions
+    .filter((match) => !settledMatchKeys.has(buildMatchLabelKey(match.match)))
     .map((match) => {
-      const scorers = [...(tryScorersByMatch[buildMatchLabelKey(match.match)] || [])]
-        .sort((a, b) => b.edgePct - a.edgePct);
-      const topTryScorer = scorers[0];
-      const projectedTotal = Math.round(match.predictedHomeScore + match.predictedAwayScore);
-      const selection = match.bestBet || match.predictedWinner;
-      const edgePct = Math.max(match.bestEdge || 0, topTryScorer?.edgePct || 0);
-      const h2hModelPct = getSgmSideModelPct(match, selection);
-      const tryScorerModelPct = topTryScorer?.statsInsiderPct || 45;
-      const gameScriptPct = getSgmGameScriptPct(projectedTotal);
-      const correlationMultiplier = getSgmCorrelationMultiplier(
-        selection,
-        topTryScorer,
-        projectedTotal,
+      const matchKey = buildMatchLabelKey(match.match);
+      const selected = getPredictionSide(match);
+      const projectedMargin = Math.abs(match.predictedHomeScore - match.predictedAwayScore);
+      const selectedTeamScorers = [...(tryScorersByMatch[matchKey] || [])]
+        .filter((row) => normalizeTeamName(row.team) === normalizeTeamName(selected.team))
+        .sort((a, b) => b.statsInsiderPct - a.statsInsiderPct);
+      const allScorers = [...(tryScorersByMatch[matchKey] || [])]
+        .sort((a, b) => b.statsInsiderPct - a.statsInsiderPct);
+      const combos: SgmCombo[] = [];
+
+      const addCombo = (combo: SgmCombo | null) => {
+        if (combo && !combos.some((existing) => existing.id === combo.id)) {
+          combos.push(combo);
+        }
+      };
+
+      const topTeamScorer = selectedTeamScorers[0];
+      if (topTeamScorer) {
+        const bookie = topTeamScorer.bookmaker;
+        const h2hOddsForBookie = getH2hOddsForBookmaker(
+          h2hOdds,
+          match,
+          selected.team,
+          bookie,
+          selected.odds,
+        );
+        addCombo(makeSgmCombo({
+          id: `${matchKey}-side-top-scorer`,
+          title: "Side + top scorer",
+          confidence: "High Prob",
+          bookmaker: bookie,
+          correlationMultiplier: 1.1,
+          note: `${selected.team} is the highest model probability side and ${topTeamScorer.player} clears the 45% try-scorer threshold.`,
+          legs: [
+            { label: `${selected.team} head-to-head`, modelPct: selected.modelPct, odds: h2hOddsForBookie },
+            { label: `${topTeamScorer.player} anytime try`, modelPct: topTeamScorer.statsInsiderPct, odds: topTeamScorer.bestOdds },
+          ],
+        }));
+      }
+
+      const sameBookieTeamPair = selectedTeamScorers.find((first, idx) =>
+        selectedTeamScorers.slice(idx + 1).some(
+          (second) => normalizeBookmakerName(second.bookmaker) === normalizeBookmakerName(first.bookmaker),
+        ),
       );
-      const modelHitPct = buildSgmModelHitPct({
-        h2hModelPct,
-        tryScorerModelPct,
-        gameScriptPct,
-        correlationMultiplier,
-      });
-      const totalLean =
-        projectedTotal >= 48
-          ? `Game total lean: Over profile (${projectedTotal} projected points)`
-          : projectedTotal <= 42
-            ? `Game total lean: Under profile (${projectedTotal} projected points)`
-            : `Game script: balanced scoring profile (${projectedTotal} projected points)`;
+      const secondSameBookieTeamScorer = sameBookieTeamPair
+        ? selectedTeamScorers.find(
+            (row) =>
+              row.player !== sameBookieTeamPair.player &&
+              normalizeBookmakerName(row.bookmaker) === normalizeBookmakerName(sameBookieTeamPair.bookmaker),
+          )
+        : undefined;
 
-      const confidence: SameGameMultiIdea["confidence"] =
-        (match.bestEdge >= 7 && (topTryScorer?.edgePct || 0) >= 5)
-          ? "Core"
-          : (match.bestEdge >= 4 || (topTryScorer?.edgePct || 0) >= 4)
-            ? "Balanced"
-            : "Long Shot";
+      if (sameBookieTeamPair && secondSameBookieTeamScorer && (projectedMargin >= 8 || selected.modelPct >= 58)) {
+        const bookie = sameBookieTeamPair.bookmaker;
+        const h2hOddsForBookie = getH2hOddsForBookmaker(
+          h2hOdds,
+          match,
+          selected.team,
+          bookie,
+          selected.odds,
+        );
+        addCombo(makeSgmCombo({
+          id: `${matchKey}-team-attack-stack`,
+          title: "Winning team attack stack",
+          confidence: "Attack Stack",
+          bookmaker: bookie,
+          correlationMultiplier: 1.22,
+          note: `${selected.team} has the model side and projected margin profile to support multiple attacking outcomes.`,
+          legs: [
+            { label: `${selected.team} head-to-head`, modelPct: selected.modelPct, odds: h2hOddsForBookie },
+            { label: `${sameBookieTeamPair.player} anytime try`, modelPct: sameBookieTeamPair.statsInsiderPct, odds: sameBookieTeamPair.bestOdds },
+            { label: `${secondSameBookieTeamScorer.player} anytime try`, modelPct: secondSameBookieTeamScorer.statsInsiderPct, odds: secondSameBookieTeamScorer.bestOdds },
+          ],
+        }));
+      }
 
-      const legs = [
-        `${selection} head-to-head`,
-        topTryScorer
-          ? `${topTryScorer.player} anytime try`
-          : `${selection} to cover the game script`,
-        totalLean,
-      ];
+      const sameBookiePair = allScorers.find((first, idx) =>
+        allScorers.slice(idx + 1).some(
+          (second) => normalizeBookmakerName(second.bookmaker) === normalizeBookmakerName(first.bookmaker),
+        ),
+      );
+      const secondSameBookieScorer = sameBookiePair
+        ? allScorers.find(
+            (row) =>
+              row.player !== sameBookiePair.player &&
+              normalizeBookmakerName(row.bookmaker) === normalizeBookmakerName(sameBookiePair.bookmaker),
+          )
+        : undefined;
 
-      const reason = topTryScorer
-        ? `${selection} rates as the model side, while ${topTryScorer.player} has the best try-scorer value in this matchup at ${topTryScorer.bookmaker || "market"} odds.`
-        : `${selection} rates as the model side, with the projected score creating the best available game-script angle.`;
+      if (sameBookiePair && secondSameBookieScorer) {
+        addCombo(makeSgmCombo({
+          id: `${matchKey}-two-scorers`,
+          title: "Two highest-probability scorers",
+          confidence: "Scorer Pair",
+          bookmaker: sameBookiePair.bookmaker,
+          correlationMultiplier:
+            normalizeTeamName(sameBookiePair.team) === normalizeTeamName(secondSameBookieScorer.team)
+              ? 1.08
+              : 0.96,
+          note: `Both try scorers clear the 45% model threshold and are available at ${displayBookmakerName(sameBookiePair.bookmaker)}.`,
+          legs: [
+            { label: `${sameBookiePair.player} anytime try`, modelPct: sameBookiePair.statsInsiderPct, odds: sameBookiePair.bestOdds },
+            { label: `${secondSameBookieScorer.player} anytime try`, modelPct: secondSameBookieScorer.statsInsiderPct, odds: secondSameBookieScorer.bestOdds },
+          ],
+        }));
+      }
 
       return {
+        key: matchKey,
         match: match.match,
-        teams: [match.homeTeam, match.awayTeam],
-        confidence,
-        legs,
-        reason,
-        projectedTotal,
-        edgePct,
-        modelHitPct,
-        h2hModelPct,
-        tryScorerModelPct,
-        gameScriptPct,
-        topTryScorer,
+        homeTeam: match.homeTeam,
+        awayTeam: match.awayTeam,
+        selectedTeam: selected.team,
+        selectedTeamModelPct: selected.modelPct,
+        projectedMargin,
+        combos: combos.sort((a, b) => b.modelHitPct - a.modelHitPct),
       };
     })
-    .filter((idea) => idea.topTryScorer || idea.edgePct > 0)
-    .slice(0, 10);
+    .filter((group) => group.combos.length > 0)
+    .sort((a, b) => b.combos[0].modelHitPct - a.combos[0].modelHitPct);
+}
+
+function SgmComboCard({ combo }: { combo: SgmCombo }) {
+  const confidenceClass =
+    combo.confidence === "High Prob"
+      ? "bg-[#00E676] text-black"
+      : combo.confidence === "Attack Stack"
+        ? "bg-[#FFEA00] text-black"
+        : "bg-[#FF2E63] text-white";
+
+  return (
+    <GlassCard className="p-5 md:p-6 relative overflow-hidden border-l-4 border-l-[#0047FF]">
+      <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(0,71,255,0.08),transparent_55%)]" />
+      <div className="relative z-10">
+        <div className="flex items-start justify-between gap-4 mb-5">
+          <div>
+            <div className="text-lg md:text-2xl font-black text-white uppercase tracking-tight">
+              {combo.title}
+            </div>
+            <div className="text-[10px] font-black text-[#FFEA00] uppercase tracking-widest mt-1">
+              Build at {combo.bookmaker}
+            </div>
+          </div>
+          <span className={`shrink-0 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest ${confidenceClass}`}>
+            {combo.confidence}
+          </span>
+        </div>
+
+        <div className="space-y-3 mb-5">
+          {combo.legs.map((leg, idx) => (
+            <div key={`${combo.id}-${leg.label}`} className="flex items-start gap-3 bg-[#111317] border border-white/10 p-3">
+              <div className="w-6 h-6 flex items-center justify-center bg-[#FFEA00] text-black text-xs font-black shrink-0">
+                {idx + 1}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-black text-white uppercase tracking-wide leading-snug">
+                  {leg.label}
+                </div>
+                <div className="text-[10px] text-white/40 font-black uppercase tracking-widest mt-1">
+                  Model {formatPercent(leg.modelPct, 1)} · Odds {leg.odds.toFixed(2)}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 mb-5">
+          <div className="bg-[#111317] border border-white/10 p-3">
+            <div className="text-[9px] font-black text-white/40 uppercase tracking-widest mb-1">
+              Model hit
+            </div>
+            <div className="text-2xl font-black text-[#FFEA00]">
+              {formatPercent(combo.modelHitPct, 1)}
+            </div>
+          </div>
+          <div className="bg-[#111317] border border-white/10 p-3">
+            <div className="text-[9px] font-black text-white/40 uppercase tracking-widest mb-1">
+              Est. odds
+            </div>
+            <div className="text-2xl font-black text-[#00E676]">
+              {combo.estimatedOdds.toFixed(2)}
+            </div>
+          </div>
+        </div>
+
+        <div className="text-sm text-white/60 font-bold leading-relaxed">
+          {combo.note}
+        </div>
+      </div>
+    </GlassCard>
+  );
 }
 
 function SgmBuilderPage({
@@ -4359,7 +4563,39 @@ function SgmBuilderPage({
   data: DashboardData;
   onRequestAccess: (targetHash?: string) => void;
 }) {
-  const ideas = useMemo(() => buildSameGameMultiIdeas(data), [data]);
+  const [h2hBookmakerOdds, setH2hBookmakerOdds] = useState<H2hBookmakerOddsMap>({});
+  const groups = useMemo(
+    () => buildSgmMatchGroups(data, h2hBookmakerOdds),
+    [data, h2hBookmakerOdds],
+  );
+  const [selectedMatchKey, setSelectedMatchKey] = useState("");
+
+  useEffect(() => {
+    let mounted = true;
+    fetchLiveOddsCached()
+      .then((rawOdds) => {
+        if (mounted) setH2hBookmakerOdds(buildH2hBookmakerOddsMap(rawOdds));
+      })
+      .catch(() => {
+        if (mounted) setH2hBookmakerOdds({});
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!groups.length) {
+      setSelectedMatchKey("");
+      return;
+    }
+    setSelectedMatchKey((current) =>
+      groups.some((group) => group.key === current) ? current : groups[0].key,
+    );
+  }, [groups]);
+
+  const selectedGroup =
+    groups.find((group) => group.key === selectedMatchKey) || groups[0];
 
   if (!hasPaidAccess()) {
     return (
@@ -4374,7 +4610,7 @@ function SgmBuilderPage({
               Premium Content
             </h2>
             <p className="text-sm md:text-base text-white/70 font-bold leading-relaxed mb-8">
-              Same Game Multi ideas are included with RightEdge Premium: model side, try-scorer value and game-script angles for each matchup.
+              Same Game Multis are included with RightEdge Premium: high-probability team and try-scorer combinations by match, with model hit rate and same-bookie odds.
             </p>
             <button
               onClick={() => onRequestAccess("sgm-builder")}
@@ -4397,7 +4633,7 @@ function SgmBuilderPage({
             Same Game Multi Builder
           </h2>
           <div className="text-[10px] md:text-sm font-bold text-[#FFEA00] uppercase tracking-widest">
-            Included with Premium — model side + try scorer value + game script
+            Pick a match — high probability team + try scorer combinations
           </div>
         </div>
         <div className="bg-[#1E232B] border-2 border-white/10 px-4 py-3 shadow-[4px_4px_0_0_#0047FF]">
@@ -4405,7 +4641,7 @@ function SgmBuilderPage({
             Showing
           </div>
           <div className="text-sm font-black text-white uppercase tracking-wider">
-            {ideas.length} multi ideas
+            {groups.reduce((sum, group) => sum + group.combos.length, 0)} combos · {groups.length} matches
           </div>
         </div>
       </div>
@@ -4414,10 +4650,10 @@ function SgmBuilderPage({
         <div className="flex flex-col md:flex-row gap-3 md:items-center md:justify-between">
           <div>
             <div className="text-sm md:text-base font-black text-white uppercase tracking-tight">
-              Build in your betting app
+              Same bookie first
             </div>
             <div className="text-xs md:text-sm text-white/50 font-bold mt-1">
-              RightEdge suggests the legs. Bookmakers price Same Game Multis differently because the legs are correlated.
+              Combos use one bookmaker where the sheet has matching try-scorer prices. SGM odds can still move inside the betting app.
             </div>
           </div>
           <div className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-[#00E676]">
@@ -4427,99 +4663,67 @@ function SgmBuilderPage({
         </div>
       </GlassCard>
 
-      {ideas.length === 0 ? (
+      {groups.length === 0 ? (
         <GlassCard className="p-8 text-center border-l-4 border-l-white/20">
           <div className="text-white/50 font-bold uppercase tracking-widest text-sm">
-            No same game multi ideas qualify yet.
+            No same game multi combos qualify yet. Add try scorers above 45% model probability to unlock this view.
           </div>
         </GlassCard>
       ) : (
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-          {ideas.map((idea, idx) => {
-            const [homeTeam, awayTeam] = idea.teams;
-            const confidenceClass =
-              idea.confidence === "Core"
-                ? "bg-[#00E676] text-black"
-                : idea.confidence === "Balanced"
-                  ? "bg-[#FFEA00] text-black"
-                  : "bg-[#FF2E63] text-white";
-
-            return (
-              <GlassCard key={`${idea.match}-${idx}`} className="p-5 md:p-6 relative overflow-hidden border-l-4 border-l-[#0047FF]">
-                <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(0,71,255,0.08),transparent_55%)]" />
-                <div className="relative z-10">
-                  <div className="flex items-center justify-between gap-4 mb-5">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <TeamLogo teamName={homeTeam} className="w-8 h-8 text-xs" />
-                      <TeamLogo teamName={awayTeam} className="w-8 h-8 text-xs" />
-                      <div className="text-sm md:text-lg font-black text-white uppercase tracking-tight truncate">
-                        {idea.match}
-                      </div>
-                    </div>
-                    <span className={`shrink-0 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest ${confidenceClass}`}>
-                      {idea.confidence}
-                    </span>
-                  </div>
-
-                  <div className="space-y-3 mb-5">
-                    {idea.legs.map((leg, legIdx) => (
-                      <div key={leg} className="flex items-start gap-3 bg-[#111317] border border-white/10 p-3">
-                        <div className="w-6 h-6 flex items-center justify-center bg-[#FFEA00] text-black text-xs font-black shrink-0">
-                          {legIdx + 1}
-                        </div>
-                        <div className="text-sm font-black text-white uppercase tracking-wide leading-snug">
-                          {leg}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-3 mb-5">
-                    <div className="bg-[#111317] border border-white/10 p-3">
-                      <div className="text-[9px] font-black text-white/40 uppercase tracking-widest mb-1">
-                        Model hit
-                      </div>
-                      <div className="text-lg font-black text-[#FFEA00]">
-                        {formatPercent(idea.modelHitPct, 1)}
-                      </div>
-                    </div>
-                    <div className="bg-[#111317] border border-white/10 p-3">
-                      <div className="text-[9px] font-black text-white/40 uppercase tracking-widest mb-1">
-                        Top edge
-                      </div>
-                      <div className="text-lg font-black text-[#00E676]">
-                        +{formatPercent(idea.edgePct, 1)}
-                      </div>
-                    </div>
-                    <div className="bg-[#111317] border border-white/10 p-3">
-                      <div className="text-[9px] font-black text-white/40 uppercase tracking-widest mb-1">
-                        Projected total
-                      </div>
-                      <div className="text-lg font-black text-white">
-                        {idea.projectedTotal}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-2 mb-5">
-                    <div className="text-[10px] text-white/40 font-black uppercase tracking-widest">
-                      Side {formatPercent(idea.h2hModelPct, 0)}
-                    </div>
-                    <div className="text-[10px] text-white/40 font-black uppercase tracking-widest">
-                      Scorer {formatPercent(idea.tryScorerModelPct, 0)}
-                    </div>
-                    <div className="text-[10px] text-white/40 font-black uppercase tracking-widest">
-                      Script {formatPercent(idea.gameScriptPct, 0)}
-                    </div>
-                  </div>
-
-                  <div className="text-sm text-white/60 font-bold leading-relaxed">
-                    {idea.reason}
-                  </div>
+        <div className="grid grid-cols-1 xl:grid-cols-[300px_minmax(0,1fr)] gap-6">
+          <div className="flex xl:flex-col gap-3 overflow-x-auto xl:overflow-visible pb-2 xl:pb-0">
+            {groups.map((group) => (
+              <button
+                key={group.key}
+                type="button"
+                onClick={() => setSelectedMatchKey(group.key)}
+                className={`min-w-[240px] xl:min-w-0 text-left p-4 border-2 transition-colors ${
+                  selectedGroup?.key === group.key
+                    ? "border-[#FFEA00] bg-[#1E232B] shadow-[4px_4px_0_0_#FF2E63]"
+                    : "border-white/10 bg-[#111317] hover:border-white/30"
+                }`}
+              >
+                <div className="flex items-center gap-2 mb-3">
+                  <TeamLogo teamName={group.homeTeam} className="w-7 h-7 text-[10px]" />
+                  <TeamLogo teamName={group.awayTeam} className="w-7 h-7 text-[10px]" />
                 </div>
-              </GlassCard>
-            );
-          })}
+                <div className="text-sm font-black text-white uppercase tracking-tight">
+                  {group.match}
+                </div>
+                <div className="text-[10px] text-white/40 font-black uppercase tracking-widest mt-2">
+                  {group.combos.length} combos · {formatPercent(group.selectedTeamModelPct, 1)} side
+                </div>
+              </button>
+            ))}
+          </div>
+
+          <div className="min-w-0">
+            {selectedGroup && (
+              <div className="space-y-5">
+                <GlassCard className="p-5 border-l-4 border-l-[#FFEA00]">
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                    <div>
+                      <div className="text-2xl font-black text-white uppercase tracking-tight">
+                        {selectedGroup.match}
+                      </div>
+                      <div className="text-xs font-black text-[#FFEA00] uppercase tracking-widest mt-2">
+                        Highest probability side: {selectedGroup.selectedTeam} · {formatPercent(selectedGroup.selectedTeamModelPct, 1)}
+                      </div>
+                    </div>
+                    <div className="text-[10px] font-black text-white/40 uppercase tracking-widest">
+                      Projected margin {selectedGroup.projectedMargin.toFixed(0)}
+                    </div>
+                  </div>
+                </GlassCard>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                  {selectedGroup.combos.map((combo) => (
+                    <SgmComboCard key={combo.id} combo={combo} />
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
