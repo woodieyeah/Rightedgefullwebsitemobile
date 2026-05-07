@@ -3945,6 +3945,35 @@ function TryScorersPage({
   data: DashboardData;
   onRequestAccess: (targetHash?: string) => void;
 }) {
+  const getTryScorerSignal = (row: TryScorerRow) => {
+    const highProbabilityNearFair =
+      row.statsInsiderPct >= 42 &&
+      row.edgePct >= -3 &&
+      row.bestOdds >= 1.5;
+    const clearValue =
+      row.edgePct >= 3 ||
+      (row.edgePct >= 0 && row.bestOdds >= 2.5) ||
+      (row.edgePct >= -0.5 && row.bestOdds >= 3);
+
+    if (highProbabilityNearFair) {
+      return {
+        label: "High Prob",
+        className: "bg-[#00E676] text-black",
+        sortRank: 2,
+      };
+    }
+
+    if (clearValue) {
+      return {
+        label: "Value",
+        className: "bg-[#FFEA00] text-black",
+        sortRank: 1,
+      };
+    }
+
+    return null;
+  };
+
   const availableRounds = useMemo(
     () =>
       Array.from(
@@ -3980,7 +4009,7 @@ function TryScorersPage({
       ? data.tryScorers
       : data.tryScorers.filter((row) => row.round === selectedRound);
 
-  const valuePlays = roundFilteredRows.filter((row) => row.edgePct > 0);
+  const valuePlays = roundFilteredRows.filter((row) => getTryScorerSignal(row));
   const roundLabel =
     selectedRound === "all" ? "All rounds" : `Round ${selectedRound}`;
 
@@ -4028,7 +4057,7 @@ function TryScorersPage({
             Try Scorer Value Plays
           </h2>
           <div className="text-[10px] md:text-sm font-bold text-[#FFEA00] uppercase tracking-widest">
-            Included with RightEdge Premium — value plays only
+            Included with RightEdge Premium — high-probability and value scorer spots
           </div>
         </div>
 
@@ -4085,7 +4114,15 @@ function TryScorersPage({
             const teams = match.split(" v ");
             const homeTeam = teams[0] || "";
             const awayTeam = teams[1] || "";
-            const sortedPlayers = [...players].sort((a, b) => b.edgePct - a.edgePct);
+            const sortedPlayers = [...players].sort((a, b) => {
+              const aSignal = getTryScorerSignal(a);
+              const bSignal = getTryScorerSignal(b);
+              return (
+                (bSignal?.sortRank || 0) - (aSignal?.sortRank || 0) ||
+                b.statsInsiderPct - a.statsInsiderPct ||
+                b.edgePct - a.edgePct
+              );
+            });
 
             return (
               <div key={match}>
@@ -4101,7 +4138,7 @@ function TryScorersPage({
                   <table className="w-full text-left border-collapse">
                     <thead>
                       <tr className="border-b border-white/10">
-                        {["Player", "Round", "Model %", "Market %", "Best Odds", "Bookmaker", "Edge"].map((h) => (
+                        {["Player", "Round", "Model %", "Market %", "Best Odds", "Bookmaker", "Signal"].map((h) => (
                           <th key={h} className="pb-3 px-3 font-black text-white/40 uppercase tracking-widest text-[10px]">
                             {h}
                           </th>
@@ -4109,7 +4146,9 @@ function TryScorersPage({
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-white/5">
-                      {sortedPlayers.map((row, i) => (
+                      {sortedPlayers.map((row, i) => {
+                        const signal = getTryScorerSignal(row);
+                        return (
                         <tr key={i} className="hover:bg-white/[0.03] transition-colors">
                           <td className="py-4 px-3">
                             <div className="flex items-center gap-2">
@@ -4133,16 +4172,13 @@ function TryScorersPage({
                             {row.bookmaker}
                           </td>
                           <td className="py-4 px-3">
-                            <span className={`inline-flex px-2 py-1 text-xs font-black uppercase tracking-widest ${
-                              row.edgePct >= 5
-                                ? "bg-[#00E676] text-black"
-                                : "bg-[#FFEA00] text-black"
-                            }`}>
-                              +{formatPercent(row.edgePct, 1)}
+                            <span className={`inline-flex px-2 py-1 text-xs font-black uppercase tracking-widest ${signal?.className || "bg-white/10 text-white/50"}`}>
+                              {signal?.label || "Watch"}
                             </span>
                           </td>
                         </tr>
-                      ))}
+                      );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -4151,6 +4187,7 @@ function TryScorersPage({
                 <div className="md:hidden flex flex-col divide-y divide-white/5">
                   {sortedPlayers.map((row, i) => {
                     const teamColors = getTeamColors(row.team);
+                    const signal = getTryScorerSignal(row);
                     return (
                       <div key={i} className="py-4 flex items-center justify-between gap-4">
                         <div className="flex-1 min-w-0">
@@ -4169,8 +4206,8 @@ function TryScorersPage({
                         <div className="flex flex-col items-end gap-1 shrink-0">
                           <span className="text-2xl font-black text-white">${row.bestOdds.toFixed(2)}</span>
                           <span className="text-[10px] text-white/40 uppercase tracking-wider">{row.bookmaker}</span>
-                          <span className={`text-xs font-black ${row.edgePct >= 5 ? 'text-[#00E676]' : 'text-[#FFEA00]'}`}>
-                            Edge +{formatPercent(row.edgePct, 1)}
+                          <span className={`px-2 py-1 text-[10px] font-black uppercase tracking-widest ${signal?.className || "bg-white/10 text-white/50"}`}>
+                            {signal?.label || "Watch"}
                           </span>
                         </div>
                       </div>
