@@ -1941,7 +1941,7 @@ function PaymentGateModal({
                 <RefreshCw className="w-5 h-5 animate-spin" />
               ) : step === "email" ? (
                 <>
-                  Unlock Full Round Card — $9/week
+                  Unlock Premium Plays — $9/week
                   <ArrowRight className="w-5 h-5 stroke-[3px]" />
                 </>
               ) : null}
@@ -2662,7 +2662,7 @@ function PublicHero({
       <div className="relative z-10 max-w-[800px]">
         <div className="inline-flex items-center gap-2 bg-[#FF2E63]/15 border border-[#FF2E63]/50 px-3 py-1.5 text-[10px] sm:text-xs font-bold text-[#FFEA00] sm:text-white mb-4 uppercase tracking-wider">
           <Sparkles className="w-3.5 h-3.5" />
-          Value Betting Intelligence
+          NRL Betting Intelligence
         </div>
 
         <h1 className="text-3xl sm:text-4xl md:text-5xl font-black tracking-tighter text-white leading-[1.05] mb-4">
@@ -2670,7 +2670,7 @@ function PublicHero({
         </h1>
         
         <p className="text-sm sm:text-base md:text-lg text-white/70 leading-relaxed mb-6 font-bold max-w-[680px]">
-          See projected scores, model odds, market edges and official premium plays for every NRL round.
+          See projected scores, model odds and premium plays for every NRL round.
         </p>
 
         <div className="flex flex-col sm:flex-row flex-wrap gap-3">
@@ -2777,11 +2777,11 @@ function FeaturedMatchPreview({
   const takeaway =
     isOfficialPlay ? (
       <>
-        The model has identified significant value backing the <Blur>{displayBestBet}</Blur>, calculating a <Blur>{formatPercent(featuredWinPct, 1)}</Blur> true win probability compared to the market. With a massive +<span className="text-[#00E676]">{formatPercent(row.bestEdge || 0, 1)}</span> edge and a favorable projected margin of <Blur>{margin} points</Blur>, this matchup easily clears all mathematical filters for an official max-confidence play.
+        The model has <Blur>{displayBestBet}</Blur> winning by <Blur>{margin} points</Blur> with a <Blur>{formatPercent(featuredWinPct, 1)}</Blur> true win probability. The price still clears our premium filter, so this matchup qualifies as an official model-aligned play.
       </>
     ) : (
       <>
-        The model projects <Blur>{displayPredictedWinner}</Blur> to win by <Blur>{margin} points</Blur> with a <Blur>{formatPercent(featuredWinPct, 1)}</Blur> true win probability. While they carry the highest win probability on the board, the edge of +<span className="text-[#00E676]">{formatPercent(row.bestEdge || 0, 1)}</span> doesn't quite meet our strict threshold for an official mathematical play.
+        The model projects <Blur>{displayPredictedWinner}</Blur> to win by <Blur>{margin} points</Blur> with a <Blur>{formatPercent(featuredWinPct, 1)}</Blur> true win probability. It is still a strong match projection, but it does not currently meet the full premium filter for an official H2H play.
       </>
     );
 
@@ -2932,7 +2932,7 @@ function FeaturedMatchPreview({
               </div>
               <div>
                 <div className="text-xs font-bold text-white/50 mb-2 uppercase tracking-widest">
-                  Best Edge
+                  Model Edge
                 </div>
                 <div className="text-2xl font-black text-[#FF2E63]">
                   +{formatPercent(row.bestEdge, 2)}
@@ -3898,13 +3898,13 @@ function BestBetsPage({
               Premium Content
             </h2>
             <p className="text-sm md:text-base text-white/70 font-bold leading-relaxed mb-8">
-              Unlock the full RightEdge round card: official Best Bets, Try Scorer value plays, staking guidance and model edges.
+              Unlock the full RightEdge round: model-aligned Best Bets, Try Scorer plays, live prices and staking guidance.
             </p>
             <button
               onClick={() => onRequestAccess("best-bets")}
               className="inline-flex items-center justify-center gap-3 bg-[#FF2E63] text-white px-8 py-4 text-base font-black uppercase tracking-wider hover:bg-[#E62959] transition-colors shadow-[4px_4px_0_0_#0047FF]"
             >
-              Unlock Full Round Card — $9/week
+              Unlock Premium Plays — $9/week
               <ArrowRight className="w-5 h-5 stroke-[3px]" />
             </button>
           </div>
@@ -4108,13 +4108,13 @@ function TryScorersPage({
               Premium Content
             </h2>
             <p className="text-sm md:text-base text-white/70 font-bold leading-relaxed mb-8">
-              Try Scorer value plays are included with RightEdge Premium. Unlock the full round card to see Best Bets, Try Scorer plays, staking guidance and model edges.
+              Try Scorer plays are included with RightEdge Premium. Unlock the full round to see Best Bets, Try Scorer signals, live prices and staking guidance.
             </p>
             <button
               onClick={() => onRequestAccess("try-scorers")}
               className="inline-flex items-center justify-center gap-3 bg-[#FF2E63] text-white px-8 py-4 text-base font-black uppercase tracking-wider hover:bg-[#E62959] transition-colors shadow-[4px_4px_0_0_#0047FF]"
             >
-              Unlock Full Round Card — $9/week
+              Unlock Premium Plays — $9/week
               <ArrowRight className="w-5 h-5 stroke-[3px]" />
             </button>
           </div>
@@ -4919,7 +4919,7 @@ function SgmBuilderPage({
               onClick={() => onRequestAccess("sgm-builder")}
               className="inline-flex items-center justify-center gap-3 bg-[#FF2E63] text-white px-8 py-4 text-base font-black uppercase tracking-wider hover:bg-[#E62959] transition-colors shadow-[4px_4px_0_0_#0047FF]"
             >
-              Unlock Full Round Card — $9/week
+              Unlock Premium Plays — $9/week
               <ArrowRight className="w-5 h-5 stroke-[3px]" />
             </button>
           </div>
@@ -6154,8 +6154,8 @@ export default function App() {
 
   {/* ── Primary SEO ── */}
   <title>RightEdge NRL Predictions & Best Bets</title>
-  <meta name="description" content="RightEdge is Australia's premier NRL analytics and value betting platform. Get expert NRL best bets, match predictions, win probabilities, and model-driven insights every round." />
-  <meta name="keywords" content="RightEdge, RightEdge NRL, RightEdge NRL Best Bets, NRL best bets, NRL analytics, NRL predictions, NRL betting tips, NRL value bets, NRL match predictions, NRL odds, rugby league betting, NRL 2026" />
+  <meta name="description" content="RightEdge is Australia's NRL analytics platform for match predictions, win probabilities, model-aligned best bets and try scorer plays every round." />
+  <meta name="keywords" content="RightEdge, RightEdge NRL, RightEdge NRL Best Bets, NRL best bets, NRL analytics, NRL predictions, NRL betting tips, NRL match predictions, NRL odds, rugby league betting, NRL 2026" />
   <meta name="robots" content="index, follow" />
   <link rel="canonical" href="https://www.rightedge.com.au/" />
 
@@ -6183,7 +6183,7 @@ export default function App() {
     "name": "RightEdge",
     "alternateName": ["RightEdge NRL", "RightEdge NRL Best Bets"],
     "url": "https://www.rightedge.com.au/",
-    "description": "Australia's premier NRL analytics and value betting platform. Get expert NRL best bets, match predictions, win probabilities, and model-driven insights every round.",
+    "description": "Australia's NRL analytics platform for match predictions, win probabilities, model-aligned best bets and try scorer plays every round.",
     "inLanguage": "en-AU"
   })}</script>
 </Helmet>
@@ -6340,17 +6340,16 @@ export default function App() {
                 </button>
               </div>
               <div className="text-sm font-bold text-[#FFEA00] uppercase tracking-widest">
-                Mathematical NRL Analytics & Value Betting
+                NRL Predictions & Premium Plays
               </div>
             </div>
             <div className="text-xs text-white/50 leading-relaxed font-bold max-w-[720px] uppercase tracking-wider">
               <p className="mb-4">
                 RightEdge provides projected scores, win
-                probabilities, true model odds, and identified
-                market edges for the NRL. Our official plays and
-                strict staking logic are designed for
-                disciplined bettors treating sports analytics as
-                an investment.
+                probabilities, model odds, official H2H plays,
+                Try Scorer signals and staking guidance for the
+                NRL. Premium plays are filtered to match the
+                model's strongest weekly reads.
               </p>
               <p className="text-[#FF2E63]/80 mb-4">
                 Disclaimer: RightEdge is an independent
