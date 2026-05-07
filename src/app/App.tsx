@@ -4215,7 +4215,6 @@ type SgmMatchGroup = {
   homeTeam: string;
   awayTeam: string;
   selectedTeam: string;
-  selectedTeamModelPct: number;
   projectedMargin: number;
   combos: SgmCombo[];
 };
@@ -4472,6 +4471,8 @@ function makeSgmCombo({
   correlationMultiplier: number;
 }): SgmCombo | null {
   if (legs.length < 2 || legs.some((leg) => !leg.modelPct || !leg.odds)) return null;
+  const modelHitPct = buildSgmHitPct(legs, correlationMultiplier);
+  if (modelHitPct < 40) return null;
 
   return {
     id,
@@ -4479,7 +4480,7 @@ function makeSgmCombo({
     confidence,
     bookmaker: displayBookmakerName(bookmaker),
     estimatedOdds: legs.reduce((product, leg) => product * leg.odds, 1),
-    modelHitPct: buildSgmHitPct(legs, correlationMultiplier),
+    modelHitPct,
     legs,
   };
 }
@@ -4565,17 +4566,6 @@ function buildSgmMatchGroups(
           legs: [sideLeg, topScorerLeg],
         }));
 
-        if (spreadLeg) {
-          addCombo(makeSgmCombo({
-            id: `${matchKey}-side-top-scorer-line`,
-            title: "Side + scorer + line",
-            confidence: "High Prob",
-            bookmaker: bookie,
-            correlationMultiplier: 1.18,
-            legs: [sideLeg, topScorerLeg, spreadLeg],
-          }));
-        }
-
         if (totalLeg) {
           addCombo(makeSgmCombo({
             id: `${matchKey}-side-top-scorer-total`,
@@ -4587,16 +4577,29 @@ function buildSgmMatchGroups(
               : 1.02,
             legs: [sideLeg, topScorerLeg, totalLeg],
           }));
-        }
 
-        if (spreadLeg && totalLeg) {
           addCombo(makeSgmCombo({
-            id: `${matchKey}-side-line-total`,
-            title: "Side + line + total",
+            id: `${matchKey}-scorer-total`,
+            title: "Scorer + total",
             confidence: "High Prob",
             bookmaker: bookie,
-            correlationMultiplier: 1.08,
-            legs: [sideLeg, spreadLeg, totalLeg],
+            correlationMultiplier: normalizeTeamName(topTeamScorer.team) === normalizeTeamName(selected.team)
+              ? 1.24
+              : 1.08,
+            legs: [topScorerLeg, totalLeg],
+          }));
+        }
+
+        if (spreadLeg) {
+          addCombo(makeSgmCombo({
+            id: `${matchKey}-line-top-scorer`,
+            title: "Line + scorer",
+            confidence: "High Prob",
+            bookmaker: bookie,
+            correlationMultiplier: normalizeTeamName(topTeamScorer.team) === normalizeTeamName(selected.team)
+              ? 1.35
+              : 1.05,
+            legs: [spreadLeg, topScorerLeg],
           }));
         }
       }
@@ -4623,7 +4626,6 @@ function buildSgmMatchGroups(
           bookie,
           selected.odds,
         );
-        const spreadLeg = getSpreadLeg(marketMap, match, selected.team, bookie);
         addCombo(makeSgmCombo({
           id: `${matchKey}-team-attack-stack`,
           title: "Winning team attack stack",
@@ -4634,7 +4636,6 @@ function buildSgmMatchGroups(
             { label: `${selected.team} head-to-head`, typeLabel: "Head 2 Head", team: selected.team, modelPct: selected.modelPct, odds: h2hOddsForBookie },
             { label: sameBookieTeamPair.player, typeLabel: "Anytime try", team: sameBookieTeamPair.team, modelPct: sameBookieTeamPair.statsInsiderPct, odds: sameBookieTeamPair.bestOdds },
             { label: secondSameBookieTeamScorer.player, typeLabel: "Anytime try", team: secondSameBookieTeamScorer.team, modelPct: secondSameBookieTeamScorer.statsInsiderPct, odds: secondSameBookieTeamScorer.bestOdds },
-            ...(spreadLeg ? [spreadLeg] : []),
           ],
         }));
       }
@@ -4676,7 +4677,6 @@ function buildSgmMatchGroups(
         homeTeam: match.homeTeam,
         awayTeam: match.awayTeam,
         selectedTeam: selected.team,
-        selectedTeamModelPct: selected.modelPct,
         projectedMargin,
         combos: combos.sort((a, b) => b.modelHitPct - a.modelHitPct),
       };
@@ -4690,12 +4690,7 @@ function buildSgmMatchGroups(
 }
 
 function SgmComboCard({ combo }: { combo: SgmCombo }) {
-  const confidenceClass =
-    combo.confidence === "High Prob"
-      ? "bg-[#00E676] text-black"
-      : combo.confidence === "Attack Stack"
-        ? "bg-[#FFEA00] text-black"
-        : "bg-[#FF2E63] text-white";
+  const showHighProbBadge = combo.modelHitPct >= 50;
 
   return (
     <GlassCard className="p-5 md:p-6 relative overflow-hidden border-l-4 border-l-[#0047FF]">
@@ -4703,13 +4698,15 @@ function SgmComboCard({ combo }: { combo: SgmCombo }) {
       <div className="relative z-10">
         <div className="flex items-start justify-between gap-4 mb-5">
           <div>
-            <div className="text-lg md:text-2xl font-black text-white uppercase tracking-tight">
+            <div className="text-lg md:text-2xl font-black text-white tracking-tight">
               {combo.title}
             </div>
           </div>
-          <span className={`shrink-0 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest ${confidenceClass}`}>
-            {combo.confidence}
-          </span>
+          {showHighProbBadge ? (
+            <span className="shrink-0 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest bg-[#00E676] text-black">
+              High Prob
+            </span>
+          ) : null}
         </div>
 
         <div className="space-y-3 mb-5">
@@ -4730,23 +4727,15 @@ function SgmComboCard({ combo }: { combo: SgmCombo }) {
                   {leg.label}
                 </div>
                 <div className="text-[10px] text-white/40 font-black uppercase tracking-widest mt-1">
-                  Model {formatPercent(leg.modelPct, 1)} · Odds {leg.odds.toFixed(2)}
+                  Odds {leg.odds.toFixed(2)}
                 </div>
               </div>
             </div>
           ))}
         </div>
 
-        <div className="grid grid-cols-2 gap-3 mb-5">
-          <div className="bg-[#111317] border border-white/10 p-3">
-            <div className="text-[9px] font-black text-white/40 uppercase tracking-widest mb-1">
-              Model %
-            </div>
-            <div className="text-2xl font-black text-[#FFEA00]">
-              {formatPercent(combo.modelHitPct, 1)}
-            </div>
-          </div>
-          <div className="bg-[#111317] border border-white/10 p-3">
+        <div className="mb-5">
+          <div className="bg-[#111317] border border-white/10 p-3 max-w-[220px]">
             <div className="text-[9px] font-black text-white/40 uppercase tracking-widest mb-1">
               Est. odds
             </div>
@@ -4817,7 +4806,7 @@ function SgmBuilderPage({
               Premium Content
             </h2>
             <p className="text-sm md:text-base text-white/70 font-bold leading-relaxed mb-8">
-              Same Game Multis are included with RightEdge Premium: high-probability team and try-scorer combinations by match, with model hit rate and same-bookie odds.
+              Same Game Multis are included with RightEdge Premium: cleaner same-bookie team, total and try-scorer combinations by match.
             </p>
             <button
               onClick={() => onRequestAccess("sgm-builder")}
@@ -4848,7 +4837,7 @@ function SgmBuilderPage({
       {groups.length === 0 ? (
         <GlassCard className="p-8 text-center border-l-4 border-l-white/20">
           <div className="text-white/50 font-bold uppercase tracking-widest text-sm">
-            No same game multi combos qualify yet. Add try scorers above 45% model probability to unlock this view.
+            No same game multi combos qualify yet.
           </div>
         </GlassCard>
       ) : (
@@ -4873,7 +4862,7 @@ function SgmBuilderPage({
                   {group.match}
                 </div>
                 <div className="text-[10px] text-white/40 font-black uppercase tracking-widest mt-2">
-                  {group.combos.length} combos · {formatPercent(group.selectedTeamModelPct, 1)} side
+                  {group.combos.length} combos
                 </div>
               </button>
             ))}
@@ -4889,7 +4878,7 @@ function SgmBuilderPage({
                         {selectedGroup.match}
                       </div>
                       <div className="text-xs font-black text-[#FFEA00] uppercase tracking-widest mt-2">
-                        Highest probability side: {selectedGroup.selectedTeam} · {formatPercent(selectedGroup.selectedTeamModelPct, 1)}
+                        Highest probability side: {selectedGroup.selectedTeam}
                       </div>
                     </div>
                     <div className="text-[10px] font-black text-white/40 uppercase tracking-widest">
