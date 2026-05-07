@@ -1390,6 +1390,8 @@ const EMAIL_ACCESS_KEY = "rightedge_email_access";
 
 function hasEmailAccess(): boolean {
   try {
+    if (hasPaidAccess()) return true;
+
     const val = localStorage.getItem(EMAIL_ACCESS_KEY);
     if (!val) return false;
 
@@ -1485,6 +1487,10 @@ function getPaidUserEmail(): string | null {
 function setPaidAccess(email: string) {
   try {
     const normalizedEmail = email.trim().toLowerCase();
+    localStorage.setItem(
+      EMAIL_ACCESS_KEY,
+      JSON.stringify({ email: normalizedEmail, subscribed: true }),
+    );
     localStorage.setItem(
       PAID_ACCESS_KEY,
       JSON.stringify({ email: normalizedEmail, subscribed: true }),
@@ -5128,6 +5134,7 @@ export default function App() {
     window.location.hash = "best-bets";
     if (hasPaidAccess()) {
       setPaidAccessState(true);
+      setShowEmailGate(false);
       return;
     }
 
@@ -5145,7 +5152,8 @@ export default function App() {
 
     if (appHashes.includes(hash)) {
       trackHashPageView(hash);
-      if (hasEmailAccess()) {
+      if (hasEmailAccess() || hasPaidAccess()) {
+        setShowEmailGate(false);
         setSitePage("app");
       } else {
         setShowEmailGate(true);
@@ -5193,6 +5201,7 @@ export default function App() {
           setEmailAccess(data.email);
           setPaidAccess(data.email);
           setPaidAccessState(true);
+          setShowEmailGate(false);
 
           const confirmedReturnHash = ["best-bets", "try-scorers"].includes(data.returnHash)
             ? data.returnHash
@@ -5406,6 +5415,11 @@ export default function App() {
             onRequestAccess={(targetHash = "best-bets") => {
               setSitePage("app");
               window.location.hash = targetHash;
+              if (hasPaidAccess()) {
+                setPaidAccessState(true);
+                setShowEmailGate(false);
+                return;
+              }
               (window as any).trackAnalyticsEvent?.("premium_paywall_open", {
                 section: targetHash,
                 cta_source: targetHash,
@@ -5437,6 +5451,7 @@ export default function App() {
           onPremiumSuccess={() => {
             setFeaturedAccess(true);
             setPaidAccessState(hasPaidAccess());
+            setShowEmailGate(false);
             setShowFeaturedGate(false);
             setSitePage("app");
             window.location.hash = "best-bets";
@@ -5453,6 +5468,7 @@ export default function App() {
           }}
           onSuccess={() => {
             setPaidAccessState(hasPaidAccess());
+            setShowEmailGate(false);
             setShowPaymentGate(false);
             setSitePage("app");
             const currentPremiumHash = window.location.hash.replace("#", "");
