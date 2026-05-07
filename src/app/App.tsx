@@ -1083,7 +1083,7 @@ function parseTryScorers(rows: RawRow[]): TryScorerRow[] {
       player: getValue(row, ["Player"]),
       team: getValue(row, ["Team"]),
       position: getValue(row, ["Position"]),
-      statsInsiderPct: toPercentNumber(getValue(row, ["StatsInsider %"])),
+      statsInsiderPct: toPercentNumber(getValue(row, ["StatsInsider %", "Stats Insider %", "Model %"])),
       bestOdds: toNumber(getValue(row, ["Best Odds"])),
       bookmaker: getValue(row, ["Bookmaker"]),
       marketImpliedPct: toPercentNumber(getValue(row, ["Market Implied %"])),
