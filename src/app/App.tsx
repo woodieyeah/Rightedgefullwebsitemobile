@@ -3955,10 +3955,18 @@ function TryScorersPage({
       (row.edgePct >= 0 && row.bestOdds >= 2.5) ||
       (row.edgePct >= -0.5 && row.bestOdds >= 3);
 
+    if (highProbabilityNearFair && clearValue) {
+      return {
+        label: "Best Bet",
+        className: "bg-[#00E676] text-black",
+        sortRank: 3,
+      };
+    }
+
     if (highProbabilityNearFair) {
       return {
         label: "High Prob",
-        className: "bg-[#00E676] text-black",
+        className: "bg-[#0047FF] text-white",
         sortRank: 2,
       };
     }
