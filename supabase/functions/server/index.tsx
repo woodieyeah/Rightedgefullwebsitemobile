@@ -723,42 +723,190 @@ app.get("/kv-namespace-scan", async (c) => {
   }
 });
 
-app.get("/live-odds", async (c) => {
-  try {
-    const apiKey = Deno.env.get("ODDS_API_KEY");
-    if (!apiKey) {
-      return c.json({ error: "Missing ODDS_API_KEY environment variable. Add your The Odds API key." }, 400);
-    }
-    
-    // Check cache to prevent spamming the API limit
-    const cachedOdds = await kv.get("live_odds_cache");
-    const cacheTime = await kv.get("live_odds_cache_time");
-    const now = Date.now();
-    
-    // Cache for 2 minutes (120,000 ms)
-    if (cachedOdds && cacheTime && (now - Number(cacheTime)) < 120000) {
-      return c.json(JSON.parse(cachedOdds));
+function normalizeNrlTeamName(team: string) {
+  const t = String(team || "").toLowerCase();
+  if (t.includes("bronco") || t.includes("brisbane")) return "Brisbane Broncos";
+  if (t.includes("rooster") || t.includes("sydney")) return "Sydney Roosters";
+  if (t.includes("storm") || t.includes("melbourne")) return "Melbourne Storm";
+  if (t.includes("panther") || t.includes("penrith")) return "Penrith Panthers";
+  if (t.includes("rabbitoh") || t.includes("south")) return "South Sydney Rabbitohs";
+  if (t.includes("eel") || t.includes("parramatta")) return "Parramatta Eels";
+  if (t.includes("shark") || t.includes("cronulla")) return "Cronulla Sharks";
+  if (t.includes("cowboy") || t.includes("north queensland") || t.includes("north qld")) return "North Queensland Cowboys";
+  if (t.includes("sea eagle") || t.includes("manly")) return "Manly Sea Eagles";
+  if (t.includes("knight") || t.includes("newcastle")) return "Newcastle Knights";
+  if (t.includes("dragon") || t.includes("st george")) return "St George Illawarra Dragons";
+  if (t.includes("titan") || t.includes("gold coast")) return "Gold Coast Titans";
+  if (t.includes("bulldog") || t.includes("canterbury")) return "Canterbury Bulldogs";
+  if (t.includes("warrior") || t.includes("new zealand")) return "New Zealand Warriors";
+  if (t.includes("raider") || t.includes("canberra")) return "Canberra Raiders";
+  if (t.includes("tiger") || t.includes("wests")) return "Wests Tigers";
+  if (t.includes("dolphin")) return "Dolphins";
+  return String(team || "").trim();
+}
+
+function shortNrlTeamName(team: string) {
+  const normalized = normalizeNrlTeamName(team);
+  const shortNames: Record<string, string> = {
+    "Brisbane Broncos": "Brisbane",
+    "Sydney Roosters": "Sydney",
+    "Melbourne Storm": "Melbourne",
+    "Penrith Panthers": "Penrith",
+    "South Sydney Rabbitohs": "Souths",
+    "Parramatta Eels": "Parramatta",
+    "Cronulla Sharks": "Cronulla",
+    "North Queensland Cowboys": "North Qld",
+    "Manly Sea Eagles": "Manly",
+    "Newcastle Knights": "Newcastle",
+    "St George Illawarra Dragons": "St Geo Illa",
+    "Gold Coast Titans": "Gold Coast",
+    "Canterbury Bulldogs": "Canterbury",
+    "New Zealand Warriors": "Warriors",
+    "Canberra Raiders": "Canberra",
+    "Wests Tigers": "Wests Tigers",
+    "Dolphins": "Dolphins",
+  };
+  return shortNames[normalized] || normalized;
+}
+
+function buildOddsMatchKey(home: string, away: string) {
+  return `${normalizeNrlTeamName(home)} v ${normalizeNrlTeamName(away)}`.toLowerCase();
+}
+
+async function fetchLiveOddsRaw(force = false) {
+  const apiKey = Deno.env.get("ODDS_API_KEY");
+  if (!apiKey) {
+    throw new Error("Missing ODDS_API_KEY environment variable. Add your The Odds API key.");
+  }
+
+  const cachedOdds = await kv.get("live_odds_cache");
+  const cacheTime = await kv.get("live_odds_cache_time");
+  const now = Date.now();
+
+  if (!force && cachedOdds && cacheTime && (now - Number(cacheTime)) < 120000) {
+    return typeof cachedOdds === "string" ? JSON.parse(cachedOdds) : cachedOdds;
+  }
+
+  const response = await fetch(`https://api.the-odds-api.com/v4/sports/rugbyleague_nrl/odds/?apiKey=${apiKey}&regions=au&markets=h2h&oddsFormat=decimal`);
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Failed to fetch from The Odds API: ${text}`);
+  }
+
+  const data = await response.json();
+
+  if (Array.isArray(data)) {
+    await kv.set("live_odds_cache", JSON.stringify(data));
+    await kv.set("live_odds_cache_time", now.toString());
+  }
+
+  return data;
+}
+
+function buildBestMatchOdds(rawOdds: any[]) {
+  const updatedAt = new Date().toISOString();
+
+  return (rawOdds || []).map((event: any) => {
+    const homeTeam = normalizeNrlTeamName(event.home_team);
+    const awayTeam = normalizeNrlTeamName(event.away_team);
+    let bestHomeOdds = 0;
+    let bestAwayOdds = 0;
+    let bestHomeBookmaker = "";
+    let bestAwayBookmaker = "";
+
+    for (const bookmaker of event.bookmakers || []) {
+      const h2hMarket = (bookmaker.markets || []).find((market: any) => market.key === "h2h");
+      if (!h2hMarket) continue;
+
+      for (const outcome of h2hMarket.outcomes || []) {
+        const outcomeTeam = normalizeNrlTeamName(outcome.name);
+        const price = Number(outcome.price) || 0;
+        if (outcomeTeam === homeTeam && price > bestHomeOdds) {
+          bestHomeOdds = price;
+          bestHomeBookmaker = bookmaker.title || bookmaker.key || "";
+        }
+        if (outcomeTeam === awayTeam && price > bestAwayOdds) {
+          bestAwayOdds = price;
+          bestAwayBookmaker = bookmaker.title || bookmaker.key || "";
+        }
+      }
     }
 
-    const response = await fetch(`https://api.the-odds-api.com/v4/sports/rugbyleague_nrl/odds/?apiKey=${apiKey}&regions=au&markets=h2h&oddsFormat=decimal`);
-    
-    if (!response.ok) {
-       const text = await response.text();
-       console.error("Odds API Error:", text);
-       return c.json({ error: "Failed to fetch from Odds API", details: text }, response.status);
-    }
-    
-    const data = await response.json();
-    
-    // Only cache if we got a valid array back
-    if (Array.isArray(data)) {
-      await kv.set("live_odds_cache", JSON.stringify(data));
-      await kv.set("live_odds_cache_time", now.toString());
-    }
-    
+    return {
+      id: event.id || "",
+      commenceTime: event.commence_time || "",
+      homeTeam,
+      awayTeam,
+      sheetHomeTeam: shortNrlTeamName(homeTeam),
+      sheetAwayTeam: shortNrlTeamName(awayTeam),
+      matchKey: buildOddsMatchKey(homeTeam, awayTeam),
+      bestHomeOdds,
+      bestAwayOdds,
+      bestHomeBookmaker,
+      bestAwayBookmaker,
+      lastUpdated: updatedAt,
+    };
+  }).filter((row: any) => row.homeTeam && row.awayTeam && row.bestHomeOdds && row.bestAwayOdds);
+}
+
+async function refreshBestMatchOdds(force = false) {
+  const rawOdds = await fetchLiveOddsRaw(force);
+  const odds = buildBestMatchOdds(rawOdds);
+  const payload = {
+    updatedAt: new Date().toISOString(),
+    sport: "rugbyleague_nrl",
+    market: "h2h",
+    odds,
+  };
+  await kv.set("best_match_odds_cache", JSON.stringify(payload));
+  await kv.set("best_match_odds_cache_time", Date.now().toString());
+  return payload;
+}
+
+app.get("/live-odds", async (c) => {
+  try {
+    const force = c.req.query("force") === "true";
+    const data = await fetchLiveOddsRaw(force);
     return c.json(data);
   } catch (err: any) {
     console.error("Server error fetching live odds:", err);
+    return c.json({ error: "Internal server error", message: err.message }, 500);
+  }
+});
+
+app.get("/best-match-odds", async (c) => {
+  try {
+    const force = c.req.query("force") === "true";
+    const format = c.req.query("format") || "json";
+    const cached = await kv.get("best_match_odds_cache");
+    const cacheTime = await kv.get("best_match_odds_cache_time");
+    const now = Date.now();
+
+    let payload =
+      !force && cached && cacheTime && (now - Number(cacheTime)) < 120000
+        ? (typeof cached === "string" ? JSON.parse(cached) : cached)
+        : await refreshBestMatchOdds(force);
+
+    if (format === "sheets") {
+      return c.json({
+        ...payload,
+        rows: payload.odds.map((row: any) => [
+          row.sheetHomeTeam,
+          row.sheetAwayTeam,
+          row.bestHomeOdds,
+          row.bestAwayOdds,
+          row.bestHomeBookmaker,
+          row.bestAwayBookmaker,
+          row.commenceTime,
+          row.lastUpdated,
+        ]),
+      });
+    }
+
+    return c.json(payload);
+  } catch (err: any) {
+    console.error("Server error building best match odds:", err);
     return c.json({ error: "Internal server error", message: err.message }, 500);
   }
 });
