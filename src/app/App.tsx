@@ -3952,13 +3952,17 @@ function TryScorersPage({
     const wholeNumberModelMarketGap = Math.abs(
       Math.round(row.statsInsiderPct) - Math.round(row.marketImpliedPct),
     );
-
-    return (
+    const highProbabilityWithEdge =
+      row.statsInsiderPct >= 40 &&
+      row.edgePct >= 2 &&
+      row.bestOdds >= 1.5;
+    const nearFairHighProbability =
       row.statsInsiderPct >= 40 &&
       row.bestOdds >= 1.9 &&
       row.edgePct >= -1.25 &&
-      wholeNumberModelMarketGap <= 1
-    );
+      wholeNumberModelMarketGap <= 1;
+
+    return highProbabilityWithEdge || nearFairHighProbability;
   };
 
   const getMatchBestBetKeys = (players: TryScorerRow[]) => {
@@ -3970,10 +3974,13 @@ function TryScorersPage({
       .sort((a, b) => {
         const aGap = Math.abs(Math.round(a.statsInsiderPct) - Math.round(a.marketImpliedPct));
         const bGap = Math.abs(Math.round(b.statsInsiderPct) - Math.round(b.marketImpliedPct));
+        const aEdgeBest = a.statsInsiderPct >= 40 && a.edgePct >= 2 && a.bestOdds >= 1.5;
+        const bEdgeBest = b.statsInsiderPct >= 40 && b.edgePct >= 2 && b.bestOdds >= 1.5;
         return (
+          Number(bEdgeBest) - Number(aEdgeBest) ||
+          b.edgePct - a.edgePct ||
           b.statsInsiderPct - a.statsInsiderPct ||
           aGap - bGap ||
-          b.edgePct - a.edgePct ||
           b.bestOdds - a.bestOdds
         );
       })
@@ -4000,7 +4007,7 @@ function TryScorersPage({
     if (bestBetKeys?.has(getTryScorerKey(row))) {
       return {
         label: "Best Bet",
-        className: "bg-[#00E676] text-black",
+        className: "bg-[#FF2E63] text-white",
         sortRank: 3,
       };
     }
