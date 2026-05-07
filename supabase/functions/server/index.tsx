@@ -864,6 +864,163 @@ async function refreshBestMatchOdds(force = false) {
   return payload;
 }
 
+function normalizeOddsPlayerName(name: string) {
+  return String(name || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+async function fetchNrlEventsRaw(force = false) {
+  const apiKey = Deno.env.get("ODDS_API_KEY");
+  if (!apiKey) {
+    throw new Error("Missing ODDS_API_KEY environment variable. Add your The Odds API key.");
+  }
+
+  const cachedEvents = await kv.get("nrl_events_cache");
+  const cacheTime = await kv.get("nrl_events_cache_time");
+  const now = Date.now();
+
+  // Events do not count against The Odds API quota, but this keeps the edge
+  // function fast and avoids needless network calls.
+  if (!force && cachedEvents && cacheTime && (now - Number(cacheTime)) < 600000) {
+    return typeof cachedEvents === "string" ? JSON.parse(cachedEvents) : cachedEvents;
+  }
+
+  const response = await fetch(`https://api.the-odds-api.com/v4/sports/rugbyleague_nrl/events?apiKey=${apiKey}`);
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Failed to fetch NRL events from The Odds API: ${text}`);
+  }
+
+  const data = await response.json();
+  if (Array.isArray(data)) {
+    await kv.set("nrl_events_cache", JSON.stringify(data));
+    await kv.set("nrl_events_cache_time", now.toString());
+  }
+
+  return data;
+}
+
+async function fetchTryScorerEventOdds(event: any, force = false) {
+  const apiKey = Deno.env.get("ODDS_API_KEY");
+  if (!apiKey) {
+    throw new Error("Missing ODDS_API_KEY environment variable. Add your The Odds API key.");
+  }
+
+  const eventId = event?.id || "";
+  if (!eventId) return null;
+
+  const cacheKey = `try_scorer_event_odds:${eventId}`;
+  const cacheTimeKey = `try_scorer_event_odds_time:${eventId}`;
+  const cachedOdds = await kv.get(cacheKey);
+  const cacheTime = await kv.get(cacheTimeKey);
+  const now = Date.now();
+
+  // Player props are fetched event-by-event, so cache a little longer than h2h.
+  if (!force && cachedOdds && cacheTime && (now - Number(cacheTime)) < 300000) {
+    return typeof cachedOdds === "string" ? JSON.parse(cachedOdds) : cachedOdds;
+  }
+
+  const url = `https://api.the-odds-api.com/v4/sports/rugbyleague_nrl/events/${eventId}/odds?apiKey=${apiKey}&regions=au&markets=player_try_scorer_anytime&oddsFormat=decimal`;
+  const response = await fetch(url);
+
+  if (!response.ok) {
+    const text = await response.text();
+    console.warn(`[TryScorerOdds] Failed event ${eventId}: ${text}`);
+    return {
+      id: eventId,
+      home_team: event.home_team || "",
+      away_team: event.away_team || "",
+      commence_time: event.commence_time || "",
+      bookmakers: [],
+      error: text,
+    };
+  }
+
+  const data = await response.json();
+  await kv.set(cacheKey, JSON.stringify(data));
+  await kv.set(cacheTimeKey, now.toString());
+  return data;
+}
+
+function buildBestTryScorerOdds(eventOddsList: any[]) {
+  const updatedAt = new Date().toISOString();
+  const bestByPlayerAndMatch = new Map<string, any>();
+
+  for (const eventOdds of eventOddsList || []) {
+    if (!eventOdds) continue;
+
+    const homeTeam = normalizeNrlTeamName(eventOdds.home_team);
+    const awayTeam = normalizeNrlTeamName(eventOdds.away_team);
+    const sheetMatch = `${shortNrlTeamName(homeTeam)} v ${shortNrlTeamName(awayTeam)}`;
+    const matchKey = buildOddsMatchKey(homeTeam, awayTeam);
+
+    for (const bookmaker of eventOdds.bookmakers || []) {
+      const tryScorerMarket = (bookmaker.markets || []).find((market: any) =>
+        market.key === "player_try_scorer_anytime"
+      );
+      if (!tryScorerMarket) continue;
+
+      for (const outcome of tryScorerMarket.outcomes || []) {
+        const player = String(outcome.name || "").trim();
+        const price = Number(outcome.price) || 0;
+        const playerKey = normalizeOddsPlayerName(player);
+        if (!player || !playerKey || price <= 1) continue;
+
+        const key = `${matchKey}|${playerKey}`;
+        const existing = bestByPlayerAndMatch.get(key);
+        if (!existing || price > existing.bestOdds) {
+          bestByPlayerAndMatch.set(key, {
+            eventId: eventOdds.id || "",
+            commenceTime: eventOdds.commence_time || "",
+            homeTeam,
+            awayTeam,
+            sheetHomeTeam: shortNrlTeamName(homeTeam),
+            sheetAwayTeam: shortNrlTeamName(awayTeam),
+            sheetMatch,
+            matchKey,
+            player,
+            normalizedPlayer: playerKey,
+            bestOdds: price,
+            bookmaker: bookmaker.title || bookmaker.key || "",
+            lastUpdated: updatedAt,
+          });
+        }
+      }
+    }
+  }
+
+  return Array.from(bestByPlayerAndMatch.values()).sort((a: any, b: any) =>
+    `${a.sheetMatch}${a.player}`.localeCompare(`${b.sheetMatch}${b.player}`)
+  );
+}
+
+async function refreshBestTryScorerOdds(force = false) {
+  const events = await fetchNrlEventsRaw(force);
+  const eventOddsList = [];
+
+  for (const event of events || []) {
+    const eventOdds = await fetchTryScorerEventOdds(event, force);
+    if (eventOdds) eventOddsList.push(eventOdds);
+  }
+
+  const odds = buildBestTryScorerOdds(eventOddsList);
+  const payload = {
+    updatedAt: new Date().toISOString(),
+    sport: "rugbyleague_nrl",
+    market: "player_try_scorer_anytime",
+    eventCount: (events || []).length,
+    odds,
+  };
+  await kv.set("best_try_scorer_odds_cache", JSON.stringify(payload));
+  await kv.set("best_try_scorer_odds_cache_time", Date.now().toString());
+  return payload;
+}
+
 app.get("/live-odds", async (c) => {
   try {
     const force = c.req.query("force") === "true";
@@ -907,6 +1064,43 @@ app.get("/best-match-odds", async (c) => {
     return c.json(payload);
   } catch (err: any) {
     console.error("Server error building best match odds:", err);
+    return c.json({ error: "Internal server error", message: err.message }, 500);
+  }
+});
+
+app.get("/best-try-scorer-odds", async (c) => {
+  try {
+    const force = c.req.query("force") === "true";
+    const format = c.req.query("format") || "json";
+    const cached = await kv.get("best_try_scorer_odds_cache");
+    const cacheTime = await kv.get("best_try_scorer_odds_cache_time");
+    const now = Date.now();
+
+    let payload =
+      !force && cached && cacheTime && (now - Number(cacheTime)) < 300000
+        ? (typeof cached === "string" ? JSON.parse(cached) : cached)
+        : await refreshBestTryScorerOdds(force);
+
+    if (format === "sheets") {
+      return c.json({
+        ...payload,
+        rows: payload.odds.map((row: any) => [
+          row.sheetMatch,
+          row.sheetHomeTeam,
+          row.sheetAwayTeam,
+          row.player,
+          row.normalizedPlayer,
+          row.bestOdds,
+          row.bookmaker,
+          row.commenceTime,
+          row.lastUpdated,
+        ]),
+      });
+    }
+
+    return c.json(payload);
+  } catch (err: any) {
+    console.error("Server error building best try scorer odds:", err);
     return c.json({ error: "Internal server error", message: err.message }, 500);
   }
 });
