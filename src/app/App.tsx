@@ -385,6 +385,11 @@ const appPages = [
     label: "Try Scorers",
     icon: <Trophy className="w-5 h-5" />,
   },
+  {
+    id: "sgm-builder",
+    label: "SGM Builder",
+    icon: <Sparkles className="w-5 h-5" />,
+  },
 ];
 
 function getAppPages(isAdmin: boolean) {
@@ -775,6 +780,14 @@ function normalizeTeamName(value: string) {
 
 function buildMatchKey(homeTeam: string, awayTeam: string) {
   return `${normalizeTeamName(homeTeam)}__${normalizeTeamName(awayTeam)}`;
+}
+
+function buildMatchLabelKey(match: string) {
+  const parts = String(match || "").split(/\s+v\s+/i);
+  if (parts.length === 2) {
+    return `${normalizeTeamName(parts[0])}__${normalizeTeamName(parts[1])}`;
+  }
+  return String(match || "").trim().toLowerCase();
 }
 
 function buildConfidence(
@@ -1731,7 +1744,7 @@ function PaymentGateModal({
   useEffect(() => {
     if (!open) return;
     const currentPremiumHash = window.location.hash.replace("#", "");
-    const section = ["best-bets", "try-scorers"].includes(currentPremiumHash)
+    const section = ["best-bets", "try-scorers", "sgm-builder"].includes(currentPremiumHash)
       ? currentPremiumHash
       : "best-bets";
     (window as any).trackAnalyticsEvent?.("premium_paywall_view", {
@@ -1782,7 +1795,7 @@ function PaymentGateModal({
 
       setStep("processing");
       const currentPremiumHash = window.location.hash.replace("#", "");
-      const returnHash = ["best-bets", "try-scorers"].includes(currentPremiumHash)
+      const returnHash = ["best-bets", "try-scorers", "sgm-builder"].includes(currentPremiumHash)
         ? currentPremiumHash
         : "best-bets";
       const returnUrl = `${window.location.origin}${window.location.pathname}`;
@@ -4178,6 +4191,245 @@ function TryScorersPage({
   );
 }
 
+type SameGameMultiIdea = {
+  match: string;
+  teams: string[];
+  confidence: "Core" | "Balanced" | "Long Shot";
+  legs: string[];
+  reason: string;
+  projectedTotal: number;
+  edgePct: number;
+  topTryScorer?: TryScorerRow;
+};
+
+function buildSameGameMultiIdeas(data: DashboardData): SameGameMultiIdea[] {
+  const settledMatchKeys = new Set(
+    data.betLog
+      .filter((b) => b.result === "W" || b.result === "L")
+      .map((b) => b.match.toLowerCase()),
+  );
+
+  const tryScorersByMatch = data.tryScorers
+    .filter((row) => row.edgePct > 0 && row.bestOdds > 1)
+    .reduce((groups, row) => {
+      const key = buildMatchLabelKey(row.match);
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(row);
+      return groups;
+    }, {} as Record<string, TryScorerRow[]>);
+
+  const activeMatches = data.predictions
+    .filter((row) => !settledMatchKeys.has(row.match.toLowerCase()))
+    .filter((row) => row.predictedWinner || row.bestBet)
+    .sort((a, b) => {
+      const aTryEdge = Math.max(...(tryScorersByMatch[buildMatchLabelKey(a.match)] || []).map((p) => p.edgePct), 0);
+      const bTryEdge = Math.max(...(tryScorersByMatch[buildMatchLabelKey(b.match)] || []).map((p) => p.edgePct), 0);
+      return (b.bestEdge + bTryEdge) - (a.bestEdge + aTryEdge);
+    });
+
+  return activeMatches
+    .map((match) => {
+      const scorers = [...(tryScorersByMatch[buildMatchLabelKey(match.match)] || [])]
+        .sort((a, b) => b.edgePct - a.edgePct);
+      const topTryScorer = scorers[0];
+      const projectedTotal = Math.round(match.predictedHomeScore + match.predictedAwayScore);
+      const selection = match.bestBet || match.predictedWinner;
+      const edgePct = Math.max(match.bestEdge || 0, topTryScorer?.edgePct || 0);
+      const totalLean =
+        projectedTotal >= 48
+          ? `Game total lean: Over profile (${projectedTotal} projected points)`
+          : projectedTotal <= 42
+            ? `Game total lean: Under profile (${projectedTotal} projected points)`
+            : `Game script: balanced scoring profile (${projectedTotal} projected points)`;
+
+      const confidence: SameGameMultiIdea["confidence"] =
+        (match.bestEdge >= 7 && (topTryScorer?.edgePct || 0) >= 5)
+          ? "Core"
+          : (match.bestEdge >= 4 || (topTryScorer?.edgePct || 0) >= 4)
+            ? "Balanced"
+            : "Long Shot";
+
+      const legs = [
+        `${selection} head-to-head`,
+        topTryScorer
+          ? `${topTryScorer.player} anytime try`
+          : `${selection} to cover the game script`,
+        totalLean,
+      ];
+
+      const reason = topTryScorer
+        ? `${selection} rates as the model side, while ${topTryScorer.player} has the best try-scorer value in this matchup at ${topTryScorer.bookmaker || "market"} odds.`
+        : `${selection} rates as the model side, with the projected score creating the best available game-script angle.`;
+
+      return {
+        match: match.match,
+        teams: [match.homeTeam, match.awayTeam],
+        confidence,
+        legs,
+        reason,
+        projectedTotal,
+        edgePct,
+        topTryScorer,
+      };
+    })
+    .filter((idea) => idea.topTryScorer || idea.edgePct > 0)
+    .slice(0, 10);
+}
+
+function SgmBuilderPage({
+  data,
+  onRequestAccess,
+}: {
+  data: DashboardData;
+  onRequestAccess: (targetHash?: string) => void;
+}) {
+  const ideas = useMemo(() => buildSameGameMultiIdeas(data), [data]);
+
+  if (!hasPaidAccess()) {
+    return (
+      <div className="flex flex-col gap-6 md:gap-8">
+        <GlassCard className="p-8 md:p-12 text-center !border-[#FF2E63] !shadow-[8px_8px_0_0_#FF2E63] relative overflow-hidden">
+          <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(255,234,0,0.08),transparent_55%)]" />
+          <div className="relative z-10 flex flex-col items-center max-w-xl mx-auto">
+            <div className="bg-[#FF2E63] p-4 mb-6 shadow-[4px_4px_0_0_#0047FF]">
+              <Lock className="w-10 h-10 text-white stroke-[3px]" />
+            </div>
+            <h2 className="text-3xl md:text-5xl font-black text-white uppercase tracking-tight mb-3">
+              Premium Content
+            </h2>
+            <p className="text-sm md:text-base text-white/70 font-bold leading-relaxed mb-8">
+              Same Game Multi ideas are included with RightEdge Premium: model side, try-scorer value and game-script angles for each matchup.
+            </p>
+            <button
+              onClick={() => onRequestAccess("sgm-builder")}
+              className="inline-flex items-center justify-center gap-3 bg-[#FF2E63] text-white px-8 py-4 text-base font-black uppercase tracking-wider hover:bg-[#E62959] transition-colors shadow-[4px_4px_0_0_#0047FF]"
+            >
+              Unlock Full Round Card — $9/week
+              <ArrowRight className="w-5 h-5 stroke-[3px]" />
+            </button>
+          </div>
+        </GlassCard>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-6 md:gap-8">
+      <div className="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-4">
+        <div>
+          <h2 className="text-xl md:text-3xl font-black text-white uppercase tracking-tight mb-1 md:mb-2">
+            Same Game Multi Builder
+          </h2>
+          <div className="text-[10px] md:text-sm font-bold text-[#FFEA00] uppercase tracking-widest">
+            Included with Premium — model side + try scorer value + game script
+          </div>
+        </div>
+        <div className="bg-[#1E232B] border-2 border-white/10 px-4 py-3 shadow-[4px_4px_0_0_#0047FF]">
+          <div className="text-[9px] font-black text-white/40 uppercase tracking-widest mb-1">
+            Showing
+          </div>
+          <div className="text-sm font-black text-white uppercase tracking-wider">
+            {ideas.length} multi ideas
+          </div>
+        </div>
+      </div>
+
+      <GlassCard className="p-4 md:p-6 border-l-4 border-l-[#FFEA00]">
+        <div className="flex flex-col md:flex-row gap-3 md:items-center md:justify-between">
+          <div>
+            <div className="text-sm md:text-base font-black text-white uppercase tracking-tight">
+              Build in your betting app
+            </div>
+            <div className="text-xs md:text-sm text-white/50 font-bold mt-1">
+              RightEdge suggests the legs. Bookmakers price Same Game Multis differently because the legs are correlated.
+            </div>
+          </div>
+          <div className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-[#00E676]">
+            <CheckCircle2 className="w-4 h-4" />
+            Data-led ideas only
+          </div>
+        </div>
+      </GlassCard>
+
+      {ideas.length === 0 ? (
+        <GlassCard className="p-8 text-center border-l-4 border-l-white/20">
+          <div className="text-white/50 font-bold uppercase tracking-widest text-sm">
+            No same game multi ideas qualify yet.
+          </div>
+        </GlassCard>
+      ) : (
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+          {ideas.map((idea, idx) => {
+            const [homeTeam, awayTeam] = idea.teams;
+            const confidenceClass =
+              idea.confidence === "Core"
+                ? "bg-[#00E676] text-black"
+                : idea.confidence === "Balanced"
+                  ? "bg-[#FFEA00] text-black"
+                  : "bg-[#FF2E63] text-white";
+
+            return (
+              <GlassCard key={`${idea.match}-${idx}`} className="p-5 md:p-6 relative overflow-hidden border-l-4 border-l-[#0047FF]">
+                <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(0,71,255,0.08),transparent_55%)]" />
+                <div className="relative z-10">
+                  <div className="flex items-center justify-between gap-4 mb-5">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <TeamLogo teamName={homeTeam} className="w-8 h-8 text-xs" />
+                      <TeamLogo teamName={awayTeam} className="w-8 h-8 text-xs" />
+                      <div className="text-sm md:text-lg font-black text-white uppercase tracking-tight truncate">
+                        {idea.match}
+                      </div>
+                    </div>
+                    <span className={`shrink-0 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest ${confidenceClass}`}>
+                      {idea.confidence}
+                    </span>
+                  </div>
+
+                  <div className="space-y-3 mb-5">
+                    {idea.legs.map((leg, legIdx) => (
+                      <div key={leg} className="flex items-start gap-3 bg-[#111317] border border-white/10 p-3">
+                        <div className="w-6 h-6 flex items-center justify-center bg-[#FFEA00] text-black text-xs font-black shrink-0">
+                          {legIdx + 1}
+                        </div>
+                        <div className="text-sm font-black text-white uppercase tracking-wide leading-snug">
+                          {leg}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 mb-5">
+                    <div className="bg-[#111317] border border-white/10 p-3">
+                      <div className="text-[9px] font-black text-white/40 uppercase tracking-widest mb-1">
+                        Top edge
+                      </div>
+                      <div className="text-lg font-black text-[#00E676]">
+                        +{formatPercent(idea.edgePct, 1)}
+                      </div>
+                    </div>
+                    <div className="bg-[#111317] border border-white/10 p-3">
+                      <div className="text-[9px] font-black text-white/40 uppercase tracking-widest mb-1">
+                        Projected total
+                      </div>
+                      <div className="text-lg font-black text-white">
+                        {idea.projectedTotal}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="text-sm text-white/60 font-bold leading-relaxed">
+                    {idea.reason}
+                  </div>
+                </div>
+              </GlassCard>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AnalyticsPage({ data }: { data: DashboardData }) {
   return (
     <div className="flex flex-col gap-6 md:gap-8">
@@ -4378,7 +4630,7 @@ function AppDashboard({
   const [page, setPage] = useState(() => {
     const hash = window.location.hash.replace("#", "");
     if (
-      ["matches", "best-bets", "try-scorers", "performance", "admin"].includes(
+      ["matches", "best-bets", "try-scorers", "sgm-builder", "performance", "admin"].includes(
         hash,
       )
     ) {
@@ -4395,6 +4647,7 @@ function AppDashboard({
           "matches",
           "best-bets",
           "try-scorers",
+          "sgm-builder",
           "performance",
           "admin",
         ].includes(hash)
@@ -4462,6 +4715,11 @@ function AppDashboard({
           title: "Premium",
           subtitle: "Try Scorer Value Plays",
         };
+      case "sgm-builder":
+        return {
+          title: "Premium",
+          subtitle: "Same Game Multi Builder",
+        };
       case "performance":
         return {
           subtitle: "Performance",
@@ -4501,7 +4759,7 @@ function AppDashboard({
                 active={page === item.id}
                 icon={item.icon}
                 label={item.label}
-                premium={item.id === "best-bets" || item.id === "try-scorers"}
+                premium={item.id === "best-bets" || item.id === "try-scorers" || item.id === "sgm-builder"}
                 onClick={() => {
                   handlePageChange(item.id);
                   window.scrollTo({
@@ -4633,6 +4891,12 @@ function AppDashboard({
               )}
               {page === "try-scorers" && (
                 <TryScorersPage
+                  data={data}
+                  onRequestAccess={onRequestAccess}
+                />
+              )}
+              {page === "sgm-builder" && (
+                <SgmBuilderPage
                   data={data}
                   onRequestAccess={onRequestAccess}
                 />
@@ -5115,7 +5379,7 @@ export default function App() {
     const analyticsName = rawHash.replace(/-/g, "_");
     (window as any).trackAnalyticsEvent?.(`${analyticsName}_view`, {
       section: rawHash,
-      app_section: ["matches", "best-bets", "try-scorers", "performance", "admin"].includes(rawHash),
+      app_section: ["matches", "best-bets", "try-scorers", "sgm-builder", "performance", "admin"].includes(rawHash),
     });
   };
 
@@ -5130,8 +5394,11 @@ export default function App() {
   };
 
   const requestPremiumAccess = (source: string = 'unknown') => {
+    const targetHash = ["best-bets", "try-scorers", "sgm-builder"].includes(source)
+      ? source
+      : "best-bets";
     setSitePage("app");
-    window.location.hash = "best-bets";
+    window.location.hash = targetHash;
     if (hasPaidAccess()) {
       setPaidAccessState(true);
       setShowEmailGate(false);
@@ -5139,7 +5406,7 @@ export default function App() {
     }
 
     (window as any).trackAnalyticsEvent?.("premium_paywall_open", {
-      section: "best-bets",
+      section: targetHash,
       cta_source: source,
     });
     setShowPaymentGate(true);
@@ -5147,7 +5414,7 @@ export default function App() {
 
   const checkHash = () => {
     const hash = window.location.hash.replace("#", "");
-    const appHashes = ["matches", "best-bets", "try-scorers", "performance", "admin"];
+    const appHashes = ["matches", "best-bets", "try-scorers", "sgm-builder", "performance", "admin"];
     const publicHashes = ["results", "methodology", "ad-studio", "articles", "article-round-5-2026", "article-methodology"];
 
     if (appHashes.includes(hash)) {
@@ -5174,7 +5441,7 @@ export default function App() {
 
       const sessionId = searchParams.get("session_id");
       const fallbackReturnHash = searchParams.get("return_hash") || window.location.hash.replace("#", "") || "best-bets";
-      const returnHash = ["best-bets", "try-scorers"].includes(fallbackReturnHash)
+      const returnHash = ["best-bets", "try-scorers", "sgm-builder"].includes(fallbackReturnHash)
         ? fallbackReturnHash
         : "best-bets";
 
@@ -5203,7 +5470,7 @@ export default function App() {
           setPaidAccessState(true);
           setShowEmailGate(false);
 
-          const confirmedReturnHash = ["best-bets", "try-scorers"].includes(data.returnHash)
+          const confirmedReturnHash = ["best-bets", "try-scorers", "sgm-builder"].includes(data.returnHash)
             ? data.returnHash
             : returnHash;
 
@@ -5472,7 +5739,7 @@ export default function App() {
             setShowPaymentGate(false);
             setSitePage("app");
             const currentPremiumHash = window.location.hash.replace("#", "");
-            const returnHash = ["best-bets", "try-scorers"].includes(currentPremiumHash)
+            const returnHash = ["best-bets", "try-scorers", "sgm-builder"].includes(currentPremiumHash)
               ? currentPremiumHash
               : "best-bets";
             window.location.hash = returnHash;
