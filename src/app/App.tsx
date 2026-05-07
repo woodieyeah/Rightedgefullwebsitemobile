@@ -841,11 +841,16 @@ function getPredictedWinnerWinPct(row: PredictionRow) {
   );
 }
 
+function isModelAlignedOfficialPlay(row: PredictionRow) {
+  if (!row.bestBet || row.stake <= 0) return false;
+  return normalizeTeamName(row.bestBet) === normalizeTeamName(row.predictedWinner);
+}
+
 function getFeaturedPrediction(predictions: PredictionRow[]) {
   if (!predictions.length) return null;
 
   const officialPlays = predictions.filter(
-    (row) => row.bestBet && row.stake > 0,
+    (row) => isModelAlignedOfficialPlay(row),
   );
 
   if (officialPlays.length) {
@@ -2733,21 +2738,25 @@ function FeaturedMatchPreview({
 }) {
   if (!row) return null;
 
+  const isOfficialPlay = isModelAlignedOfficialPlay(row);
+  const selectedTeam = normalizeTeamName(
+    isOfficialPlay ? row.bestBet : row.predictedWinner,
+  );
   const selectedOdds =
-    row.side === "Home"
+    selectedTeam === normalizeTeamName(row.homeTeam)
       ? row.marketHomeOdds
-      : row.side === "Away"
+      : selectedTeam === normalizeTeamName(row.awayTeam)
         ? row.marketAwayOdds
         : 0;
   const selectedModel =
-    row.side === "Home"
+    selectedTeam === normalizeTeamName(row.homeTeam)
       ? row.modelHomeOdds
-      : row.side === "Away"
+      : selectedTeam === normalizeTeamName(row.awayTeam)
         ? row.modelAwayOdds
         : 0;
 
   const featuredWinPct =
-    row.bestBet && row.stake > 0
+    isOfficialPlay
       ? getRowSideWinPct(row)
       : getPredictedWinnerWinPct(row);
 
@@ -2766,7 +2775,7 @@ function FeaturedMatchPreview({
     hasFeaturedAccess ? <span>{children}</span> : <BlurredText>{children}</BlurredText>;
 
   const takeaway =
-    row.bestBet && row.stake > 0 ? (
+    isOfficialPlay ? (
       <>
         The model has identified significant value backing the <Blur>{displayBestBet}</Blur>, calculating a <Blur>{formatPercent(featuredWinPct, 1)}</Blur> true win probability compared to the market. With a massive +<span className="text-[#00E676]">{formatPercent(row.bestEdge || 0, 1)}</span> edge and a favorable projected margin of <Blur>{margin} points</Blur>, this matchup easily clears all mathematical filters for an official max-confidence play.
       </>
@@ -2789,7 +2798,7 @@ function FeaturedMatchPreview({
         <div className="relative z-10 flex flex-col md:flex-row md:items-start justify-between gap-10">
           <div className="flex-1">
             <div className="flex flex-wrap items-center gap-4 mb-8">
-              {row.bestBet && row.stake > 0 ? (
+              {isOfficialPlay ? (
                 <span className="inline-flex items-center gap-2 bg-[#FF2E63] px-3 py-1.5 text-sm font-bold text-white uppercase tracking-wider">
                   <Flame className="w-4 h-4" />
                   Official Play
@@ -2877,7 +2886,7 @@ function FeaturedMatchPreview({
             </div>
 
             {/* Best Bet — blurred until email entered */}
-            {row.bestBet && row.stake > 0 && (
+            {isOfficialPlay && (
               <div className="mb-10 inline-flex flex-col items-start border-l-[6px] border-[#00E676] bg-[#00E676]/10 px-6 py-5 shadow-[4px_4px_0_0_rgba(0,230,118,0.2)]">
                 <span className="text-xs font-black text-[#00E676] uppercase tracking-widest mb-1">
                   Best Bet
@@ -3712,7 +3721,7 @@ function PredictionsPage({ data }: { data: DashboardData }) {
               ? `${Math.round(row.predictedHomeScore)} - ${Math.round(row.predictedAwayScore)}`
               : "—";
 
-          const isOfficialPlay = row.bestBet && row.stake > 0;
+          const isOfficialPlay = isModelAlignedOfficialPlay(row);
 
           return (
             <GlassCard
@@ -3872,8 +3881,7 @@ function BestBetsPage({
 
   const officialPlays = data.predictions.filter(
     (row) =>
-      row.bestBet &&
-      row.stake > 0 &&
+      isModelAlignedOfficialPlay(row) &&
       !settledMatchKeys.has(row.match.toLowerCase()),
   );
 
@@ -3913,7 +3921,7 @@ function BestBetsPage({
             Official Best Bets
           </h2>
           <div className="text-[10px] md:text-sm font-bold text-[#FFEA00] uppercase tracking-widest">
-            Qualified edges and staking plans for this round
+            Model-aligned plays and staking plans for this round
           </div>
         </div>
       </div>
@@ -3921,7 +3929,7 @@ function BestBetsPage({
       {officialPlays.length === 0 ? (
         <GlassCard className="p-4 md:p-8 text-center border-l-4 border-l-white/20">
           <div className="text-white/50 font-bold uppercase tracking-widest text-[10px] md:text-base">
-            No official plays qualify for this round yet.
+            No model-aligned H2H official plays qualify right now.
           </div>
         </GlassCard>
       ) : (
