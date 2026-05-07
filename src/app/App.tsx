@@ -385,11 +385,6 @@ const appPages = [
     label: "Try Scorers",
     icon: <Trophy className="w-5 h-5" />,
   },
-  {
-    id: "sgm-builder",
-    label: "SGM Builder",
-    icon: <Sparkles className="w-5 h-5" />,
-  },
 ];
 
 function getAppPages(isAdmin: boolean) {
@@ -1744,7 +1739,7 @@ function PaymentGateModal({
   useEffect(() => {
     if (!open) return;
     const currentPremiumHash = window.location.hash.replace("#", "");
-    const section = ["best-bets", "try-scorers", "sgm-builder"].includes(currentPremiumHash)
+    const section = ["best-bets", "try-scorers"].includes(currentPremiumHash)
       ? currentPremiumHash
       : "best-bets";
     (window as any).trackAnalyticsEvent?.("premium_paywall_view", {
@@ -1795,7 +1790,7 @@ function PaymentGateModal({
 
       setStep("processing");
       const currentPremiumHash = window.location.hash.replace("#", "");
-      const returnHash = ["best-bets", "try-scorers", "sgm-builder"].includes(currentPremiumHash)
+      const returnHash = ["best-bets", "try-scorers"].includes(currentPremiumHash)
         ? currentPremiumHash
         : "best-bets";
       const returnUrl = `${window.location.origin}${window.location.pathname}`;
@@ -5105,7 +5100,7 @@ function AppDashboard({
   const [page, setPage] = useState(() => {
     const hash = window.location.hash.replace("#", "");
     if (
-      ["matches", "best-bets", "try-scorers", "sgm-builder", "performance", "admin"].includes(
+      ["matches", "best-bets", "try-scorers", "performance", "admin"].includes(
         hash,
       )
     ) {
@@ -5122,7 +5117,6 @@ function AppDashboard({
           "matches",
           "best-bets",
           "try-scorers",
-          "sgm-builder",
           "performance",
           "admin",
         ].includes(hash)
@@ -5190,11 +5184,6 @@ function AppDashboard({
           title: "Premium",
           subtitle: "Try Scorer Value Plays",
         };
-      case "sgm-builder":
-        return {
-          title: "Premium",
-          subtitle: "Same Game Multi Builder",
-        };
       case "performance":
         return {
           subtitle: "Performance",
@@ -5234,7 +5223,7 @@ function AppDashboard({
                 active={page === item.id}
                 icon={item.icon}
                 label={item.label}
-                premium={item.id === "best-bets" || item.id === "try-scorers" || item.id === "sgm-builder"}
+                premium={item.id === "best-bets" || item.id === "try-scorers"}
                 onClick={() => {
                   handlePageChange(item.id);
                   window.scrollTo({
@@ -5366,12 +5355,6 @@ function AppDashboard({
               )}
               {page === "try-scorers" && (
                 <TryScorersPage
-                  data={data}
-                  onRequestAccess={onRequestAccess}
-                />
-              )}
-              {page === "sgm-builder" && (
-                <SgmBuilderPage
                   data={data}
                   onRequestAccess={onRequestAccess}
                 />
@@ -5854,7 +5837,7 @@ export default function App() {
     const analyticsName = rawHash.replace(/-/g, "_");
     (window as any).trackAnalyticsEvent?.(`${analyticsName}_view`, {
       section: rawHash,
-      app_section: ["matches", "best-bets", "try-scorers", "sgm-builder", "performance", "admin"].includes(rawHash),
+      app_section: ["matches", "best-bets", "try-scorers", "performance", "admin"].includes(rawHash),
     });
   };
 
@@ -5869,7 +5852,7 @@ export default function App() {
   };
 
   const requestPremiumAccess = (source: string = 'unknown') => {
-    const targetHash = ["best-bets", "try-scorers", "sgm-builder"].includes(source)
+    const targetHash = ["best-bets", "try-scorers"].includes(source)
       ? source
       : "best-bets";
     setSitePage("app");
@@ -5889,8 +5872,13 @@ export default function App() {
 
   const checkHash = () => {
     const hash = window.location.hash.replace("#", "");
-    const appHashes = ["matches", "best-bets", "try-scorers", "sgm-builder", "performance", "admin"];
+    const appHashes = ["matches", "best-bets", "try-scorers", "performance", "admin"];
     const publicHashes = ["results", "methodology", "ad-studio", "articles", "article-round-5-2026", "article-methodology"];
+
+    if (hash === "sgm-builder") {
+      window.location.hash = "best-bets";
+      return;
+    }
 
     if (appHashes.includes(hash)) {
       trackHashPageView(hash);
@@ -5916,7 +5904,7 @@ export default function App() {
 
       const sessionId = searchParams.get("session_id");
       const fallbackReturnHash = searchParams.get("return_hash") || window.location.hash.replace("#", "") || "best-bets";
-      const returnHash = ["best-bets", "try-scorers", "sgm-builder"].includes(fallbackReturnHash)
+      const returnHash = ["best-bets", "try-scorers"].includes(fallbackReturnHash)
         ? fallbackReturnHash
         : "best-bets";
 
@@ -5945,7 +5933,7 @@ export default function App() {
           setPaidAccessState(true);
           setShowEmailGate(false);
 
-          const confirmedReturnHash = ["best-bets", "try-scorers", "sgm-builder"].includes(data.returnHash)
+          const confirmedReturnHash = ["best-bets", "try-scorers"].includes(data.returnHash)
             ? data.returnHash
             : returnHash;
 
@@ -6214,7 +6202,7 @@ export default function App() {
             setShowPaymentGate(false);
             setSitePage("app");
             const currentPremiumHash = window.location.hash.replace("#", "");
-            const returnHash = ["best-bets", "try-scorers", "sgm-builder"].includes(currentPremiumHash)
+            const returnHash = ["best-bets", "try-scorers"].includes(currentPremiumHash)
               ? currentPremiumHash
               : "best-bets";
             window.location.hash = returnHash;
