@@ -787,7 +787,7 @@ async function fetchLiveOddsRaw(force = false) {
     return typeof cachedOdds === "string" ? JSON.parse(cachedOdds) : cachedOdds;
   }
 
-  const response = await fetch(`https://api.the-odds-api.com/v4/sports/rugbyleague_nrl/odds/?apiKey=${apiKey}&regions=au&markets=h2h&oddsFormat=decimal`);
+  const response = await fetch(`https://api.the-odds-api.com/v4/sports/rugbyleague_nrl/odds/?apiKey=${apiKey}&regions=au&markets=h2h,spreads,totals&oddsFormat=decimal`);
 
   if (!response.ok) {
     const text = await response.text();
