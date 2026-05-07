@@ -4031,6 +4031,13 @@ function TryScorersPage({
     return null;
   };
 
+  const getTryScorerSignalClass = (label?: string) => {
+    if (label === "Best Bet") return "bg-[#FF2E63] text-white";
+    if (label === "High Prob") return "bg-[#0047FF] text-white";
+    if (label === "Value") return "bg-[#FFEA00] text-black";
+    return "bg-white/10 text-white/50";
+  };
+
   const availableRounds = useMemo(
     () =>
       Array.from(
@@ -4232,7 +4239,7 @@ function TryScorersPage({
                             {row.bookmaker}
                           </td>
                           <td className="py-4 px-3">
-                            <span className={`inline-flex px-2 py-1 text-xs font-black uppercase tracking-widest ${signal?.className || "bg-white/10 text-white/50"}`}>
+                            <span className={`inline-flex px-2 py-1 text-xs font-black uppercase tracking-widest ${getTryScorerSignalClass(signal?.label)}`}>
                               {signal?.label || "Watch"}
                             </span>
                           </td>
@@ -4266,7 +4273,7 @@ function TryScorersPage({
                         <div className="flex flex-col items-end gap-1 shrink-0">
                           <span className="text-2xl font-black text-white">${row.bestOdds.toFixed(2)}</span>
                           <span className="text-[10px] text-white/40 uppercase tracking-wider">{row.bookmaker}</span>
-                          <span className={`px-2 py-1 text-[10px] font-black uppercase tracking-widest ${signal?.className || "bg-white/10 text-white/50"}`}>
+                          <span className={`px-2 py-1 text-[10px] font-black uppercase tracking-widest ${getTryScorerSignalClass(signal?.label)}`}>
                             {signal?.label || "Watch"}
                           </span>
                         </div>
