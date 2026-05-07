@@ -4199,8 +4199,66 @@ type SameGameMultiIdea = {
   reason: string;
   projectedTotal: number;
   edgePct: number;
+  modelHitPct: number;
+  h2hModelPct: number;
+  tryScorerModelPct: number;
+  gameScriptPct: number;
   topTryScorer?: TryScorerRow;
 };
+
+function getSgmSideModelPct(match: PredictionRow, selection: string) {
+  const normalizedSelection = normalizeTeamName(selection);
+  if (normalizedSelection === normalizeTeamName(match.homeTeam)) {
+    return getImpliedWinPctFromOdds(match.modelHomeOdds);
+  }
+  if (normalizedSelection === normalizeTeamName(match.awayTeam)) {
+    return getImpliedWinPctFromOdds(match.modelAwayOdds);
+  }
+  return getPredictedWinnerWinPct(match);
+}
+
+function getSgmGameScriptPct(projectedTotal: number) {
+  if (!projectedTotal) return 52;
+  if (projectedTotal >= 48) return Math.min(66, 54 + ((projectedTotal - 48) * 1.6));
+  if (projectedTotal <= 42) return Math.min(64, 54 + ((42 - projectedTotal) * 1.4));
+  return 56;
+}
+
+function getSgmCorrelationMultiplier(
+  selection: string,
+  topTryScorer: TryScorerRow | undefined,
+  projectedTotal: number,
+) {
+  let multiplier = 1;
+  if (topTryScorer && normalizeTeamName(topTryScorer.team) === normalizeTeamName(selection)) {
+    multiplier += 0.08;
+  }
+  if (topTryScorer && projectedTotal >= 48) {
+    multiplier += 0.06;
+  }
+  if (projectedTotal <= 42 && topTryScorer) {
+    multiplier -= 0.05;
+  }
+  return Math.max(0.88, Math.min(1.18, multiplier));
+}
+
+function buildSgmModelHitPct({
+  h2hModelPct,
+  tryScorerModelPct,
+  gameScriptPct,
+  correlationMultiplier,
+}: {
+  h2hModelPct: number;
+  tryScorerModelPct: number;
+  gameScriptPct: number;
+  correlationMultiplier: number;
+}) {
+  const independentHit =
+    (Math.max(h2hModelPct, 1) / 100) *
+    (Math.max(tryScorerModelPct, 1) / 100) *
+    (Math.max(gameScriptPct, 1) / 100);
+  return Math.max(1, Math.min(45, independentHit * correlationMultiplier * 100));
+}
 
 function buildSameGameMultiIdeas(data: DashboardData): SameGameMultiIdea[] {
   const settledMatchKeys = new Set(
@@ -4235,6 +4293,20 @@ function buildSameGameMultiIdeas(data: DashboardData): SameGameMultiIdea[] {
       const projectedTotal = Math.round(match.predictedHomeScore + match.predictedAwayScore);
       const selection = match.bestBet || match.predictedWinner;
       const edgePct = Math.max(match.bestEdge || 0, topTryScorer?.edgePct || 0);
+      const h2hModelPct = getSgmSideModelPct(match, selection);
+      const tryScorerModelPct = topTryScorer?.statsInsiderPct || 45;
+      const gameScriptPct = getSgmGameScriptPct(projectedTotal);
+      const correlationMultiplier = getSgmCorrelationMultiplier(
+        selection,
+        topTryScorer,
+        projectedTotal,
+      );
+      const modelHitPct = buildSgmModelHitPct({
+        h2hModelPct,
+        tryScorerModelPct,
+        gameScriptPct,
+        correlationMultiplier,
+      });
       const totalLean =
         projectedTotal >= 48
           ? `Game total lean: Over profile (${projectedTotal} projected points)`
@@ -4269,6 +4341,10 @@ function buildSameGameMultiIdeas(data: DashboardData): SameGameMultiIdea[] {
         reason,
         projectedTotal,
         edgePct,
+        modelHitPct,
+        h2hModelPct,
+        tryScorerModelPct,
+        gameScriptPct,
         topTryScorer,
       };
     })
@@ -4398,7 +4474,15 @@ function SgmBuilderPage({
                     ))}
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3 mb-5">
+                  <div className="grid grid-cols-3 gap-3 mb-5">
+                    <div className="bg-[#111317] border border-white/10 p-3">
+                      <div className="text-[9px] font-black text-white/40 uppercase tracking-widest mb-1">
+                        Model hit
+                      </div>
+                      <div className="text-lg font-black text-[#FFEA00]">
+                        {formatPercent(idea.modelHitPct, 1)}
+                      </div>
+                    </div>
                     <div className="bg-[#111317] border border-white/10 p-3">
                       <div className="text-[9px] font-black text-white/40 uppercase tracking-widest mb-1">
                         Top edge
@@ -4414,6 +4498,18 @@ function SgmBuilderPage({
                       <div className="text-lg font-black text-white">
                         {idea.projectedTotal}
                       </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2 mb-5">
+                    <div className="text-[10px] text-white/40 font-black uppercase tracking-widest">
+                      Side {formatPercent(idea.h2hModelPct, 0)}
+                    </div>
+                    <div className="text-[10px] text-white/40 font-black uppercase tracking-widest">
+                      Scorer {formatPercent(idea.tryScorerModelPct, 0)}
+                    </div>
+                    <div className="text-[10px] text-white/40 font-black uppercase tracking-widest">
+                      Script {formatPercent(idea.gameScriptPct, 0)}
                     </div>
                   </div>
 
