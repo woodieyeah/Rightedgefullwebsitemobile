@@ -377,7 +377,7 @@ const appPages = [
   },
   {
     id: "best-bets",
-    label: "Best Bets",
+    label: "Premium Plays",
     icon: <Flame className="w-5 h-5" />,
   },
   {
@@ -844,6 +844,107 @@ function getPredictedWinnerWinPct(row: PredictionRow) {
 function isModelAlignedOfficialPlay(row: PredictionRow) {
   if (!row.bestBet || row.stake <= 0) return false;
   return normalizeTeamName(row.bestBet) === normalizeTeamName(row.predictedWinner);
+}
+
+function getPredictedWinnerMarketOdds(row: PredictionRow) {
+  const winner = normalizeTeamName(row.predictedWinner);
+  if (winner === normalizeTeamName(row.homeTeam)) return row.marketHomeOdds;
+  if (winner === normalizeTeamName(row.awayTeam)) return row.marketAwayOdds;
+  return 0;
+}
+
+function getTryScorerKey(row: TryScorerRow) {
+  return `${row.match}::${row.team}::${row.player}`.toLowerCase();
+}
+
+function isTryScorerBestBetCandidate(row: TryScorerRow) {
+  const wholeNumberModelMarketGap = Math.abs(
+    Math.round(row.statsInsiderPct) - Math.round(row.marketImpliedPct),
+  );
+  const highProbabilityWithEdge =
+    row.statsInsiderPct >= 40 &&
+    row.edgePct >= 2 &&
+    row.bestOdds >= 1.5;
+  const nearFairHighProbability =
+    row.statsInsiderPct >= 40 &&
+    row.bestOdds >= 1.9 &&
+    row.edgePct >= -1.25 &&
+    wholeNumberModelMarketGap <= 1;
+
+  return highProbabilityWithEdge || nearFairHighProbability;
+}
+
+function getMatchBestBetKeys(players: TryScorerRow[]) {
+  const usedTeams = new Set<string>();
+  const selected = new Set<string>();
+
+  [...players]
+    .filter(isTryScorerBestBetCandidate)
+    .sort((a, b) => {
+      const aGap = Math.abs(Math.round(a.statsInsiderPct) - Math.round(a.marketImpliedPct));
+      const bGap = Math.abs(Math.round(b.statsInsiderPct) - Math.round(b.marketImpliedPct));
+      const aEdgeBest = a.statsInsiderPct >= 40 && a.edgePct >= 2 && a.bestOdds >= 1.5;
+      const bEdgeBest = b.statsInsiderPct >= 40 && b.edgePct >= 2 && b.bestOdds >= 1.5;
+      return (
+        Number(bEdgeBest) - Number(aEdgeBest) ||
+        b.edgePct - a.edgePct ||
+        b.statsInsiderPct - a.statsInsiderPct ||
+        aGap - bGap ||
+        b.bestOdds - a.bestOdds
+      );
+    })
+    .forEach((row) => {
+      const teamKey = normalizeTeamName(row.team);
+      if (selected.size >= 2 || usedTeams.has(teamKey)) return;
+      usedTeams.add(teamKey);
+      selected.add(getTryScorerKey(row));
+    });
+
+  return selected;
+}
+
+function getTryScorerSignal(row: TryScorerRow, bestBetKeys?: Set<string>) {
+  const highProbabilityNearFair =
+    row.statsInsiderPct >= 42 &&
+    row.edgePct >= -3 &&
+    row.bestOdds >= 1.5;
+  const clearValue =
+    row.edgePct >= 3 ||
+    (row.edgePct >= 0 && row.bestOdds >= 2.5) ||
+    (row.edgePct >= -0.5 && row.bestOdds >= 3);
+
+  if (bestBetKeys?.has(getTryScorerKey(row))) {
+    return {
+      label: "Best Bet",
+      className: "bg-[#FF2E63] text-white",
+      sortRank: 3,
+    };
+  }
+
+  if (highProbabilityNearFair) {
+    return {
+      label: "High Prob",
+      className: "bg-[#0047FF] text-white",
+      sortRank: 2,
+    };
+  }
+
+  if (clearValue) {
+    return {
+      label: "Value",
+      className: "bg-[#FFEA00] text-black",
+      sortRank: 1,
+    };
+  }
+
+  return null;
+}
+
+function getTryScorerSignalClass(label?: string) {
+  if (label === "Best Bet") return "bg-[#FF2E63] text-white";
+  if (label === "High Prob") return "bg-[#0047FF] text-white";
+  if (label === "Value") return "bg-[#FFEA00] text-black";
+  return "bg-white/10 text-white/50";
 }
 
 function getFeaturedPrediction(predictions: PredictionRow[]) {
@@ -1744,7 +1845,7 @@ function PaymentGateModal({
   useEffect(() => {
     if (!open) return;
     const currentPremiumHash = window.location.hash.replace("#", "");
-    const section = ["best-bets", "try-scorers"].includes(currentPremiumHash)
+    const section = ["matches", "best-bets", "try-scorers"].includes(currentPremiumHash)
       ? currentPremiumHash
       : "best-bets";
     (window as any).trackAnalyticsEvent?.("premium_paywall_view", {
@@ -1795,7 +1896,7 @@ function PaymentGateModal({
 
       setStep("processing");
       const currentPremiumHash = window.location.hash.replace("#", "");
-      const returnHash = ["best-bets", "try-scorers"].includes(currentPremiumHash)
+      const returnHash = ["matches", "best-bets", "try-scorers"].includes(currentPremiumHash)
         ? currentPremiumHash
         : "best-bets";
       const returnUrl = `${window.location.origin}${window.location.pathname}`;
@@ -3704,35 +3805,70 @@ function RoundCentrePage({ data }: { data: DashboardData }) {
   );
 }
 
-function PredictionsPage({ data }: { data: DashboardData }) {
+function PredictionsPage({
+  data,
+  onRequestAccess,
+}: {
+  data: DashboardData;
+  onRequestAccess: (targetHash?: string) => void;
+}) {
   const rows = data.predictions;
+  const paid = hasPaidAccess();
+  const freeLimit = 3;
 
   return (
     <div className="flex flex-col gap-6 md:gap-8">
       <SectionHeader
-        title="Predictions"
-        subtitle="Current round score projections and pricing model vs market"
+        title="Matches"
+        subtitle={
+          paid
+            ? "Full round model predictions, projected scores and live best odds"
+            : "Free members get 3 match predictions. Premium unlocks the full round."
+        }
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6 md:gap-8">
         {rows.map((row, i) => {
+          const locked = !paid && i >= freeLimit;
           const predictedScore =
             row.predictedHomeScore || row.predictedAwayScore
               ? `${Math.round(row.predictedHomeScore)} - ${Math.round(row.predictedAwayScore)}`
               : "—";
 
           const isOfficialPlay = isModelAlignedOfficialPlay(row);
+          const winnerOdds = getPredictedWinnerMarketOdds(row);
+          const winnerWinPct = getPredictedWinnerWinPct(row);
+          const Reveal = ({ children }: { children: React.ReactNode }) =>
+            locked ? <BlurredText>{children}</BlurredText> : <>{children}</>;
 
           return (
             <GlassCard
               key={i}
-              className={`p-0 relative transition-transform duration-300 hover:-translate-y-1 ${
-                isOfficialPlay
+              className={`p-0 relative overflow-hidden transition-transform duration-300 hover:-translate-y-1 ${
+                !locked && isOfficialPlay
                   ? "!shadow-[8px_8px_0_0_#FF2E63] !border-[#FF2E63]"
                   : ""
               }`}
             >
-              {isOfficialPlay && (
+              {locked && (
+                <button
+                  type="button"
+                  onClick={() => onRequestAccess("matches")}
+                  className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-[#05070b]/72 backdrop-blur-[2px] p-6 text-center"
+                >
+                  <div className="bg-[#FF2E63] p-3 mb-4 shadow-[4px_4px_0_0_#0047FF]">
+                    <Lock className="w-7 h-7 text-white stroke-[3px]" />
+                  </div>
+                  <div className="text-white text-xl font-black uppercase tracking-tight">
+                    Premium Match
+                  </div>
+                  <div className="mt-2 text-[#FFEA00] text-[10px] font-black uppercase tracking-widest">
+                    Unlock full round predictions
+                  </div>
+                </button>
+              )}
+
+              {!locked && isOfficialPlay && (
                 <div className="absolute top-0 right-0 bg-[#FF2E63] text-white px-3 py-1.5 text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5 z-20 shadow-[-4px_4px_0_0_rgba(0,0,0,0.3)]">
                   <Flame className="w-3.5 h-3.5" /> Official
                   Play
@@ -3779,7 +3915,7 @@ function PredictionsPage({ data }: { data: DashboardData }) {
                       Proj Score
                     </div>
                     <div className="text-xl md:text-2xl font-black text-white">
-                      {predictedScore}
+                      <Reveal>{predictedScore}</Reveal>
                     </div>
                   </div>
                   <div className="bg-[#1E232B] p-3 border-l-4 border-l-[#00E676]">
@@ -3793,7 +3929,7 @@ function PredictionsPage({ data }: { data: DashboardData }) {
                           className="w-6 h-6 text-[10px]"
                         />
                         <span className="text-sm md:text-base font-black text-white truncate">
-                          {row.predictedWinner}
+                          <Reveal>{row.predictedWinner}</Reveal>
                         </span>
                       </div>
                     ) : (
@@ -3812,47 +3948,64 @@ function PredictionsPage({ data }: { data: DashboardData }) {
                     Model
                   </div>
                   <div className="font-black text-[#FFEA00] uppercase tracking-widest text-[10px] text-center">
-                    Market
+                    Best Odds
                   </div>
 
                   <div className="font-black text-white/70 uppercase text-[11px] tracking-wider">
                     Home
                   </div>
                   <div className="bg-[#1E232B] py-2.5 text-center font-black text-white border-b-2 border-[#00E676]/30">
-                    {formatPercent(
-                      getImpliedWinPctFromOdds(
-                        row.modelHomeOdds,
-                      ),
-                      1,
-                    )}
+                    <Reveal>
+                      {formatPercent(
+                        getImpliedWinPctFromOdds(
+                          row.modelHomeOdds,
+                        ),
+                        1,
+                      )}
+                    </Reveal>
                   </div>
                   <div className="bg-[#1E232B] py-2.5 text-center font-black text-white border-b-2 border-[#FFEA00]/30">
-                    {formatPercent(
-                      getImpliedWinPctFromOdds(
-                        row.marketHomeOdds,
-                      ),
-                      1,
-                    )}
+                    <Reveal>
+                      {row.marketHomeOdds ? `$${row.marketHomeOdds.toFixed(2)}` : "—"}
+                    </Reveal>
                   </div>
 
                   <div className="font-black text-white/70 uppercase text-[11px] tracking-wider">
                     Away
                   </div>
                   <div className="bg-[#1E232B] py-2.5 text-center font-black text-white border-b-2 border-[#00E676]/30">
-                    {formatPercent(
-                      getImpliedWinPctFromOdds(
-                        row.modelAwayOdds,
-                      ),
-                      1,
-                    )}
+                    <Reveal>
+                      {formatPercent(
+                        getImpliedWinPctFromOdds(
+                          row.modelAwayOdds,
+                        ),
+                        1,
+                      )}
+                    </Reveal>
                   </div>
                   <div className="bg-[#1E232B] py-2.5 text-center font-black text-white border-b-2 border-[#FFEA00]/30">
-                    {formatPercent(
-                      getImpliedWinPctFromOdds(
-                        row.marketAwayOdds,
-                      ),
-                      1,
-                    )}
+                    <Reveal>
+                      {row.marketAwayOdds ? `$${row.marketAwayOdds.toFixed(2)}` : "—"}
+                    </Reveal>
+                  </div>
+                </div>
+
+                <div className="mt-5 grid grid-cols-2 gap-4">
+                  <div className="bg-[#111317] border border-white/10 p-3">
+                    <div className="text-[10px] uppercase font-black tracking-widest text-white/45 mb-1">
+                      Model Winner %
+                    </div>
+                    <div className="text-lg font-black text-[#00E676]">
+                      <Reveal>{formatPercent(winnerWinPct, 1)}</Reveal>
+                    </div>
+                  </div>
+                  <div className="bg-[#111317] border border-white/10 p-3">
+                    <div className="text-[10px] uppercase font-black tracking-widest text-white/45 mb-1">
+                      Best Odds
+                    </div>
+                    <div className="text-lg font-black text-[#FFEA00]">
+                      <Reveal>{winnerOdds ? `$${winnerOdds.toFixed(2)}` : "—"}</Reveal>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -3860,6 +4013,26 @@ function PredictionsPage({ data }: { data: DashboardData }) {
           );
         })}
       </div>
+
+      {!paid && rows.length > freeLimit && (
+        <GlassCard className="p-6 md:p-8 !border-[#FF2E63] !shadow-[6px_6px_0_0_#0047FF] text-center">
+          <div className="text-2xl md:text-4xl font-black text-white uppercase tracking-tight mb-3">
+            Unlock the full round
+          </div>
+          <p className="text-white/65 font-bold text-sm md:text-base max-w-2xl mx-auto mb-6">
+            Free members get 3 match predictions. Premium unlocks every projected score,
+            model win percentage, live best odds and the Try Scorer plays.
+          </p>
+          <button
+            type="button"
+            onClick={() => onRequestAccess("matches")}
+            className="inline-flex items-center justify-center gap-3 bg-[#FF2E63] text-white px-8 py-4 text-base font-black uppercase tracking-wider hover:bg-[#E62959] transition-colors shadow-[4px_4px_0_0_#0047FF]"
+          >
+            Unlock Premium Plays — $9/week
+            <ArrowRight className="w-5 h-5 stroke-[3px]" />
+          </button>
+        </GlassCard>
+      )}
     </div>
   );
 }
@@ -3871,19 +4044,52 @@ function BestBetsPage({
   data: DashboardData;
   onRequestAccess: (targetHash?: string) => void;
 }) {
-  // Only show pending (unsettled) bets — exclude any match already in the
-  // bet log with a W or L result.
   const settledMatchKeys = new Set(
     data.betLog
       .filter((b) => b.result === "W" || b.result === "L")
       .map((b) => b.match.toLowerCase()),
   );
 
-  const officialPlays = data.predictions.filter(
-    (row) =>
-      isModelAlignedOfficialPlay(row) &&
-      !settledMatchKeys.has(row.match.toLowerCase()),
+  const matchReads = data.predictions
+    .filter((row) => !settledMatchKeys.has(row.match.toLowerCase()))
+    .map((row) => ({
+      row,
+      winPct: getPredictedWinnerWinPct(row),
+      margin: Math.abs((row.predictedHomeScore || 0) - (row.predictedAwayScore || 0)),
+      odds: getPredictedWinnerMarketOdds(row),
+    }))
+    .filter((play) => play.winPct >= 50.5)
+    .sort((a, b) => {
+      if (b.winPct !== a.winPct) return b.winPct - a.winPct;
+      if (b.margin !== a.margin) return b.margin - a.margin;
+      return b.odds - a.odds;
+    })
+    .slice(0, 4);
+
+  const latestTryScorerRound = Math.max(
+    0,
+    ...data.tryScorers.map((row) => row.round).filter((round) => Number.isFinite(round)),
   );
+  const latestTryScorers = data.tryScorers.filter(
+    (row) => row.round === latestTryScorerRound,
+  );
+  const tryScorerGroups = latestTryScorers.reduce((groups, row) => {
+    if (!groups[row.match]) groups[row.match] = [];
+    groups[row.match].push(row);
+    return groups;
+  }, {} as Record<string, TryScorerRow[]>);
+  const tryScorerBestBets = Object.values(tryScorerGroups)
+    .flatMap((players) => {
+      const keys = getMatchBestBetKeys(players);
+      return players
+        .filter((row) => keys.has(getTryScorerKey(row)))
+        .map((row) => ({
+          row,
+          signal: getTryScorerSignal(row, keys),
+        }));
+    })
+    .sort((a, b) => b.row.statsInsiderPct - a.row.statsInsiderPct)
+    .slice(0, 8);
 
   if (!hasPaidAccess()) {
     return (
@@ -3895,10 +4101,10 @@ function BestBetsPage({
               <Lock className="w-10 h-10 text-white stroke-[3px]" />
             </div>
             <h2 className="text-3xl md:text-5xl font-black text-white uppercase tracking-tight mb-3">
-              Premium Content
+              Premium Plays
             </h2>
             <p className="text-sm md:text-base text-white/70 font-bold leading-relaxed mb-8">
-              Unlock the full RightEdge round: model-aligned Best Bets, Try Scorer plays, live prices and staking guidance.
+              Unlock the strongest match reads and Try Scorer best bets from the full RightEdge model.
             </p>
             <button
               onClick={() => onRequestAccess("best-bets")}
@@ -3918,30 +4124,175 @@ function BestBetsPage({
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl md:text-3xl font-black text-white uppercase tracking-tight mb-1 md:mb-2">
-            Official Best Bets
+            Premium Plays
           </h2>
           <div className="text-[10px] md:text-sm font-bold text-[#FFEA00] uppercase tracking-widest">
-            Model-aligned plays and staking plans for this round
+            Best model reads and Try Scorer best bets from this round
           </div>
         </div>
       </div>
 
-      {officialPlays.length === 0 ? (
-        <GlassCard className="p-4 md:p-8 text-center border-l-4 border-l-white/20">
-          <div className="text-white/50 font-bold uppercase tracking-widest text-[10px] md:text-base">
-            No model-aligned H2H official plays qualify right now.
+      <div className="flex flex-col gap-4">
+        <div>
+          <h3 className="text-lg md:text-2xl font-black text-white uppercase tracking-tight">
+            Best Match Reads
+          </h3>
+          <div className="text-[10px] md:text-xs font-black text-white/45 uppercase tracking-widest mt-1">
+            Predicted winners ranked by model confidence
           </div>
-        </GlassCard>
-      ) : (
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 md:gap-8">
-          {officialPlays.map((row, idx) => (
-            <OfficialPlayCard
-              key={`${row.match}-${idx}`}
-              row={row}
-            />
-          ))}
         </div>
-      )}
+        {matchReads.length === 0 ? (
+          <GlassCard className="p-4 md:p-8 text-center border-l-4 border-l-white/20">
+            <div className="text-white/50 font-bold uppercase tracking-widest text-[10px] md:text-base">
+              No match reads available right now.
+            </div>
+          </GlassCard>
+        ) : (
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 md:gap-6">
+            {matchReads.map(({ row, winPct, margin, odds }) => (
+            <GlassCard
+              key={row.match}
+              className="p-5 md:p-6 border-l-4 border-l-[#00E676]"
+            >
+              <div className="flex items-start justify-between gap-4 mb-5">
+                <div>
+                  <div className="text-[10px] uppercase font-black text-white/45 tracking-widest mb-2">
+                    {row.fixture
+                      ? `${row.fixture.day} ${row.fixture.dateLabel} @ ${row.fixture.aedt} AEST`
+                      : "Time TBC"}
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <TeamLogo
+                      teamName={row.predictedWinner}
+                      className="w-11 h-11 rounded-sm shadow-[2px_2px_0_0_rgba(255,255,255,0.1)]"
+                    />
+                    <div>
+                      <div className="text-2xl md:text-3xl font-black text-white uppercase tracking-tight">
+                        {row.predictedWinner}
+                      </div>
+                      <div className="text-[10px] md:text-xs font-black text-[#FFEA00] uppercase tracking-widest">
+                        {row.homeTeam} v {row.awayTeam}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <span className="bg-[#FF2E63] text-white px-3 py-1.5 text-[10px] font-black uppercase tracking-widest">
+                  Model Read
+                </span>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div className="bg-[#1E232B] p-3">
+                  <div className="text-[9px] font-black text-white/45 uppercase tracking-widest mb-1">
+                    Score
+                  </div>
+                  <div className="text-lg font-black text-white">
+                    {Math.round(row.predictedHomeScore)}-{Math.round(row.predictedAwayScore)}
+                  </div>
+                </div>
+                <div className="bg-[#1E232B] p-3">
+                  <div className="text-[9px] font-black text-white/45 uppercase tracking-widest mb-1">
+                    Model %
+                  </div>
+                  <div className="text-lg font-black text-[#00E676]">
+                    {formatPercent(winPct, 1)}
+                  </div>
+                </div>
+                <div className="bg-[#1E232B] p-3">
+                  <div className="text-[9px] font-black text-white/45 uppercase tracking-widest mb-1">
+                    Best Odds
+                  </div>
+                  <div className="text-lg font-black text-[#FFEA00]">
+                    {odds ? `$${odds.toFixed(2)}` : "—"}
+                  </div>
+                </div>
+              </div>
+              <div className="mt-4 text-xs font-bold text-white/45 uppercase tracking-widest">
+                Projected margin: {margin} points
+              </div>
+            </GlassCard>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="flex flex-col gap-4">
+        <div>
+          <h3 className="text-lg md:text-2xl font-black text-white uppercase tracking-tight">
+            Try Scorer Best Bets
+          </h3>
+          <div className="text-[10px] md:text-xs font-black text-white/45 uppercase tracking-widest mt-1">
+            Top scorer signals from the premium Try Scorers model
+          </div>
+        </div>
+        {tryScorerBestBets.length === 0 ? (
+          <GlassCard className="p-4 md:p-8 text-center border-l-4 border-l-white/20">
+            <div className="text-white/50 font-bold uppercase tracking-widest text-[10px] md:text-base">
+              No Try Scorer best bets qualify right now.
+            </div>
+          </GlassCard>
+        ) : (
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 md:gap-6">
+            {tryScorerBestBets.map(({ row, signal }) => (
+              <GlassCard
+                key={getTryScorerKey(row)}
+                className="p-5 md:p-6 border-l-4 border-l-[#FF2E63]"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-3 mb-3">
+                      <TeamLogo
+                        teamName={row.team}
+                        className="w-9 h-9 rounded-sm"
+                      />
+                      <div>
+                        <div className="text-xl md:text-2xl font-black text-white tracking-tight">
+                          {row.player}
+                        </div>
+                        <div className="text-[10px] md:text-xs font-black text-[#FFEA00] uppercase tracking-widest">
+                          {row.team} · {row.position} · R{row.round}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="text-[10px] font-black text-white/40 uppercase tracking-widest">
+                      {row.match}
+                    </div>
+                  </div>
+                  <span className={`shrink-0 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest ${getTryScorerSignalClass(signal?.label)}`}>
+                    {signal?.label || "Best Bet"}
+                  </span>
+                </div>
+                <div className="mt-5 grid grid-cols-3 gap-3">
+                  <div className="bg-[#1E232B] p-3">
+                    <div className="text-[9px] font-black text-white/45 uppercase tracking-widest mb-1">
+                      Model %
+                    </div>
+                    <div className="text-lg font-black text-white">
+                      {formatPercent(row.statsInsiderPct, 1)}
+                    </div>
+                  </div>
+                  <div className="bg-[#1E232B] p-3">
+                    <div className="text-[9px] font-black text-white/45 uppercase tracking-widest mb-1">
+                      Odds
+                    </div>
+                    <div className="text-lg font-black text-[#00E676]">
+                      ${row.bestOdds.toFixed(2)}
+                    </div>
+                  </div>
+                  <div className="bg-[#1E232B] p-3">
+                    <div className="text-[9px] font-black text-white/45 uppercase tracking-widest mb-1">
+                      Bookie
+                    </div>
+                    <div className="text-xs font-black text-[#FFEA00] uppercase truncate">
+                      {row.bookmaker || "—"}
+                    </div>
+                  </div>
+                </div>
+              </GlassCard>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -3953,99 +4304,6 @@ function TryScorersPage({
   data: DashboardData;
   onRequestAccess: (targetHash?: string) => void;
 }) {
-  const getTryScorerKey = (row: TryScorerRow) =>
-    `${row.match}::${row.team}::${row.player}`.toLowerCase();
-
-  const isTryScorerBestBetCandidate = (row: TryScorerRow) => {
-    const wholeNumberModelMarketGap = Math.abs(
-      Math.round(row.statsInsiderPct) - Math.round(row.marketImpliedPct),
-    );
-    const highProbabilityWithEdge =
-      row.statsInsiderPct >= 40 &&
-      row.edgePct >= 2 &&
-      row.bestOdds >= 1.5;
-    const nearFairHighProbability =
-      row.statsInsiderPct >= 40 &&
-      row.bestOdds >= 1.9 &&
-      row.edgePct >= -1.25 &&
-      wholeNumberModelMarketGap <= 1;
-
-    return highProbabilityWithEdge || nearFairHighProbability;
-  };
-
-  const getMatchBestBetKeys = (players: TryScorerRow[]) => {
-    const usedTeams = new Set<string>();
-    const selected = new Set<string>();
-
-    [...players]
-      .filter(isTryScorerBestBetCandidate)
-      .sort((a, b) => {
-        const aGap = Math.abs(Math.round(a.statsInsiderPct) - Math.round(a.marketImpliedPct));
-        const bGap = Math.abs(Math.round(b.statsInsiderPct) - Math.round(b.marketImpliedPct));
-        const aEdgeBest = a.statsInsiderPct >= 40 && a.edgePct >= 2 && a.bestOdds >= 1.5;
-        const bEdgeBest = b.statsInsiderPct >= 40 && b.edgePct >= 2 && b.bestOdds >= 1.5;
-        return (
-          Number(bEdgeBest) - Number(aEdgeBest) ||
-          b.edgePct - a.edgePct ||
-          b.statsInsiderPct - a.statsInsiderPct ||
-          aGap - bGap ||
-          b.bestOdds - a.bestOdds
-        );
-      })
-      .forEach((row) => {
-        const teamKey = normalizeTeamName(row.team);
-        if (selected.size >= 2 || usedTeams.has(teamKey)) return;
-        usedTeams.add(teamKey);
-        selected.add(getTryScorerKey(row));
-      });
-
-    return selected;
-  };
-
-  const getTryScorerSignal = (row: TryScorerRow, bestBetKeys?: Set<string>) => {
-    const highProbabilityNearFair =
-      row.statsInsiderPct >= 42 &&
-      row.edgePct >= -3 &&
-      row.bestOdds >= 1.5;
-    const clearValue =
-      row.edgePct >= 3 ||
-      (row.edgePct >= 0 && row.bestOdds >= 2.5) ||
-      (row.edgePct >= -0.5 && row.bestOdds >= 3);
-
-    if (bestBetKeys?.has(getTryScorerKey(row))) {
-      return {
-        label: "Best Bet",
-        className: "bg-[#FF2E63] text-white",
-        sortRank: 3,
-      };
-    }
-
-    if (highProbabilityNearFair) {
-      return {
-        label: "High Prob",
-        className: "bg-[#0047FF] text-white",
-        sortRank: 2,
-      };
-    }
-
-    if (clearValue) {
-      return {
-        label: "Value",
-        className: "bg-[#FFEA00] text-black",
-        sortRank: 1,
-      };
-    }
-
-    return null;
-  };
-
-  const getTryScorerSignalClass = (label?: string) => {
-    if (label === "Best Bet") return "bg-[#FF2E63] text-white";
-    if (label === "High Prob") return "bg-[#0047FF] text-white";
-    if (label === "Value") return "bg-[#FFEA00] text-black";
-    return "bg-white/10 text-white/50";
-  };
-
   const availableRounds = useMemo(
     () =>
       Array.from(
@@ -5288,8 +5546,8 @@ function AppDashboard({
         };
       case "best-bets":
         return {
-          title: "",
-          subtitle: "What to Bet This Round",
+          title: "Premium",
+          subtitle: "Premium Plays",
         };
       case "try-scorers":
         return {
@@ -5463,7 +5721,10 @@ function AppDashboard({
                 />
               )}
               {page === "matches" && (
-                <PredictionsPage data={data} />
+                <PredictionsPage
+                  data={data}
+                  onRequestAccess={onRequestAccess}
+                />
               )}
               {page === "try-scorers" && (
                 <TryScorersPage
@@ -5964,7 +6225,7 @@ export default function App() {
   };
 
   const requestPremiumAccess = (source: string = 'unknown') => {
-    const targetHash = ["best-bets", "try-scorers"].includes(source)
+    const targetHash = ["matches", "best-bets", "try-scorers"].includes(source)
       ? source
       : "best-bets";
     setSitePage("app");
@@ -6016,7 +6277,7 @@ export default function App() {
 
       const sessionId = searchParams.get("session_id");
       const fallbackReturnHash = searchParams.get("return_hash") || window.location.hash.replace("#", "") || "best-bets";
-      const returnHash = ["best-bets", "try-scorers"].includes(fallbackReturnHash)
+      const returnHash = ["matches", "best-bets", "try-scorers"].includes(fallbackReturnHash)
         ? fallbackReturnHash
         : "best-bets";
 
@@ -6045,7 +6306,7 @@ export default function App() {
           setPaidAccessState(true);
           setShowEmailGate(false);
 
-          const confirmedReturnHash = ["best-bets", "try-scorers"].includes(data.returnHash)
+          const confirmedReturnHash = ["matches", "best-bets", "try-scorers"].includes(data.returnHash)
             ? data.returnHash
             : returnHash;
 
@@ -6314,7 +6575,7 @@ export default function App() {
             setShowPaymentGate(false);
             setSitePage("app");
             const currentPremiumHash = window.location.hash.replace("#", "");
-            const returnHash = ["best-bets", "try-scorers"].includes(currentPremiumHash)
+            const returnHash = ["matches", "best-bets", "try-scorers"].includes(currentPremiumHash)
               ? currentPremiumHash
               : "best-bets";
             window.location.hash = returnHash;
