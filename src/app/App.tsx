@@ -2271,7 +2271,7 @@ function mapTeamToOddsApi(team: string): string {
 
 // Module level cache to prevent concurrent fetch requests from multiple cards
 let fetchOddsPromise: Promise<any> | null = null;
-const ODDS_CACHE_KEY = "rightedge_odds_cache";
+const ODDS_CACHE_KEY = "rightedge_odds_cache_v2";
 const ODDS_CACHE_DURATION = 4 * 60 * 60 * 1000; // 4 hours in milliseconds
 
 async function fetchLiveOddsCached() {
@@ -4193,6 +4193,8 @@ function TryScorersPage({
 
 type SgmLeg = {
   label: string;
+  typeLabel: string;
+  team?: string;
   modelPct: number;
   odds: number;
 };
@@ -4205,7 +4207,6 @@ type SgmCombo = {
   estimatedOdds: number;
   modelHitPct: number;
   legs: SgmLeg[];
-  note: string;
 };
 
 type SgmMatchGroup = {
@@ -4219,7 +4220,21 @@ type SgmMatchGroup = {
   combos: SgmCombo[];
 };
 
-type H2hBookmakerOddsMap = Record<string, Record<string, number>>;
+type SgmMarketBookmakerData = {
+  h2h: Record<string, number>;
+  spreads: {
+    team: string;
+    point: number;
+    odds: number;
+  }[];
+  totals: {
+    side: "Over" | "Under";
+    point: number;
+    odds: number;
+  }[];
+};
+
+type SgmMarketMap = Record<string, Record<string, SgmMarketBookmakerData>>;
 
 function normalizeBookmakerName(name: string) {
   const key = String(name || "").toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -4249,8 +4264,8 @@ function displayBookmakerName(name: string) {
   return labels[normalized] || name || "Same bookie";
 }
 
-function buildH2hBookmakerOddsMap(rawOdds: any[]): H2hBookmakerOddsMap {
-  const prices: H2hBookmakerOddsMap = {};
+function buildSgmMarketMap(rawOdds: any[]): SgmMarketMap {
+  const prices: SgmMarketMap = {};
 
   for (const event of rawOdds || []) {
     const homeTeam = normalizeTeamName(event.home_team || "");
@@ -4260,16 +4275,45 @@ function buildH2hBookmakerOddsMap(rawOdds: any[]): H2hBookmakerOddsMap {
     const matchKey = buildMatchKey(homeTeam, awayTeam);
     for (const bookmaker of event.bookmakers || []) {
       const bookKey = normalizeBookmakerName(bookmaker.title || bookmaker.key || "");
-      const h2hMarket = (bookmaker.markets || []).find((market: any) => market.key === "h2h");
-      if (!bookKey || !h2hMarket) continue;
+      if (!bookKey) continue;
+      if (!prices[matchKey]) prices[matchKey] = {};
+      if (!prices[matchKey][bookKey]) {
+        prices[matchKey][bookKey] = {
+          h2h: {},
+          spreads: [],
+          totals: [],
+        };
+      }
 
-      for (const outcome of h2hMarket.outcomes || []) {
+      const h2hMarket = (bookmaker.markets || []).find((market: any) => market.key === "h2h");
+      const spreadMarket = (bookmaker.markets || []).find((market: any) => market.key === "spreads");
+      const totalsMarket = (bookmaker.markets || []).find((market: any) => market.key === "totals");
+
+      for (const outcome of h2hMarket?.outcomes || []) {
         const team = normalizeTeamName(outcome.name || "");
         const price = Number(outcome.price) || 0;
         if (!team || price <= 1) continue;
-        const key = `${matchKey}|${team}`;
-        if (!prices[key]) prices[key] = {};
-        prices[key][bookKey] = price;
+        prices[matchKey][bookKey].h2h[team] = price;
+      }
+
+      for (const outcome of spreadMarket?.outcomes || []) {
+        const team = normalizeTeamName(outcome.name || "");
+        const price = Number(outcome.price) || 0;
+        const point = Number(outcome.point);
+        if (!team || price <= 1 || !Number.isFinite(point)) continue;
+        prices[matchKey][bookKey].spreads.push({ team, point, odds: price });
+      }
+
+      for (const outcome of totalsMarket?.outcomes || []) {
+        const side = String(outcome.name || "");
+        const price = Number(outcome.price) || 0;
+        const point = Number(outcome.point);
+        if (!["Over", "Under"].includes(side) || price <= 1 || !Number.isFinite(point)) continue;
+        prices[matchKey][bookKey].totals.push({
+          side: side as "Over" | "Under",
+          point,
+          odds: price,
+        });
       }
     }
   }
@@ -4289,7 +4333,7 @@ function getPredictionSide(match: PredictionRow) {
 }
 
 function getH2hOddsForBookmaker(
-  h2hOdds: H2hBookmakerOddsMap,
+  marketMap: SgmMarketMap,
   match: PredictionRow,
   team: string,
   bookmaker: string,
@@ -4298,7 +4342,72 @@ function getH2hOddsForBookmaker(
   const matchKey = buildMatchLabelKey(match.match);
   const teamKey = normalizeTeamName(team);
   const bookKey = normalizeBookmakerName(bookmaker);
-  return h2hOdds[`${matchKey}|${teamKey}`]?.[bookKey] || fallbackOdds || 0;
+  return marketMap[matchKey]?.[bookKey]?.h2h[teamKey] || fallbackOdds || 0;
+}
+
+function formatSgmLine(point: number) {
+  if (point > 0) return `+${point}`;
+  return String(point);
+}
+
+function getSelectedTeamProjectedMargin(match: PredictionRow, selectedTeam: string) {
+  const homeMargin = match.predictedHomeScore - match.predictedAwayScore;
+  return normalizeTeamName(selectedTeam) === normalizeTeamName(match.homeTeam)
+    ? homeMargin
+    : -homeMargin;
+}
+
+function getSpreadLeg(
+  marketMap: SgmMarketMap,
+  match: PredictionRow,
+  selectedTeam: string,
+  bookmaker: string,
+) {
+  const matchKey = buildMatchLabelKey(match.match);
+  const bookKey = normalizeBookmakerName(bookmaker);
+  const spread = marketMap[matchKey]?.[bookKey]?.spreads.find(
+    (row) => normalizeTeamName(row.team) === normalizeTeamName(selectedTeam),
+  );
+  if (!spread) return null;
+
+  const projectedMargin = getSelectedTeamProjectedMargin(match, selectedTeam);
+  const coverEdge = projectedMargin + spread.point;
+  const modelPct = Math.max(38, Math.min(76, 50 + (coverEdge * 4)));
+
+  return {
+    label: `${selectedTeam} ${formatSgmLine(spread.point)} line`,
+    typeLabel: "Line",
+    team: selectedTeam,
+    modelPct,
+    odds: spread.odds,
+  } as SgmLeg;
+}
+
+function getTotalLeg(
+  marketMap: SgmMarketMap,
+  match: PredictionRow,
+  bookmaker: string,
+) {
+  const matchKey = buildMatchLabelKey(match.match);
+  const bookKey = normalizeBookmakerName(bookmaker);
+  const projectedTotal = match.predictedHomeScore + match.predictedAwayScore;
+  const totals = marketMap[matchKey]?.[bookKey]?.totals || [];
+  if (!totals.length || !projectedTotal) return null;
+
+  const sortedTotals = [...totals].sort(
+    (a, b) => Math.abs(projectedTotal - a.point) - Math.abs(projectedTotal - b.point),
+  );
+  const total = sortedTotals[0];
+  const side = projectedTotal >= total.point ? "Over" : "Under";
+  const matchingTotal = totals.find((row) => row.side === side && row.point === total.point) || total;
+  const totalDiff = Math.abs(projectedTotal - matchingTotal.point);
+
+  return {
+    label: `${side} ${matchingTotal.point} total points`,
+    typeLabel: "Total",
+    modelPct: Math.max(38, Math.min(76, 50 + (totalDiff * 3))),
+    odds: matchingTotal.odds,
+  } as SgmLeg;
 }
 
 function buildSgmHitPct(legs: SgmLeg[], correlationMultiplier: number) {
@@ -4316,7 +4425,6 @@ function makeSgmCombo({
   bookmaker,
   legs,
   correlationMultiplier,
-  note,
 }: {
   id: string;
   title: string;
@@ -4324,7 +4432,6 @@ function makeSgmCombo({
   bookmaker: string;
   legs: SgmLeg[];
   correlationMultiplier: number;
-  note: string;
 }): SgmCombo | null {
   if (legs.length < 2 || legs.some((leg) => !leg.modelPct || !leg.odds)) return null;
 
@@ -4336,13 +4443,12 @@ function makeSgmCombo({
     estimatedOdds: legs.reduce((product, leg) => product * leg.odds, 1),
     modelHitPct: buildSgmHitPct(legs, correlationMultiplier),
     legs,
-    note,
   };
 }
 
 function buildSgmMatchGroups(
   data: DashboardData,
-  h2hOdds: H2hBookmakerOddsMap = {},
+  marketMap: SgmMarketMap = {},
 ): SgmMatchGroup[] {
   const settledMatchKeys = new Set(
     data.betLog
@@ -4358,6 +4464,13 @@ function buildSgmMatchGroups(
       groups[key].push(row);
       return groups;
     }, {} as Record<string, TryScorerRow[]>);
+
+  const fixtureOrder = new Map(
+    data.fixtures.map((fixture, idx) => [
+      buildMatchKey(fixture.homeTeam, fixture.awayTeam),
+      idx,
+    ]),
+  );
 
   return data.predictions
     .filter((match) => !settledMatchKeys.has(buildMatchLabelKey(match.match)))
@@ -4382,24 +4495,61 @@ function buildSgmMatchGroups(
       if (topTeamScorer) {
         const bookie = topTeamScorer.bookmaker;
         const h2hOddsForBookie = getH2hOddsForBookmaker(
-          h2hOdds,
+          marketMap,
           match,
           selected.team,
           bookie,
           selected.odds,
         );
+        const sideLeg = {
+          label: `${selected.team} head-to-head`,
+          typeLabel: "Team",
+          team: selected.team,
+          modelPct: selected.modelPct,
+          odds: h2hOddsForBookie,
+        };
+        const topScorerLeg = {
+          label: topTeamScorer.player,
+          typeLabel: "Anytime try",
+          team: topTeamScorer.team,
+          modelPct: topTeamScorer.statsInsiderPct,
+          odds: topTeamScorer.bestOdds,
+        };
+        const spreadLeg = getSpreadLeg(marketMap, match, selected.team, bookie);
+        const totalLeg = getTotalLeg(marketMap, match, bookie);
+
         addCombo(makeSgmCombo({
           id: `${matchKey}-side-top-scorer`,
           title: "Side + top scorer",
           confidence: "High Prob",
           bookmaker: bookie,
           correlationMultiplier: 1.1,
-          note: `${selected.team} is the highest model probability side and ${topTeamScorer.player} clears the 45% try-scorer threshold.`,
-          legs: [
-            { label: `${selected.team} head-to-head`, modelPct: selected.modelPct, odds: h2hOddsForBookie },
-            { label: `${topTeamScorer.player} anytime try`, modelPct: topTeamScorer.statsInsiderPct, odds: topTeamScorer.bestOdds },
-          ],
+          legs: [sideLeg, topScorerLeg],
         }));
+
+        if (spreadLeg) {
+          addCombo(makeSgmCombo({
+            id: `${matchKey}-side-top-scorer-line`,
+            title: "Side + scorer + line",
+            confidence: "High Prob",
+            bookmaker: bookie,
+            correlationMultiplier: 1.18,
+            legs: [sideLeg, topScorerLeg, spreadLeg],
+          }));
+        }
+
+        if (totalLeg) {
+          addCombo(makeSgmCombo({
+            id: `${matchKey}-side-top-scorer-total`,
+            title: "Side + scorer + total",
+            confidence: "High Prob",
+            bookmaker: bookie,
+            correlationMultiplier: normalizeTeamName(topTeamScorer.team) === normalizeTeamName(selected.team)
+              ? 1.14
+              : 1.02,
+            legs: [sideLeg, topScorerLeg, totalLeg],
+          }));
+        }
       }
 
       const sameBookieTeamPair = selectedTeamScorers.find((first, idx) =>
@@ -4418,23 +4568,24 @@ function buildSgmMatchGroups(
       if (sameBookieTeamPair && secondSameBookieTeamScorer && (projectedMargin >= 8 || selected.modelPct >= 58)) {
         const bookie = sameBookieTeamPair.bookmaker;
         const h2hOddsForBookie = getH2hOddsForBookmaker(
-          h2hOdds,
+          marketMap,
           match,
           selected.team,
           bookie,
           selected.odds,
         );
+        const spreadLeg = getSpreadLeg(marketMap, match, selected.team, bookie);
         addCombo(makeSgmCombo({
           id: `${matchKey}-team-attack-stack`,
           title: "Winning team attack stack",
           confidence: "Attack Stack",
           bookmaker: bookie,
           correlationMultiplier: 1.22,
-          note: `${selected.team} has the model side and projected margin profile to support multiple attacking outcomes.`,
           legs: [
-            { label: `${selected.team} head-to-head`, modelPct: selected.modelPct, odds: h2hOddsForBookie },
-            { label: `${sameBookieTeamPair.player} anytime try`, modelPct: sameBookieTeamPair.statsInsiderPct, odds: sameBookieTeamPair.bestOdds },
-            { label: `${secondSameBookieTeamScorer.player} anytime try`, modelPct: secondSameBookieTeamScorer.statsInsiderPct, odds: secondSameBookieTeamScorer.bestOdds },
+            { label: `${selected.team} head-to-head`, typeLabel: "Team", team: selected.team, modelPct: selected.modelPct, odds: h2hOddsForBookie },
+            { label: sameBookieTeamPair.player, typeLabel: "Anytime try", team: sameBookieTeamPair.team, modelPct: sameBookieTeamPair.statsInsiderPct, odds: sameBookieTeamPair.bestOdds },
+            { label: secondSameBookieTeamScorer.player, typeLabel: "Anytime try", team: secondSameBookieTeamScorer.team, modelPct: secondSameBookieTeamScorer.statsInsiderPct, odds: secondSameBookieTeamScorer.bestOdds },
+            ...(spreadLeg ? [spreadLeg] : []),
           ],
         }));
       }
@@ -4462,10 +4613,9 @@ function buildSgmMatchGroups(
             normalizeTeamName(sameBookiePair.team) === normalizeTeamName(secondSameBookieScorer.team)
               ? 1.08
               : 0.96,
-          note: `Both try scorers clear the 45% model threshold and are available at ${displayBookmakerName(sameBookiePair.bookmaker)}.`,
           legs: [
-            { label: `${sameBookiePair.player} anytime try`, modelPct: sameBookiePair.statsInsiderPct, odds: sameBookiePair.bestOdds },
-            { label: `${secondSameBookieScorer.player} anytime try`, modelPct: secondSameBookieScorer.statsInsiderPct, odds: secondSameBookieScorer.bestOdds },
+            { label: sameBookiePair.player, typeLabel: "Anytime try", team: sameBookiePair.team, modelPct: sameBookiePair.statsInsiderPct, odds: sameBookiePair.bestOdds },
+            { label: secondSameBookieScorer.player, typeLabel: "Anytime try", team: secondSameBookieScorer.team, modelPct: secondSameBookieScorer.statsInsiderPct, odds: secondSameBookieScorer.bestOdds },
           ],
         }));
       }
@@ -4482,7 +4632,11 @@ function buildSgmMatchGroups(
       };
     })
     .filter((group) => group.combos.length > 0)
-    .sort((a, b) => b.combos[0].modelHitPct - a.combos[0].modelHitPct);
+    .sort((a, b) => {
+      const aOrder = fixtureOrder.get(a.key) ?? 999;
+      const bOrder = fixtureOrder.get(b.key) ?? 999;
+      return aOrder - bOrder;
+    });
 }
 
 function SgmComboCard({ combo }: { combo: SgmCombo }) {
@@ -4502,9 +4656,6 @@ function SgmComboCard({ combo }: { combo: SgmCombo }) {
             <div className="text-lg md:text-2xl font-black text-white uppercase tracking-tight">
               {combo.title}
             </div>
-            <div className="text-[10px] font-black text-[#FFEA00] uppercase tracking-widest mt-1">
-              Build at {combo.bookmaker}
-            </div>
           </div>
           <span className={`shrink-0 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest ${confidenceClass}`}>
             {combo.confidence}
@@ -4512,12 +4663,19 @@ function SgmComboCard({ combo }: { combo: SgmCombo }) {
         </div>
 
         <div className="space-y-3 mb-5">
-          {combo.legs.map((leg, idx) => (
+          {combo.legs.map((leg) => (
             <div key={`${combo.id}-${leg.label}`} className="flex items-start gap-3 bg-[#111317] border border-white/10 p-3">
-              <div className="w-6 h-6 flex items-center justify-center bg-[#FFEA00] text-black text-xs font-black shrink-0">
-                {idx + 1}
-              </div>
+              {leg.team ? (
+                <TeamLogo teamName={leg.team} className="w-7 h-7 text-[10px]" />
+              ) : (
+                <div className="w-7 h-7 flex items-center justify-center bg-[#FFEA00] text-black shrink-0">
+                  <Target className="w-4 h-4 stroke-[3px]" />
+                </div>
+              )}
               <div className="min-w-0 flex-1">
+                <div className="text-[9px] text-[#FFEA00] font-black uppercase tracking-widest mb-1">
+                  {leg.typeLabel}
+                </div>
                 <div className="text-sm font-black text-white uppercase tracking-wide leading-snug">
                   {leg.label}
                 </div>
@@ -4532,7 +4690,7 @@ function SgmComboCard({ combo }: { combo: SgmCombo }) {
         <div className="grid grid-cols-2 gap-3 mb-5">
           <div className="bg-[#111317] border border-white/10 p-3">
             <div className="text-[9px] font-black text-white/40 uppercase tracking-widest mb-1">
-              Model hit
+              Model %
             </div>
             <div className="text-2xl font-black text-[#FFEA00]">
               {formatPercent(combo.modelHitPct, 1)}
@@ -4545,11 +4703,10 @@ function SgmComboCard({ combo }: { combo: SgmCombo }) {
             <div className="text-2xl font-black text-[#00E676]">
               {combo.estimatedOdds.toFixed(2)}
             </div>
+            <div className="text-[9px] font-black text-white/40 uppercase tracking-widest mt-1">
+              {combo.bookmaker}
+            </div>
           </div>
-        </div>
-
-        <div className="text-sm text-white/60 font-bold leading-relaxed">
-          {combo.note}
         </div>
       </div>
     </GlassCard>
@@ -4563,10 +4720,10 @@ function SgmBuilderPage({
   data: DashboardData;
   onRequestAccess: (targetHash?: string) => void;
 }) {
-  const [h2hBookmakerOdds, setH2hBookmakerOdds] = useState<H2hBookmakerOddsMap>({});
+  const [sgmMarketMap, setSgmMarketMap] = useState<SgmMarketMap>({});
   const groups = useMemo(
-    () => buildSgmMatchGroups(data, h2hBookmakerOdds),
-    [data, h2hBookmakerOdds],
+    () => buildSgmMatchGroups(data, sgmMarketMap),
+    [data, sgmMarketMap],
   );
   const [selectedMatchKey, setSelectedMatchKey] = useState("");
 
@@ -4574,10 +4731,10 @@ function SgmBuilderPage({
     let mounted = true;
     fetchLiveOddsCached()
       .then((rawOdds) => {
-        if (mounted) setH2hBookmakerOdds(buildH2hBookmakerOddsMap(rawOdds));
+        if (mounted) setSgmMarketMap(buildSgmMarketMap(rawOdds));
       })
       .catch(() => {
-        if (mounted) setH2hBookmakerOdds({});
+        if (mounted) setSgmMarketMap({});
       });
     return () => {
       mounted = false;
@@ -4636,32 +4793,7 @@ function SgmBuilderPage({
             Pick a match — high probability team + try scorer combinations
           </div>
         </div>
-        <div className="bg-[#1E232B] border-2 border-white/10 px-4 py-3 shadow-[4px_4px_0_0_#0047FF]">
-          <div className="text-[9px] font-black text-white/40 uppercase tracking-widest mb-1">
-            Showing
-          </div>
-          <div className="text-sm font-black text-white uppercase tracking-wider">
-            {groups.reduce((sum, group) => sum + group.combos.length, 0)} combos · {groups.length} matches
-          </div>
-        </div>
       </div>
-
-      <GlassCard className="p-4 md:p-6 border-l-4 border-l-[#FFEA00]">
-        <div className="flex flex-col md:flex-row gap-3 md:items-center md:justify-between">
-          <div>
-            <div className="text-sm md:text-base font-black text-white uppercase tracking-tight">
-              Same bookie first
-            </div>
-            <div className="text-xs md:text-sm text-white/50 font-bold mt-1">
-              Combos use one bookmaker where the sheet has matching try-scorer prices. SGM odds can still move inside the betting app.
-            </div>
-          </div>
-          <div className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-[#00E676]">
-            <CheckCircle2 className="w-4 h-4" />
-            Data-led ideas only
-          </div>
-        </div>
-      </GlassCard>
 
       {groups.length === 0 ? (
         <GlassCard className="p-8 text-center border-l-4 border-l-white/20">
@@ -4726,6 +4858,10 @@ function SgmBuilderPage({
           </div>
         </div>
       )}
+
+      <div className="border-t border-white/10 pt-4 text-[10px] font-black uppercase tracking-widest text-white/30 leading-relaxed">
+        SGM prices can move inside bookmaker apps. Estimated odds use the listed bookmaker where available.
+      </div>
     </div>
   );
 }
