@@ -1260,7 +1260,7 @@ app.post("/create-checkout-session", async (c) => {
     const body = await c.req.json();
     const email = body?.email?.trim()?.toLowerCase();
     const returnUrl = body?.returnUrl || "http://localhost:5173";
-    const returnHash = ["best-bets", "try-scorers", "sgm-builder"].includes(body?.returnHash)
+    const returnHash = ["matches", "best-bets", "try-scorers", "sgm-builder"].includes(body?.returnHash)
       ? body.returnHash
       : "best-bets";
     const cancelUrl = body?.cancelUrl || `${returnUrl}#${returnHash}`;
@@ -1401,7 +1401,7 @@ app.post("/confirm-checkout-session", async (c) => {
         return c.json({ error: "Invalid instant access session." }, 400);
       }
 
-      const returnHash = ["best-bets", "try-scorers", "sgm-builder"].includes(data.returnHash)
+      const returnHash = ["matches", "best-bets", "try-scorers", "sgm-builder"].includes(data.returnHash)
         ? data.returnHash
         : "best-bets";
 
@@ -1457,7 +1457,7 @@ app.post("/confirm-checkout-session", async (c) => {
       return c.json({ error: "Could not determine subscriber email from Stripe session." }, 400);
     }
 
-    const returnHash = ["best-bets", "try-scorers", "sgm-builder"].includes(session.metadata?.returnHash || "")
+    const returnHash = ["matches", "best-bets", "try-scorers", "sgm-builder"].includes(session.metadata?.returnHash || "")
       ? session.metadata?.returnHash
       : "best-bets";
 
