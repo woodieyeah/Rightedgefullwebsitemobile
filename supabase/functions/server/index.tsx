@@ -874,6 +874,18 @@ function normalizeOddsPlayerName(name: string) {
     .trim();
 }
 
+function toDecimalOdds(price: any) {
+  const numericPrice = Number(price) || 0;
+  if (!numericPrice) return 0;
+
+  // Some player prop books can return American-style prices even when decimal
+  // odds are requested. Convert obvious American prices back to decimal.
+  if (numericPrice >= 100) return 1 + (numericPrice / 100);
+  if (numericPrice <= -100) return 1 + (100 / Math.abs(numericPrice));
+
+  return numericPrice;
+}
+
 async function fetchNrlEventsRaw(force = false) {
   const apiKey = Deno.env.get("ODDS_API_KEY");
   if (!apiKey) {
@@ -966,9 +978,13 @@ function buildBestTryScorerOdds(eventOddsList: any[]) {
       if (!tryScorerMarket) continue;
 
       for (const outcome of tryScorerMarket.outcomes || []) {
-        const player = String(outcome.name || "").trim();
-        const price = Number(outcome.price) || 0;
+        const outcomeName = String(outcome.name || "").trim();
+        const outcomeType = outcomeName.toLowerCase();
+        const player = String(outcome.description || outcome.name || "").trim();
+        const price = toDecimalOdds(outcome.price);
         const playerKey = normalizeOddsPlayerName(player);
+
+        if (outcome.description && !["yes", "over"].includes(outcomeType)) continue;
         if (!player || !playerKey || price <= 1) continue;
 
         const key = `${matchKey}|${playerKey}`;

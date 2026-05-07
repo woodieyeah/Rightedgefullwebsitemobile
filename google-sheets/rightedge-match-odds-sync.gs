@@ -179,6 +179,11 @@ function syncRightEdgeTryScorerOdds() {
   const oddsRows = payload.rows || [];
   const oddsByMatchAndPlayer = {};
 
+  if (!oddsRows.length) {
+    ss.toast('No try scorer prices came back from RightEdge. Check the Supabase function deployment and The Odds API market availability.', 'RightEdge Odds', 12);
+    return;
+  }
+
   oddsRows.forEach(row => {
     const matchKey = normalizeRightEdgeMatch(row[0]);
     const playerKey = normalizeRightEdgePlayer(row[3]);
@@ -232,7 +237,7 @@ function syncRightEdgeTryScorerOdds() {
   const stamp = payload.updatedAt
     ? new Date(payload.updatedAt).toLocaleString()
     : new Date().toLocaleString();
-  ss.toast(`Updated ${updatedCount} try scorer odds. ${unmatchedCount} rows left unchanged. Last sync: ${stamp}`, 'RightEdge Odds', 10);
+  ss.toast(`Updated ${updatedCount} try scorer odds from ${oddsRows.length} API prices. ${unmatchedCount} rows left unchanged. Last sync: ${stamp}`, 'RightEdge Odds', 10);
 }
 
 function normalizeRightEdgeSheetTeam(team) {
