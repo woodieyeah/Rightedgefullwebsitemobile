@@ -2411,7 +2411,7 @@ function mapTeamToOddsApi(team: string): string {
 // Module level cache to prevent concurrent fetch requests from multiple cards
 let fetchOddsPromise: Promise<any> | null = null;
 const ODDS_CACHE_KEY = "rightedge_odds_cache_v3";
-const ODDS_CACHE_DURATION = 5 * 60 * 1000; // Keep kickoff-day prices fresh without hammering the edge function
+const ODDS_CACHE_DURATION = 30 * 60 * 1000; // Protect the 500/month free Odds API quota
 
 async function fetchLiveOddsCached() {
   // 1. Check local storage cache

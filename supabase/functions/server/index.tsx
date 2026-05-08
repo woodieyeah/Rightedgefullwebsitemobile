@@ -6,6 +6,7 @@ import Stripe from "npm:stripe";
 import { createClient } from "jsr:@supabase/supabase-js@2.49.8";
 import * as kv from "./kv_store.tsx";
 const app = new Hono().basePath('/make-server-3b84b96c');
+const MATCH_ODDS_CACHE_MS = 30 * 60 * 1000;
 
 // Enable logger
 app.use('*', logger(console.log));
@@ -783,7 +784,7 @@ async function fetchLiveOddsRaw(force = false) {
   const cacheTime = await kv.get("live_odds_cache_time");
   const now = Date.now();
 
-  if (!force && cachedOdds && cacheTime && (now - Number(cacheTime)) < 120000) {
+  if (!force && cachedOdds && cacheTime && (now - Number(cacheTime)) < MATCH_ODDS_CACHE_MS) {
     return typeof cachedOdds === "string" ? JSON.parse(cachedOdds) : cachedOdds;
   }
 
@@ -1057,7 +1058,7 @@ app.get("/best-match-odds", async (c) => {
     const now = Date.now();
 
     let payload =
-      !force && cached && cacheTime && (now - Number(cacheTime)) < 120000
+      !force && cached && cacheTime && (now - Number(cacheTime)) < MATCH_ODDS_CACHE_MS
         ? (typeof cached === "string" ? JSON.parse(cached) : cached)
         : await refreshBestMatchOdds(force);
 
