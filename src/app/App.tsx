@@ -885,6 +885,46 @@ function getFixtureSortValue(row: PredictionRow) {
   return Number.isFinite(dateOnly) ? dateOnly : Number.MAX_SAFE_INTEGER;
 }
 
+function getFixtureUtcKickoffMs(fixture?: FixtureRow | null) {
+  if (!fixture) return Number.MAX_SAFE_INTEGER;
+
+  const iso = fixture.dateISO || "";
+  const time = fixture.aedt || fixture.local || "";
+  const timeMatch = time.match(/(\d{1,2})(?::(\d{2}))?\s*(AM|PM)/i);
+  const dateOnly = Date.parse(iso);
+
+  if (Number.isFinite(dateOnly) && timeMatch) {
+    let hours = Number(timeMatch[1]);
+    const minutes = Number(timeMatch[2] || 0);
+    const meridiem = timeMatch[3].toUpperCase();
+
+    if (meridiem === "PM" && hours < 12) hours += 12;
+    if (meridiem === "AM" && hours === 12) hours = 0;
+
+    const tz = (fixture.tz || "").toUpperCase();
+    const offsetHours = tz.includes("AEDT") ? 11 : 10;
+    return dateOnly + hours * 60 * 60 * 1000 + minutes * 60 * 1000 - offsetHours * 60 * 60 * 1000;
+  }
+
+  return Number.MAX_SAFE_INTEGER;
+}
+
+function hasPredictionKickedOff(row?: PredictionRow | null, now = Date.now()) {
+  if (!row?.fixture) return false;
+  return getFixtureUtcKickoffMs(row.fixture) <= now;
+}
+
+function useMinuteNow() {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 60 * 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  return now;
+}
+
 function sortPredictionsByFixture(a: PredictionRow, b: PredictionRow) {
   const timeDiff = getFixtureSortValue(a) - getFixtureSortValue(b);
   if (timeDiff !== 0) return timeDiff;
@@ -4406,6 +4446,7 @@ function getBestPremiumMarketPlayForMatch(
 function buildPremiumMarketPlays(
   data: DashboardData,
   marketMap: SgmMarketMap,
+  now = Date.now(),
 ) {
   const settledMatchKeys = new Set(
     data.betLog
@@ -4416,6 +4457,7 @@ function buildPremiumMarketPlays(
   return [...data.predictions]
     .sort(sortPredictionsByFixture)
     .filter((row) => !settledMatchKeys.has(buildMatchLabelKey(row.match)))
+    .filter((row) => !hasPredictionKickedOff(row, now))
     .map((row) => getBestPremiumMarketPlayForMatch(row, marketMap))
     .filter(Boolean) as PremiumMarketPlay[];
 }
@@ -4512,6 +4554,7 @@ function BestBetsPage({
 }) {
   const [marketMap, setMarketMap] = useState<SgmMarketMap>({});
   const [isLoadingMarkets, setIsLoadingMarkets] = useState(true);
+  const now = useMinuteNow();
 
   useEffect(() => {
     let isMounted = true;
@@ -4536,8 +4579,8 @@ function BestBetsPage({
   }, []);
 
   const matchReads = useMemo(
-    () => buildPremiumMarketPlays(data, marketMap).slice(0, 8),
-    [data, marketMap],
+    () => buildPremiumMarketPlays(data, marketMap, now).slice(0, 8),
+    [data, marketMap, now],
   );
 
   const latestTryScorerRound = Math.max(
@@ -4558,10 +4601,13 @@ function BestBetsPage({
       prediction,
     ]),
   );
+  const isTryScorerMatchLive = (row: TryScorerRow) =>
+    hasPredictionKickedOff(predictionByMatch.get(buildMatchLabelKey(row.match)), now);
   const tryScorerBestBets = Object.values(tryScorerGroups)
     .flatMap((players) => {
       const keys = getMatchBestBetKeys(players);
       return players
+        .filter((row) => !isTryScorerMatchLive(row))
         .filter((row) => keys.has(getTryScorerKey(row)))
         .map((row) => ({
           row,
@@ -4741,6 +4787,7 @@ function TryScorersPage({
   data: DashboardData;
   onRequestAccess: (targetHash?: string) => void;
 }) {
+  const now = useMinuteNow();
   const availableRounds = useMemo(
     () =>
       Array.from(
@@ -4771,14 +4818,25 @@ function TryScorersPage({
     });
   }, [availableRoundKey, latestRound]);
 
+  const predictionByMatch = useMemo(
+    () =>
+      new Map(
+        data.predictions.map((prediction) => [
+          buildMatchLabelKey(prediction.match),
+          prediction,
+        ]),
+      ),
+    [data.predictions],
+  );
+
   const roundFilteredRows =
     selectedRound === "all"
       ? data.tryScorers
       : data.tryScorers.filter((row) => row.round === selectedRound);
 
-  const valuePlays = roundFilteredRows.filter(
-    (row) => getTryScorerSignal(row) || isTryScorerBestBetCandidate(row),
-  );
+  const valuePlays = roundFilteredRows
+    .filter((row) => !hasPredictionKickedOff(predictionByMatch.get(buildMatchLabelKey(row.match)), now))
+    .filter((row) => getTryScorerSignal(row) || isTryScorerBestBetCandidate(row));
   const roundLabel =
     selectedRound === "all" ? "All rounds" : `Round ${selectedRound}`;
 
