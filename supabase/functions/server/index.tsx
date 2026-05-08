@@ -7,6 +7,7 @@ import { createClient } from "jsr:@supabase/supabase-js@2.49.8";
 import * as kv from "./kv_store.tsx";
 const app = new Hono().basePath('/make-server-3b84b96c');
 const MATCH_ODDS_CACHE_MS = 30 * 60 * 1000;
+const PREMATCH_ODDS_LOCK_PREFIX = "prematch_odds_lock";
 
 // Enable logger
 app.use('*', logger(console.log));
@@ -774,6 +775,81 @@ function buildOddsMatchKey(home: string, away: string) {
   return `${normalizeNrlTeamName(home)} v ${normalizeNrlTeamName(away)}`.toLowerCase();
 }
 
+function getOddsEventLockKey(event: any, market = "match") {
+  const id = String(event?.id || "").trim();
+  if (id) return `${PREMATCH_ODDS_LOCK_PREFIX}:${market}:event:${id}`;
+
+  const homeTeam = normalizeNrlTeamName(event?.home_team || event?.homeTeam || "");
+  const awayTeam = normalizeNrlTeamName(event?.away_team || event?.awayTeam || "");
+  return `${PREMATCH_ODDS_LOCK_PREFIX}:${market}:match:${buildOddsMatchKey(homeTeam, awayTeam)}:${event?.commence_time || event?.commenceTime || ""}`;
+}
+
+function getEventCommenceMs(event: any) {
+  const raw = event?.commence_time || event?.commenceTime || "";
+  const ms = Date.parse(raw);
+  return Number.isFinite(ms) ? ms : 0;
+}
+
+function hasEventCommenced(event: any, now = Date.now()) {
+  const commenceMs = getEventCommenceMs(event);
+  return commenceMs > 0 && commenceMs <= now;
+}
+
+async function getLockedOddsSnapshot(event: any, market = "match") {
+  const key = getOddsEventLockKey(event, market);
+  const locked = await kv.get(key);
+  if (!locked) return null;
+
+  try {
+    const parsed = typeof locked === "string" ? JSON.parse(locked) : locked;
+    return parsed?.snapshot || parsed;
+  } catch {
+    return locked;
+  }
+}
+
+async function lockOddsSnapshot(event: any, source: string, market = "match") {
+  const existing = await getLockedOddsSnapshot(event, market);
+  if (existing) return existing;
+
+  const snapshot = {
+    ...event,
+    preKickoffLocked: true,
+    lockedAt: new Date().toISOString(),
+  };
+
+  await kv.set(getOddsEventLockKey(event, market), JSON.stringify({
+    snapshot,
+    lockedAt: snapshot.lockedAt,
+    source,
+    commenceTime: event?.commence_time || event?.commenceTime || "",
+  }));
+
+  console.log(`[OddsLock] Locked ${market} pre-match odds for ${event?.home_team || ""} v ${event?.away_team || ""} from ${source}`);
+  return snapshot;
+}
+
+async function applyPrematchOddsLocks(rawOdds: any[], source: string) {
+  const now = Date.now();
+  const rows = Array.isArray(rawOdds) ? rawOdds : [];
+
+  return Promise.all(rows.map(async (event) => {
+    if (!hasEventCommenced(event, now)) return event;
+    const existing = await getLockedOddsSnapshot(event, "match");
+    if (existing) return existing;
+
+    // Only lock from already cached data. Fresh post-kickoff API responses can
+    // contain in-play prices, so they must never become the saved pre-game line.
+    if (source === "cache") return lockOddsSnapshot(event, source, "match");
+
+    return {
+      ...event,
+      bookmakers: [],
+      oddsLockedUnavailable: true,
+    };
+  }));
+}
+
 async function fetchLiveOddsRaw(force = false) {
   const apiKey = Deno.env.get("ODDS_API_KEY");
   if (!apiKey) {
@@ -783,9 +859,17 @@ async function fetchLiveOddsRaw(force = false) {
   const cachedOdds = await kv.get("live_odds_cache");
   const cacheTime = await kv.get("live_odds_cache_time");
   const now = Date.now();
+  const parsedCachedOdds = cachedOdds
+    ? (typeof cachedOdds === "string" ? JSON.parse(cachedOdds) : cachedOdds)
+    : null;
 
-  if (!force && cachedOdds && cacheTime && (now - Number(cacheTime)) < MATCH_ODDS_CACHE_MS) {
-    return typeof cachedOdds === "string" ? JSON.parse(cachedOdds) : cachedOdds;
+  if (parsedCachedOdds) {
+    const lockedCachedOdds = await applyPrematchOddsLocks(parsedCachedOdds, "cache");
+    await kv.set("live_odds_cache", JSON.stringify(lockedCachedOdds));
+
+    if (!force && cacheTime && (now - Number(cacheTime)) < MATCH_ODDS_CACHE_MS) {
+      return lockedCachedOdds;
+    }
   }
 
   const response = await fetch(`https://api.the-odds-api.com/v4/sports/rugbyleague_nrl/odds/?apiKey=${apiKey}&regions=au&markets=h2h,spreads,totals&oddsFormat=decimal`);
@@ -797,12 +881,16 @@ async function fetchLiveOddsRaw(force = false) {
 
   const data = await response.json();
 
-  if (Array.isArray(data)) {
-    await kv.set("live_odds_cache", JSON.stringify(data));
+  const lockedData = Array.isArray(data)
+    ? await applyPrematchOddsLocks(data, "fresh-api")
+    : data;
+
+  if (Array.isArray(lockedData)) {
+    await kv.set("live_odds_cache", JSON.stringify(lockedData));
     await kv.set("live_odds_cache_time", now.toString());
   }
 
-  return data;
+  return lockedData;
 }
 
 function buildBestMatchOdds(rawOdds: any[]) {
@@ -932,10 +1020,34 @@ async function fetchTryScorerEventOdds(event: any, force = false) {
   const cachedOdds = await kv.get(cacheKey);
   const cacheTime = await kv.get(cacheTimeKey);
   const now = Date.now();
+  const parsedCachedOdds = cachedOdds
+    ? (typeof cachedOdds === "string" ? JSON.parse(cachedOdds) : cachedOdds)
+    : null;
+
+  if (hasEventCommenced(event, now)) {
+    const locked = await getLockedOddsSnapshot(event, "try-scorer");
+    if (locked) return locked;
+
+    if (parsedCachedOdds) {
+      const lockedFromCache = await lockOddsSnapshot(parsedCachedOdds, "try-scorer-cache", "try-scorer");
+      await kv.set(cacheKey, JSON.stringify(lockedFromCache));
+      return lockedFromCache;
+    }
+
+    console.warn(`[TryScorerOdds] Event ${eventId} has commenced and no pre-match odds snapshot exists.`);
+    return {
+      id: eventId,
+      home_team: event.home_team || "",
+      away_team: event.away_team || "",
+      commence_time: event.commence_time || "",
+      bookmakers: [],
+      oddsLockedUnavailable: true,
+    };
+  }
 
   // Player props are fetched event-by-event, so cache a little longer than h2h.
-  if (!force && cachedOdds && cacheTime && (now - Number(cacheTime)) < 300000) {
-    return typeof cachedOdds === "string" ? JSON.parse(cachedOdds) : cachedOdds;
+  if (!force && parsedCachedOdds && cacheTime && (now - Number(cacheTime)) < 300000) {
+    return parsedCachedOdds;
   }
 
   const url = `https://api.the-odds-api.com/v4/sports/rugbyleague_nrl/events/${eventId}/odds?apiKey=${apiKey}&regions=au&markets=player_try_scorer_anytime&oddsFormat=decimal`;
@@ -1053,14 +1165,7 @@ app.get("/best-match-odds", async (c) => {
   try {
     const force = c.req.query("force") === "true";
     const format = c.req.query("format") || "json";
-    const cached = await kv.get("best_match_odds_cache");
-    const cacheTime = await kv.get("best_match_odds_cache_time");
-    const now = Date.now();
-
-    let payload =
-      !force && cached && cacheTime && (now - Number(cacheTime)) < MATCH_ODDS_CACHE_MS
-        ? (typeof cached === "string" ? JSON.parse(cached) : cached)
-        : await refreshBestMatchOdds(force);
+    const payload = await refreshBestMatchOdds(force);
 
     if (format === "sheets") {
       return c.json({
@@ -1089,14 +1194,7 @@ app.get("/best-try-scorer-odds", async (c) => {
   try {
     const force = c.req.query("force") === "true";
     const format = c.req.query("format") || "json";
-    const cached = await kv.get("best_try_scorer_odds_cache");
-    const cacheTime = await kv.get("best_try_scorer_odds_cache_time");
-    const now = Date.now();
-
-    let payload =
-      !force && cached && cacheTime && (now - Number(cacheTime)) < 300000
-        ? (typeof cached === "string" ? JSON.parse(cached) : cached)
-        : await refreshBestTryScorerOdds(force);
+    const payload = await refreshBestTryScorerOdds(force);
 
     if (format === "sheets") {
       return c.json({
