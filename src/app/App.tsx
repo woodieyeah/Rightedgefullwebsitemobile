@@ -4427,69 +4427,69 @@ function PremiumMarketPlayCard({ play }: { play: PremiumMarketPlay }) {
         : `Model winner ${formatPercent(play.modelPct, 1)} vs market ${formatPercent(getImpliedWinPctFromOdds(play.odds), 1)}`;
 
   return (
-    <GlassCard className="p-5 md:p-6 border-l-4 border-l-[#00E676]">
-      <div className="flex items-start justify-between gap-4 mb-5">
+    <GlassCard className="p-4 md:p-6 border-l-4 border-l-[#00E676]">
+      <div className="flex items-start justify-between gap-3 md:gap-4 mb-4">
         <div>
           <div className="text-[10px] uppercase font-black text-white/45 tracking-widest mb-2">
             {row.fixture
               ? `${row.fixture.day} ${row.fixture.dateLabel} @ ${row.fixture.aedt} AEST`
               : "Time TBC"}
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5 md:gap-3">
             <TeamLogo
               teamName={play.type === "Total" ? row.predictedWinner : play.selection}
-              className="w-11 h-11 rounded-sm shadow-[2px_2px_0_0_rgba(255,255,255,0.1)]"
+              className="w-9 h-9 md:w-11 md:h-11 rounded-sm shadow-[2px_2px_0_0_rgba(255,255,255,0.1)]"
             />
-            <div>
-              <div className="text-2xl md:text-3xl font-black text-white uppercase tracking-tight">
+            <div className="min-w-0">
+              <div className="text-lg md:text-3xl font-black text-white uppercase tracking-tight leading-[1.05] break-words">
                 {play.selection}
               </div>
-              <div className="text-[10px] md:text-xs font-black text-[#FFEA00] uppercase tracking-widest">
+              <div className="mt-1 text-[9px] md:text-xs font-black text-[#FFEA00] uppercase tracking-widest">
                 {row.homeTeam} v {row.awayTeam}
               </div>
             </div>
           </div>
         </div>
-        <span className="bg-[#FF2E63] text-white px-3 py-1.5 text-[10px] font-black uppercase tracking-widest">
+        <span className="shrink-0 bg-[#FF2E63] text-white px-2.5 md:px-3 py-1 md:py-1.5 text-[8px] md:text-[10px] font-black uppercase tracking-widest">
           {play.type}
         </span>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div className="bg-[#1E232B] p-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 md:gap-3">
+        <div className="bg-[#1E232B] p-2.5 md:p-3">
           <div className="text-[9px] font-black text-white/45 uppercase tracking-widest mb-1">
             Score
           </div>
-          <div className="text-lg font-black text-white">
+          <div className="text-base md:text-lg font-black text-white">
             {predictedScore}
           </div>
         </div>
-        <div className="bg-[#1E232B] p-3">
+        <div className="bg-[#1E232B] p-2.5 md:p-3">
           <div className="text-[9px] font-black text-white/45 uppercase tracking-widest mb-1">
             Model %
           </div>
-          <div className="text-lg font-black text-[#00E676]">
+          <div className="text-base md:text-lg font-black text-[#00E676]">
             {formatPercent(play.modelPct, 1)}
           </div>
         </div>
-        <div className="bg-[#1E232B] p-3">
+        <div className="bg-[#1E232B] p-2.5 md:p-3">
           <div className="text-[9px] font-black text-white/45 uppercase tracking-widest mb-1">
             Odds
           </div>
-          <div className="text-lg font-black text-[#FFEA00]">
+          <div className="text-base md:text-lg font-black text-[#FFEA00]">
             ${play.odds.toFixed(2)}
           </div>
         </div>
-        <div className="bg-[#1E232B] p-3">
+        <div className="bg-[#1E232B] p-2.5 md:p-3">
           <div className="text-[9px] font-black text-white/45 uppercase tracking-widest mb-1">
             Bookie
           </div>
-          <div className="text-xs font-black text-white uppercase truncate">
+          <div className="text-[11px] md:text-xs font-black text-white uppercase truncate">
             {play.bookmaker}
           </div>
         </div>
       </div>
-      <div className="mt-4 text-xs font-bold text-white/45 uppercase tracking-widest">
+      <div className="mt-3 md:mt-4 text-[10px] md:text-xs font-bold text-white/45 uppercase tracking-widest leading-relaxed">
         {detail}
       </div>
     </GlassCard>
@@ -4545,6 +4545,12 @@ function BestBetsPage({
     groups[row.match].push(row);
     return groups;
   }, {} as Record<string, TryScorerRow[]>);
+  const predictionByMatch = new Map(
+    data.predictions.map((prediction) => [
+      buildMatchLabelKey(prediction.match),
+      prediction,
+    ]),
+  );
   const tryScorerBestBets = Object.values(tryScorerGroups)
     .flatMap((players) => {
       const keys = getMatchBestBetKeys(players);
@@ -4555,7 +4561,18 @@ function BestBetsPage({
           signal: getTryScorerSignal(row, keys),
         }));
     })
-    .sort((a, b) => b.row.statsInsiderPct - a.row.statsInsiderPct)
+    .sort((a, b) => {
+      const aFixture = predictionByMatch.get(buildMatchLabelKey(a.row.match));
+      const bFixture = predictionByMatch.get(buildMatchLabelKey(b.row.match));
+      const aFixtureTime = aFixture ? getFixtureSortValue(aFixture) : Number.MAX_SAFE_INTEGER;
+      const bFixtureTime = bFixture ? getFixtureSortValue(bFixture) : Number.MAX_SAFE_INTEGER;
+
+      if (aFixtureTime !== bFixtureTime) return aFixtureTime - bFixtureTime;
+      if ((b.signal?.sortRank || 0) !== (a.signal?.sortRank || 0)) {
+        return (b.signal?.sortRank || 0) - (a.signal?.sortRank || 0);
+      }
+      return b.row.statsInsiderPct - a.row.statsInsiderPct;
+    })
     .slice(0, 8);
 
   if (!hasPaidAccess()) {
@@ -4649,54 +4666,54 @@ function BestBetsPage({
             {tryScorerBestBets.map(({ row, signal }) => (
               <GlassCard
                 key={getTryScorerKey(row)}
-                className="p-5 md:p-6 border-l-4 border-l-[#FF2E63]"
+                className="p-4 md:p-6 border-l-4 border-l-[#FF2E63]"
               >
-                <div className="flex items-start justify-between gap-4">
+                <div className="flex items-start justify-between gap-3 md:gap-4">
                   <div className="min-w-0">
-                    <div className="flex items-center gap-3 mb-3">
+                    <div className="flex items-center gap-2.5 md:gap-3 mb-2.5 md:mb-3">
                       <TeamLogo
                         teamName={row.team}
-                        className="w-9 h-9 rounded-sm"
+                        className="w-8 h-8 md:w-9 md:h-9 rounded-sm"
                       />
                       <div>
-                        <div className="text-xl md:text-2xl font-black text-white tracking-tight">
+                        <div className="text-lg md:text-2xl font-black text-white tracking-tight leading-[1.05]">
                           {row.player}
                         </div>
-                        <div className="text-[10px] md:text-xs font-black text-[#FFEA00] uppercase tracking-widest">
+                        <div className="mt-1 text-[9px] md:text-xs font-black text-[#FFEA00] uppercase tracking-widest">
                           {row.team} · {row.position} · R{row.round}
                         </div>
                       </div>
                     </div>
-                    <div className="text-[10px] font-black text-white/40 uppercase tracking-widest">
+                    <div className="text-[9px] md:text-[10px] font-black text-white/40 uppercase tracking-widest">
                       {row.match}
                     </div>
                   </div>
-                  <span className={`shrink-0 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest ${getTryScorerSignalClass(signal?.label)}`}>
+                  <span className={`shrink-0 px-2.5 md:px-3 py-1 md:py-1.5 text-[8px] md:text-[10px] font-black uppercase tracking-widest ${getTryScorerSignalClass(signal?.label)}`}>
                     {signal?.label || "Best Bet"}
                   </span>
                 </div>
-                <div className="mt-5 grid grid-cols-3 gap-3">
-                  <div className="bg-[#1E232B] p-3">
+                <div className="mt-4 md:mt-5 grid grid-cols-3 gap-2.5 md:gap-3">
+                  <div className="bg-[#1E232B] p-2.5 md:p-3">
                     <div className="text-[9px] font-black text-white/45 uppercase tracking-widest mb-1">
                       Model %
                     </div>
-                    <div className="text-lg font-black text-white">
+                    <div className="text-base md:text-lg font-black text-white">
                       {formatPercent(row.statsInsiderPct, 1)}
                     </div>
                   </div>
-                  <div className="bg-[#1E232B] p-3">
+                  <div className="bg-[#1E232B] p-2.5 md:p-3">
                     <div className="text-[9px] font-black text-white/45 uppercase tracking-widest mb-1">
                       Odds
                     </div>
-                    <div className="text-lg font-black text-[#00E676]">
+                    <div className="text-base md:text-lg font-black text-[#00E676]">
                       ${row.bestOdds.toFixed(2)}
                     </div>
                   </div>
-                  <div className="bg-[#1E232B] p-3">
+                  <div className="bg-[#1E232B] p-2.5 md:p-3">
                     <div className="text-[9px] font-black text-white/45 uppercase tracking-widest mb-1">
                       Bookie
                     </div>
-                    <div className="text-xs font-black text-[#FFEA00] uppercase truncate">
+                    <div className="text-[11px] md:text-xs font-black text-[#FFEA00] uppercase truncate">
                       {row.bookmaker || "—"}
                     </div>
                   </div>
