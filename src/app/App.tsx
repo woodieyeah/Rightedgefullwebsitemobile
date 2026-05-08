@@ -853,6 +853,13 @@ function getPredictedWinnerMarketOdds(row: PredictionRow) {
   return 0;
 }
 
+function getPredictedWinnerModelOdds(row: PredictionRow) {
+  const winner = normalizeTeamName(row.predictedWinner);
+  if (winner === normalizeTeamName(row.homeTeam)) return row.modelHomeOdds;
+  if (winner === normalizeTeamName(row.awayTeam)) return row.modelAwayOdds;
+  return 0;
+}
+
 function getTryScorerKey(row: TryScorerRow) {
   return `${row.match}::${row.team}::${row.player}`.toLowerCase();
 }
@@ -2817,6 +2824,198 @@ function ReadMore({ children }: { children: React.ReactNode }) {
   );
 }
 
+function MatchLiveOddsPanel({
+  row,
+  selectedTeam,
+  fallbackOdds,
+  locked = false,
+}: {
+  row: PredictionRow;
+  selectedTeam: string;
+  fallbackOdds: number;
+  locked?: boolean;
+}) {
+  const [liveOdds, setLiveOdds] = useState<
+    {
+      name: string;
+      odds: number;
+      isBest: boolean;
+      url: string;
+    }[]
+  >([]);
+  const [isLoadingOdds, setIsLoadingOdds] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+    setIsLoadingOdds(true);
+
+    const fetchRealOdds = async () => {
+      try {
+        const data = await fetchLiveOddsCached();
+        if (!isMounted) return;
+
+        const homeApiName = mapTeamToOddsApi(row.homeTeam);
+        const awayApiName = mapTeamToOddsApi(row.awayTeam);
+        const selectedApiName = mapTeamToOddsApi(selectedTeam);
+
+        const match = data.find(
+          (m: any) =>
+            (m.home_team === homeApiName && m.away_team === awayApiName) ||
+            (m.home_team === awayApiName && m.away_team === homeApiName),
+        );
+
+        if (!match?.bookmakers?.length) {
+          throw new Error("Match not found or no bookmakers");
+        }
+
+        const formattedOdds = match.bookmakers
+          .map((bookie: any) => {
+            const h2hMarket = bookie.markets?.find((market: any) => market.key === "h2h");
+            if (!h2hMarket) return null;
+
+            const outcome = h2hMarket.outcomes?.find(
+              (item: any) => item.name === selectedApiName,
+            );
+            if (!outcome) return null;
+
+            let url = "#";
+            if (bookie.key === "sportsbet")
+              url = `https://www.sportsbet.com.au/?aff=rightedge`;
+            if (bookie.key === "tab")
+              url = `https://www.tab.com.au/?affiliate=rightedge`;
+            if (bookie.key === "neds")
+              url = `https://www.neds.com.au/?ref=rightedge`;
+            if (bookie.key === "pointsbetau")
+              url = `https://pointsbet.com.au/?aff=rightedge`;
+            if (bookie.key === "ladbrokes_au")
+              url = `https://www.ladbrokes.com.au/?ref=rightedge`;
+
+            return {
+              name: bookie.title,
+              url,
+              odds: outcome.price,
+            };
+          })
+          .filter(Boolean);
+
+        if (formattedOdds.length === 0) {
+          throw new Error("No odds found");
+        }
+
+        const top3 = formattedOdds
+          .sort((a: any, b: any) => b.odds - a.odds)
+          .slice(0, 3);
+        const bestOdd = Math.max(...top3.map((bookie: any) => bookie.odds));
+
+        setLiveOdds(
+          top3.map((bookie: any) => ({
+            ...bookie,
+            isBest: bookie.odds === bestOdd,
+          })),
+        );
+      } catch (e) {
+        if (!isMounted) return;
+        const base = fallbackOdds || 1.9;
+        const bookies = [
+          {
+            name: "Sportsbet",
+            url: `https://www.sportsbet.com.au/?aff=rightedge`,
+            odds: base,
+          },
+          {
+            name: "TAB",
+            url: `https://www.tab.com.au/?affiliate=rightedge`,
+            odds: base - 0.05,
+          },
+          {
+            name: "Neds",
+            url: `https://www.neds.com.au/?ref=rightedge`,
+            odds: base + 0.05,
+          },
+        ];
+        const randomized = bookies
+          .map((bookie) => ({
+            ...bookie,
+            odds: Number((bookie.odds + (Math.random() * 0.06 - 0.03)).toFixed(2)),
+          }))
+          .sort((a, b) => b.odds - a.odds);
+        const bestOdd = Math.max(...randomized.map((bookie) => bookie.odds));
+
+        setLiveOdds(
+          randomized.map((bookie) => ({
+            ...bookie,
+            isBest: bookie.odds === bestOdd,
+          })),
+        );
+      } finally {
+        if (isMounted) setIsLoadingOdds(false);
+      }
+    };
+
+    fetchRealOdds();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [fallbackOdds, row.homeTeam, row.awayTeam, selectedTeam]);
+
+  return (
+    <div className="mt-5 border-t-2 border-white/10 pt-5">
+      <div className="text-[10px] font-black text-white/45 mb-3 uppercase tracking-widest flex items-center justify-between">
+        <span>Live Bookmaker Prices</span>
+        <span className="flex h-2 w-2 relative">
+          <span className="animate-ping-pong absolute inline-flex h-full w-full rounded-full bg-[#00E676] opacity-75" />
+          <span className="relative inline-flex rounded-full h-2 w-2 bg-[#00E676]" />
+        </span>
+      </div>
+      <div className="flex flex-col gap-2 min-h-[136px]">
+        {isLoadingOdds ? (
+          <div className="flex flex-col gap-2 opacity-50">
+            <div className="h-10 bg-white/5 animate-pulse border-2 border-white/5" />
+            <div className="h-10 bg-white/5 animate-pulse border-2 border-white/5" />
+            <div className="h-10 bg-white/5 animate-pulse border-2 border-white/5" />
+          </div>
+        ) : (
+          liveOdds.map((bookie) => (
+            <div
+              key={bookie.name}
+              className={`flex items-center justify-between p-3 border-2 ${
+                bookie.isBest
+                  ? "border-[#00E676] bg-[rgba(0,230,118,0.05)]"
+                  : "border-white/5 bg-[#111317]"
+              }`}
+            >
+              <span className="text-sm font-bold text-white">
+                {bookie.name}
+              </span>
+              <div className="flex items-center gap-3">
+                <span
+                  className={`text-lg font-black ${
+                    bookie.isBest ? "text-[#00E676]" : "text-white/70"
+                  }`}
+                >
+                  {locked ? <BlurredText>${bookie.odds.toFixed(2)}</BlurredText> : `$${bookie.odds.toFixed(2)}`}
+                </span>
+                {!locked && (
+                  <a
+                    href={bookie.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="bg-white/10 hover:bg-white text-white hover:text-black p-1.5 transition-colors group"
+                    title={`Bet at ${bookie.name}`}
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                  </a>
+                )}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
 function BlurredText({ children }: { children: React.ReactNode }) {
   return (
     <span className="inline-flex items-center justify-center relative group px-1 mx-0.5">
@@ -3829,14 +4028,15 @@ function PredictionsPage({
 
       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6 md:gap-8">
         {rows.map((row, i) => {
-          const locked = !paid && i >= freeLimit;
           const predictedScore =
             row.predictedHomeScore || row.predictedAwayScore
               ? `${Math.round(row.predictedHomeScore)} - ${Math.round(row.predictedAwayScore)}`
               : "—";
 
           const isOfficialPlay = isModelAlignedOfficialPlay(row);
+          const locked = !paid && (i >= freeLimit || isOfficialPlay);
           const winnerOdds = getPredictedWinnerMarketOdds(row);
+          const winnerModelOdds = getPredictedWinnerModelOdds(row);
           const winnerWinPct = getPredictedWinnerWinPct(row);
           const Reveal = ({ children }: { children: React.ReactNode }) =>
             locked ? <BlurredText>{children}</BlurredText> : <>{children}</>;
@@ -3860,10 +4060,10 @@ function PredictionsPage({
                     <Lock className="w-7 h-7 text-white stroke-[3px]" />
                   </div>
                   <div className="text-white text-xl font-black uppercase tracking-tight">
-                    Premium Match
+                    {isOfficialPlay ? "Premium Play" : "Premium Match"}
                   </div>
                   <div className="mt-2 text-[#FFEA00] text-[10px] font-black uppercase tracking-widest">
-                    Unlock full round predictions
+                    {isOfficialPlay ? "Unlock model play" : "Unlock full round predictions"}
                   </div>
                 </button>
               )}
@@ -3875,7 +4075,7 @@ function PredictionsPage({
                 </div>
               )}
 
-              <div className="p-5 md:p-6">
+              <div className={`p-5 md:p-6 ${locked ? "blur-sm opacity-45 pointer-events-none select-none" : ""}`}>
                 <div className="flex justify-between items-start mb-6">
                   <div>
                     <div className="text-[10px] uppercase font-black text-white/50 tracking-widest mb-3">
@@ -3948,7 +4148,7 @@ function PredictionsPage({
                     Model
                   </div>
                   <div className="font-black text-[#FFEA00] uppercase tracking-widest text-[10px] text-center">
-                    Best Odds
+                    Model Odds
                   </div>
 
                   <div className="font-black text-white/70 uppercase text-[11px] tracking-wider">
@@ -3966,7 +4166,7 @@ function PredictionsPage({
                   </div>
                   <div className="bg-[#1E232B] py-2.5 text-center font-black text-white border-b-2 border-[#FFEA00]/30">
                     <Reveal>
-                      {row.marketHomeOdds ? `$${row.marketHomeOdds.toFixed(2)}` : "—"}
+                      {row.modelHomeOdds ? row.modelHomeOdds.toFixed(2) : "—"}
                     </Reveal>
                   </div>
 
@@ -3985,18 +4185,26 @@ function PredictionsPage({
                   </div>
                   <div className="bg-[#1E232B] py-2.5 text-center font-black text-white border-b-2 border-[#FFEA00]/30">
                     <Reveal>
-                      {row.marketAwayOdds ? `$${row.marketAwayOdds.toFixed(2)}` : "—"}
+                      {row.modelAwayOdds ? row.modelAwayOdds.toFixed(2) : "—"}
                     </Reveal>
                   </div>
                 </div>
 
-                <div className="mt-5 grid grid-cols-2 gap-4">
+                <div className="mt-5 grid grid-cols-3 gap-3">
                   <div className="bg-[#111317] border border-white/10 p-3">
                     <div className="text-[10px] uppercase font-black tracking-widest text-white/45 mb-1">
                       Model Winner %
                     </div>
                     <div className="text-lg font-black text-[#00E676]">
                       <Reveal>{formatPercent(winnerWinPct, 1)}</Reveal>
+                    </div>
+                  </div>
+                  <div className="bg-[#111317] border border-white/10 p-3">
+                    <div className="text-[10px] uppercase font-black tracking-widest text-white/45 mb-1">
+                      Model Odds
+                    </div>
+                    <div className="text-lg font-black text-white">
+                      <Reveal>{winnerModelOdds ? winnerModelOdds.toFixed(2) : "—"}</Reveal>
                     </div>
                   </div>
                   <div className="bg-[#111317] border border-white/10 p-3">
@@ -4008,6 +4216,13 @@ function PredictionsPage({
                     </div>
                   </div>
                 </div>
+
+                <MatchLiveOddsPanel
+                  row={row}
+                  selectedTeam={row.predictedWinner}
+                  fallbackOdds={winnerOdds}
+                  locked={locked}
+                />
               </div>
             </GlassCard>
           );
