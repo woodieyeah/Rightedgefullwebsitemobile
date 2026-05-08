@@ -4083,18 +4083,12 @@ function PredictionsPage({
   onRequestAccess: (targetHash?: string) => void;
 }) {
   const rows = [...data.predictions].sort(sortPredictionsByFixture);
-  const paid = hasPaidAccess();
-  const freeLimit = 3;
 
   return (
     <div className="flex flex-col gap-6 md:gap-8">
       <SectionHeader
         title="Matches"
-        subtitle={
-          paid
-            ? "Full round model predictions, projected scores and live best odds"
-            : "Premium unlocks the full round model predictions, projected scores and live best odds."
-        }
+        subtitle="Full round model predictions, projected scores and live best odds"
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6 md:gap-8">
@@ -4104,13 +4098,9 @@ function PredictionsPage({
               ? `${Math.round(row.predictedHomeScore)} - ${Math.round(row.predictedAwayScore)}`
               : "—";
 
-          const isOfficialPlay = isModelAlignedOfficialPlay(row);
-          const locked = !paid && (i >= freeLimit || isOfficialPlay);
           const winnerOdds = getPredictedWinnerMarketOdds(row);
           const winnerModelOdds = getPredictedWinnerModelOdds(row);
           const winnerWinPct = getPredictedWinnerWinPct(row);
-          const Reveal = ({ children }: { children: React.ReactNode }) =>
-            locked ? <BlurredText>{children}</BlurredText> : <>{children}</>;
 
           return (
             <GlassCard
@@ -4153,33 +4143,13 @@ function PredictionsPage({
               </div>
 
               <div className="relative px-5 md:px-6 pb-5 md:pb-6">
-                {locked && (
-                  <button
-                    type="button"
-                    onClick={() => onRequestAccess("matches")}
-                    className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-[#05070b]/68 backdrop-blur-[2px] p-5 text-center"
-                  >
-                    <div className="bg-[#FF2E63] p-2.5 mb-3 shadow-[4px_4px_0_0_#0047FF]">
-                      <Lock className="w-6 h-6 text-white stroke-[3px]" />
-                    </div>
-                    <div className="text-white text-lg font-black uppercase tracking-tight">
-                      Premium Match
-                    </div>
-                    <div className="mt-2 text-[#FFEA00] text-[10px] font-black uppercase tracking-widest">
-                      Unlock model details
-                    </div>
-                  </button>
-                )}
-
-                <div className={locked ? "blur-sm opacity-45 pointer-events-none select-none" : ""}>
-
                 <div className="grid grid-cols-2 gap-4 pb-5 border-b-2 border-white/10 mb-5">
                   <div className="bg-[#1E232B] p-3 border-l-4 border-l-[#FFEA00]">
                     <div className="text-[10px] uppercase font-black tracking-widest text-[#FFEA00] mb-1">
                       Proj Score
                     </div>
                     <div className="text-xl md:text-2xl font-black text-white">
-                      <Reveal>{predictedScore}</Reveal>
+                      {predictedScore}
                     </div>
                   </div>
                   <div className="bg-[#1E232B] p-3 border-l-4 border-l-[#00E676]">
@@ -4193,7 +4163,7 @@ function PredictionsPage({
                           className="w-6 h-6 text-[10px]"
                         />
                         <span className="text-sm md:text-base font-black text-white truncate">
-                          <Reveal>{row.predictedWinner}</Reveal>
+                          {row.predictedWinner}
                         </span>
                       </div>
                     ) : (
@@ -4219,38 +4189,30 @@ function PredictionsPage({
                     Home
                   </div>
                   <div className="bg-[#1E232B] py-2.5 text-center font-black text-white border-b-2 border-[#00E676]/30">
-                    <Reveal>
-                      {formatPercent(
-                        getImpliedWinPctFromOdds(
-                          row.modelHomeOdds,
-                        ),
-                        1,
-                      )}
-                    </Reveal>
+                    {formatPercent(
+                      getImpliedWinPctFromOdds(
+                        row.modelHomeOdds,
+                      ),
+                      1,
+                    )}
                   </div>
                   <div className="bg-[#1E232B] py-2.5 text-center font-black text-white border-b-2 border-[#FFEA00]/30">
-                    <Reveal>
-                      {row.modelHomeOdds ? row.modelHomeOdds.toFixed(2) : "—"}
-                    </Reveal>
+                    {row.modelHomeOdds ? row.modelHomeOdds.toFixed(2) : "—"}
                   </div>
 
                   <div className="font-black text-white/70 uppercase text-[11px] tracking-wider">
                     Away
                   </div>
                   <div className="bg-[#1E232B] py-2.5 text-center font-black text-white border-b-2 border-[#00E676]/30">
-                    <Reveal>
-                      {formatPercent(
-                        getImpliedWinPctFromOdds(
-                          row.modelAwayOdds,
-                        ),
-                        1,
-                      )}
-                    </Reveal>
+                    {formatPercent(
+                      getImpliedWinPctFromOdds(
+                        row.modelAwayOdds,
+                      ),
+                      1,
+                    )}
                   </div>
                   <div className="bg-[#1E232B] py-2.5 text-center font-black text-white border-b-2 border-[#FFEA00]/30">
-                    <Reveal>
-                      {row.modelAwayOdds ? row.modelAwayOdds.toFixed(2) : "—"}
-                    </Reveal>
+                    {row.modelAwayOdds ? row.modelAwayOdds.toFixed(2) : "—"}
                   </div>
                 </div>
 
@@ -4260,7 +4222,7 @@ function PredictionsPage({
                       Model Winner %
                     </div>
                     <div className="text-lg font-black text-[#00E676]">
-                      <Reveal>{formatPercent(winnerWinPct, 1)}</Reveal>
+                      {formatPercent(winnerWinPct, 1)}
                     </div>
                   </div>
                   <div className="bg-[#111317] border border-white/10 p-3">
@@ -4268,7 +4230,7 @@ function PredictionsPage({
                       Model Odds
                     </div>
                     <div className="text-lg font-black text-white">
-                      <Reveal>{winnerModelOdds ? winnerModelOdds.toFixed(2) : "—"}</Reveal>
+                      {winnerModelOdds ? winnerModelOdds.toFixed(2) : "—"}
                     </div>
                   </div>
                   <div className="bg-[#111317] border border-white/10 p-3">
@@ -4276,7 +4238,7 @@ function PredictionsPage({
                       Best Odds
                     </div>
                     <div className="text-lg font-black text-[#FFEA00]">
-                      <Reveal>{winnerOdds ? `$${winnerOdds.toFixed(2)}` : "—"}</Reveal>
+                      {winnerOdds ? `$${winnerOdds.toFixed(2)}` : "—"}
                     </div>
                   </div>
                 </div>
@@ -4285,34 +4247,13 @@ function PredictionsPage({
                   row={row}
                   selectedTeam={row.predictedWinner}
                   fallbackOdds={winnerOdds}
-                  locked={locked}
+                  locked={false}
                 />
-                </div>
               </div>
             </GlassCard>
           );
         })}
       </div>
-
-      {!paid && rows.length > freeLimit && (
-        <GlassCard className="p-6 md:p-8 !border-[#FF2E63] !shadow-[6px_6px_0_0_#0047FF] text-center">
-          <div className="text-2xl md:text-4xl font-black text-white uppercase tracking-tight mb-3">
-            Unlock the full round
-          </div>
-          <p className="text-white/65 font-bold text-sm md:text-base max-w-2xl mx-auto mb-6">
-            Premium unlocks every projected score, model win percentage,
-            live best odds and the Try Scorer plays.
-          </p>
-          <button
-            type="button"
-            onClick={() => onRequestAccess("matches")}
-            className="inline-flex items-center justify-center gap-3 bg-[#FF2E63] text-white px-8 py-4 text-base font-black uppercase tracking-wider hover:bg-[#E62959] transition-colors shadow-[4px_4px_0_0_#0047FF]"
-          >
-            Unlock Premium Plays — $9/week
-            <ArrowRight className="w-5 h-5 stroke-[3px]" />
-          </button>
-        </GlassCard>
-      )}
     </div>
   );
 }
