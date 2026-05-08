@@ -865,10 +865,23 @@ function getFixtureSortValue(row: PredictionRow) {
 
   const iso = row.fixture.dateISO || "";
   const time = row.fixture.aedt || row.fixture.local || "";
+  const timeMatch = time.match(/(\d{1,2})(?::(\d{2}))?\s*(AM|PM)/i);
+  const dateOnly = Date.parse(iso);
+
+  if (Number.isFinite(dateOnly) && timeMatch) {
+    let hours = Number(timeMatch[1]);
+    const minutes = Number(timeMatch[2] || 0);
+    const meridiem = timeMatch[3].toUpperCase();
+
+    if (meridiem === "PM" && hours < 12) hours += 12;
+    if (meridiem === "AM" && hours === 12) hours = 0;
+
+    return dateOnly + hours * 60 * 60 * 1000 + minutes * 60 * 1000;
+  }
+
   const dateTime = Date.parse(`${iso} ${time}`);
   if (Number.isFinite(dateTime)) return dateTime;
 
-  const dateOnly = Date.parse(iso);
   return Number.isFinite(dateOnly) ? dateOnly : Number.MAX_SAFE_INTEGER;
 }
 
@@ -4062,39 +4075,10 @@ function PredictionsPage({
           return (
             <GlassCard
               key={i}
-              className={`p-0 relative overflow-hidden transition-transform duration-300 hover:-translate-y-1 ${
-                !locked && isOfficialPlay
-                  ? "!shadow-[8px_8px_0_0_#FF2E63] !border-[#FF2E63]"
-                  : ""
-              }`}
+              className="p-0 relative overflow-hidden transition-transform duration-300 hover:-translate-y-1"
             >
-              {locked && (
-                <button
-                  type="button"
-                  onClick={() => onRequestAccess("matches")}
-                  className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-[#05070b]/72 backdrop-blur-[2px] p-6 text-center"
-                >
-                  <div className="bg-[#FF2E63] p-3 mb-4 shadow-[4px_4px_0_0_#0047FF]">
-                    <Lock className="w-7 h-7 text-white stroke-[3px]" />
-                  </div>
-                  <div className="text-white text-xl font-black uppercase tracking-tight">
-                    {isOfficialPlay ? "Premium Play" : "Premium Match"}
-                  </div>
-                  <div className="mt-2 text-[#FFEA00] text-[10px] font-black uppercase tracking-widest">
-                    {isOfficialPlay ? "Unlock model play" : "Unlock full round predictions"}
-                  </div>
-                </button>
-              )}
-
-              {!locked && isOfficialPlay && (
-                <div className="absolute top-0 right-0 bg-[#FF2E63] text-white px-3 py-1.5 text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5 z-20 shadow-[-4px_4px_0_0_rgba(0,0,0,0.3)]">
-                  <Flame className="w-3.5 h-3.5" /> Official
-                  Play
-                </div>
-              )}
-
-              <div className={`p-5 md:p-6 ${locked ? "blur-sm opacity-45 pointer-events-none select-none" : ""}`}>
-                <div className="flex justify-between items-start mb-6">
+              <div className="p-5 md:p-6">
+                <div className="flex justify-between items-start">
                   <div>
                     <div className="text-[10px] uppercase font-black text-white/50 tracking-widest mb-3">
                       {row.fixture
@@ -4126,6 +4110,28 @@ function PredictionsPage({
                     </div>
                   </div>
                 </div>
+              </div>
+
+              <div className="relative px-5 md:px-6 pb-5 md:pb-6">
+                {locked && (
+                  <button
+                    type="button"
+                    onClick={() => onRequestAccess("matches")}
+                    className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-[#05070b]/68 backdrop-blur-[2px] p-5 text-center"
+                  >
+                    <div className="bg-[#FF2E63] p-2.5 mb-3 shadow-[4px_4px_0_0_#0047FF]">
+                      <Lock className="w-6 h-6 text-white stroke-[3px]" />
+                    </div>
+                    <div className="text-white text-lg font-black uppercase tracking-tight">
+                      Premium Match
+                    </div>
+                    <div className="mt-2 text-[#FFEA00] text-[10px] font-black uppercase tracking-widest">
+                      Unlock model details
+                    </div>
+                  </button>
+                )}
+
+                <div className={locked ? "blur-sm opacity-45 pointer-events-none select-none" : ""}>
 
                 <div className="grid grid-cols-2 gap-4 pb-5 border-b-2 border-white/10 mb-5">
                   <div className="bg-[#1E232B] p-3 border-l-4 border-l-[#FFEA00]">
@@ -4241,6 +4247,7 @@ function PredictionsPage({
                   fallbackOdds={winnerOdds}
                   locked={locked}
                 />
+                </div>
               </div>
             </GlassCard>
           );
