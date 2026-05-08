@@ -860,6 +860,24 @@ function getPredictedWinnerModelOdds(row: PredictionRow) {
   return 0;
 }
 
+function getFixtureSortValue(row: PredictionRow) {
+  if (!row.fixture) return Number.MAX_SAFE_INTEGER;
+
+  const iso = row.fixture.dateISO || "";
+  const time = row.fixture.aedt || row.fixture.local || "";
+  const dateTime = Date.parse(`${iso} ${time}`);
+  if (Number.isFinite(dateTime)) return dateTime;
+
+  const dateOnly = Date.parse(iso);
+  return Number.isFinite(dateOnly) ? dateOnly : Number.MAX_SAFE_INTEGER;
+}
+
+function sortPredictionsByFixture(a: PredictionRow, b: PredictionRow) {
+  const timeDiff = getFixtureSortValue(a) - getFixtureSortValue(b);
+  if (timeDiff !== 0) return timeDiff;
+  return a.match.localeCompare(b.match);
+}
+
 function getTryScorerKey(row: TryScorerRow) {
   return `${row.match}::${row.team}::${row.player}`.toLowerCase();
 }
@@ -2380,7 +2398,7 @@ function mapTeamToOddsApi(team: string): string {
 // Module level cache to prevent concurrent fetch requests from multiple cards
 let fetchOddsPromise: Promise<any> | null = null;
 const ODDS_CACHE_KEY = "rightedge_odds_cache_v3";
-const ODDS_CACHE_DURATION = 4 * 60 * 60 * 1000; // 4 hours in milliseconds
+const ODDS_CACHE_DURATION = 5 * 60 * 1000; // Keep kickoff-day prices fresh without hammering the edge function
 
 async function fetchLiveOddsCached() {
   // 1. Check local storage cache
@@ -4011,7 +4029,7 @@ function PredictionsPage({
   data: DashboardData;
   onRequestAccess: (targetHash?: string) => void;
 }) {
-  const rows = data.predictions;
+  const rows = [...data.predictions].sort(sortPredictionsByFixture);
   const paid = hasPaidAccess();
   const freeLimit = 3;
 
@@ -4022,7 +4040,7 @@ function PredictionsPage({
         subtitle={
           paid
             ? "Full round model predictions, projected scores and live best odds"
-            : "Free members get 3 match predictions. Premium unlocks the full round."
+            : "Premium unlocks the full round model predictions, projected scores and live best odds."
         }
       />
 
@@ -4235,8 +4253,8 @@ function PredictionsPage({
             Unlock the full round
           </div>
           <p className="text-white/65 font-bold text-sm md:text-base max-w-2xl mx-auto mb-6">
-            Free members get 3 match predictions. Premium unlocks every projected score,
-            model win percentage, live best odds and the Try Scorer plays.
+            Premium unlocks every projected score, model win percentage,
+            live best odds and the Try Scorer plays.
           </p>
           <button
             type="button"
@@ -4252,6 +4270,232 @@ function PredictionsPage({
   );
 }
 
+type PremiumMarketPlay = {
+  id: string;
+  row: PredictionRow;
+  type: "Line" | "Total" | "Head 2 Head";
+  selection: string;
+  bookmaker: string;
+  odds: number;
+  modelPct: number;
+  modelEdge: number;
+  marketPoint?: number;
+  projectedValue?: number;
+};
+
+function probabilityFromEdge(edge: number, scale = 7.5) {
+  return Math.max(1, Math.min(99, (1 / (1 + Math.exp(-(edge / scale)))) * 100));
+}
+
+function getBestPremiumMarketPlayForMatch(
+  row: PredictionRow,
+  marketMap: SgmMarketMap,
+): PremiumMarketPlay | null {
+  const matchMarkets = getSgmMatchMarkets(marketMap, row);
+  const candidates: PremiumMarketPlay[] = [];
+  const projectedTotal = row.predictedHomeScore + row.predictedAwayScore;
+  const projectedHomeMargin = row.predictedHomeScore - row.predictedAwayScore;
+  const predictedWinner = normalizeTeamName(row.predictedWinner);
+  const winnerWinPct = getPredictedWinnerWinPct(row);
+
+  Object.entries(matchMarkets).forEach(([bookKey, bookData]) => {
+    const bookmaker = displayBookmakerName(bookKey);
+
+    bookData.spreads.forEach((spread) => {
+      const team = normalizeTeamName(spread.team);
+      const projectedTeamMargin =
+        team === normalizeTeamName(row.homeTeam)
+          ? projectedHomeMargin
+          : -projectedHomeMargin;
+      const coverEdge = projectedTeamMargin + spread.point;
+      const modelPct = probabilityFromEdge(coverEdge, 7.5);
+
+      if (modelPct < 53 || spread.odds < 1.55) return;
+
+      candidates.push({
+        id: `${row.match}-${bookKey}-line-${team}-${spread.point}`,
+        row,
+        type: "Line",
+        selection: `${team} ${formatSgmLine(spread.point)}`,
+        bookmaker,
+        odds: spread.odds,
+        modelPct,
+        modelEdge: coverEdge,
+        marketPoint: spread.point,
+        projectedValue: projectedTeamMargin,
+      });
+    });
+
+    bookData.totals.forEach((total) => {
+      if (!projectedTotal) return;
+
+      const edge =
+        total.side === "Over"
+          ? projectedTotal - total.point
+          : total.point - projectedTotal;
+      const modelPct = probabilityFromEdge(edge, 8);
+
+      if (modelPct < 53 || total.odds < 1.55) return;
+
+      candidates.push({
+        id: `${row.match}-${bookKey}-total-${total.side}-${total.point}`,
+        row,
+        type: "Total",
+        selection: `${total.side} ${total.point}`,
+        bookmaker,
+        odds: total.odds,
+        modelPct,
+        modelEdge: edge,
+        marketPoint: total.point,
+        projectedValue: projectedTotal,
+      });
+    });
+
+    Object.entries(bookData.h2h).forEach(([team, odds]) => {
+      if (normalizeTeamName(team) !== predictedWinner) return;
+      if (winnerWinPct < 55 || odds < 1.35) return;
+
+      candidates.push({
+        id: `${row.match}-${bookKey}-h2h-${team}`,
+        row,
+        type: "Head 2 Head",
+        selection: `${team} head-to-head`,
+        bookmaker,
+        odds,
+        modelPct: winnerWinPct,
+        modelEdge: winnerWinPct - getImpliedWinPctFromOdds(odds),
+        projectedValue: Math.abs(projectedHomeMargin),
+      });
+    });
+  });
+
+  if (!candidates.length) {
+    const odds = getPredictedWinnerMarketOdds(row);
+    if (winnerWinPct >= 55 && odds >= 1.35) {
+      return {
+        id: `${row.match}-fallback-h2h`,
+        row,
+        type: "Head 2 Head",
+        selection: `${row.predictedWinner} head-to-head`,
+        bookmaker: "Best available",
+        odds,
+        modelPct: winnerWinPct,
+        modelEdge: winnerWinPct - getImpliedWinPctFromOdds(odds),
+        projectedValue: Math.abs(projectedHomeMargin),
+      };
+    }
+    return null;
+  }
+
+  return candidates.sort((a, b) => {
+    const typeRank = (play: PremiumMarketPlay) =>
+      play.type === "Line" ? 3 : play.type === "Total" ? 2 : 1;
+    const aScore = a.modelPct + Math.min(8, Math.max(0, (a.odds - 1.8) * 6)) + typeRank(a);
+    const bScore = b.modelPct + Math.min(8, Math.max(0, (b.odds - 1.8) * 6)) + typeRank(b);
+    return bScore - aScore;
+  })[0];
+}
+
+function buildPremiumMarketPlays(
+  data: DashboardData,
+  marketMap: SgmMarketMap,
+) {
+  const settledMatchKeys = new Set(
+    data.betLog
+      .filter((b) => b.result === "W" || b.result === "L")
+      .map((b) => buildMatchLabelKey(b.match)),
+  );
+
+  return [...data.predictions]
+    .sort(sortPredictionsByFixture)
+    .filter((row) => !settledMatchKeys.has(buildMatchLabelKey(row.match)))
+    .map((row) => getBestPremiumMarketPlayForMatch(row, marketMap))
+    .filter(Boolean) as PremiumMarketPlay[];
+}
+
+function PremiumMarketPlayCard({ play }: { play: PremiumMarketPlay }) {
+  const { row } = play;
+  const predictedScore =
+    row.predictedHomeScore || row.predictedAwayScore
+      ? `${Math.round(row.predictedHomeScore)}-${Math.round(row.predictedAwayScore)}`
+      : "—";
+  const detail =
+    play.type === "Line"
+      ? `Model margin ${play.projectedValue && play.projectedValue > 0 ? "+" : ""}${Math.round(play.projectedValue || 0)} vs market ${formatSgmLine(play.marketPoint || 0)}`
+      : play.type === "Total"
+        ? `Model total ${Math.round(play.projectedValue || 0)} vs market ${play.marketPoint}`
+        : `Model winner ${formatPercent(play.modelPct, 1)} vs market ${formatPercent(getImpliedWinPctFromOdds(play.odds), 1)}`;
+
+  return (
+    <GlassCard className="p-5 md:p-6 border-l-4 border-l-[#00E676]">
+      <div className="flex items-start justify-between gap-4 mb-5">
+        <div>
+          <div className="text-[10px] uppercase font-black text-white/45 tracking-widest mb-2">
+            {row.fixture
+              ? `${row.fixture.day} ${row.fixture.dateLabel} @ ${row.fixture.aedt} AEST`
+              : "Time TBC"}
+          </div>
+          <div className="flex items-center gap-3">
+            <TeamLogo
+              teamName={play.type === "Total" ? row.predictedWinner : play.selection}
+              className="w-11 h-11 rounded-sm shadow-[2px_2px_0_0_rgba(255,255,255,0.1)]"
+            />
+            <div>
+              <div className="text-2xl md:text-3xl font-black text-white uppercase tracking-tight">
+                {play.selection}
+              </div>
+              <div className="text-[10px] md:text-xs font-black text-[#FFEA00] uppercase tracking-widest">
+                {row.homeTeam} v {row.awayTeam}
+              </div>
+            </div>
+          </div>
+        </div>
+        <span className="bg-[#FF2E63] text-white px-3 py-1.5 text-[10px] font-black uppercase tracking-widest">
+          {play.type}
+        </span>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="bg-[#1E232B] p-3">
+          <div className="text-[9px] font-black text-white/45 uppercase tracking-widest mb-1">
+            Score
+          </div>
+          <div className="text-lg font-black text-white">
+            {predictedScore}
+          </div>
+        </div>
+        <div className="bg-[#1E232B] p-3">
+          <div className="text-[9px] font-black text-white/45 uppercase tracking-widest mb-1">
+            Model %
+          </div>
+          <div className="text-lg font-black text-[#00E676]">
+            {formatPercent(play.modelPct, 1)}
+          </div>
+        </div>
+        <div className="bg-[#1E232B] p-3">
+          <div className="text-[9px] font-black text-white/45 uppercase tracking-widest mb-1">
+            Odds
+          </div>
+          <div className="text-lg font-black text-[#FFEA00]">
+            ${play.odds.toFixed(2)}
+          </div>
+        </div>
+        <div className="bg-[#1E232B] p-3">
+          <div className="text-[9px] font-black text-white/45 uppercase tracking-widest mb-1">
+            Bookie
+          </div>
+          <div className="text-xs font-black text-white uppercase truncate">
+            {play.bookmaker}
+          </div>
+        </div>
+      </div>
+      <div className="mt-4 text-xs font-bold text-white/45 uppercase tracking-widest">
+        {detail}
+      </div>
+    </GlassCard>
+  );
+}
+
 function BestBetsPage({
   data,
   onRequestAccess,
@@ -4259,27 +4503,35 @@ function BestBetsPage({
   data: DashboardData;
   onRequestAccess: (targetHash?: string) => void;
 }) {
-  const settledMatchKeys = new Set(
-    data.betLog
-      .filter((b) => b.result === "W" || b.result === "L")
-      .map((b) => b.match.toLowerCase()),
-  );
+  const [marketMap, setMarketMap] = useState<SgmMarketMap>({});
+  const [isLoadingMarkets, setIsLoadingMarkets] = useState(true);
 
-  const matchReads = data.predictions
-    .filter((row) => !settledMatchKeys.has(row.match.toLowerCase()))
-    .map((row) => ({
-      row,
-      winPct: getPredictedWinnerWinPct(row),
-      margin: Math.abs((row.predictedHomeScore || 0) - (row.predictedAwayScore || 0)),
-      odds: getPredictedWinnerMarketOdds(row),
-    }))
-    .filter((play) => play.winPct >= 50.5)
-    .sort((a, b) => {
-      if (b.winPct !== a.winPct) return b.winPct - a.winPct;
-      if (b.margin !== a.margin) return b.margin - a.margin;
-      return b.odds - a.odds;
-    })
-    .slice(0, 4);
+  useEffect(() => {
+    let isMounted = true;
+    setIsLoadingMarkets(true);
+
+    fetchLiveOddsCached()
+      .then((rawOdds) => {
+        if (!isMounted) return;
+        setMarketMap(buildSgmMarketMap(rawOdds));
+      })
+      .catch(() => {
+        if (!isMounted) return;
+        setMarketMap({});
+      })
+      .finally(() => {
+        if (isMounted) setIsLoadingMarkets(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const matchReads = useMemo(
+    () => buildPremiumMarketPlays(data, marketMap).slice(0, 8),
+    [data, marketMap],
+  );
 
   const latestTryScorerRound = Math.max(
     0,
@@ -4350,13 +4602,19 @@ function BestBetsPage({
       <div className="flex flex-col gap-4">
         <div>
           <h3 className="text-lg md:text-2xl font-black text-white uppercase tracking-tight">
-            Best Match Reads
+            Best Match Plays
           </h3>
           <div className="text-[10px] md:text-xs font-black text-white/45 uppercase tracking-widest mt-1">
-            Predicted winners ranked by model confidence
+            Model margin and total compared against current market lines
           </div>
         </div>
-        {matchReads.length === 0 ? (
+        {isLoadingMarkets ? (
+          <GlassCard className="p-4 md:p-8 text-center border-l-4 border-l-white/20">
+            <div className="text-white/50 font-bold uppercase tracking-widest text-[10px] md:text-base">
+              Loading live line and total prices...
+            </div>
+          </GlassCard>
+        ) : matchReads.length === 0 ? (
           <GlassCard className="p-4 md:p-8 text-center border-l-4 border-l-white/20">
             <div className="text-white/50 font-bold uppercase tracking-widest text-[10px] md:text-base">
               No match reads available right now.
@@ -4364,68 +4622,8 @@ function BestBetsPage({
           </GlassCard>
         ) : (
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 md:gap-6">
-            {matchReads.map(({ row, winPct, margin, odds }) => (
-            <GlassCard
-              key={row.match}
-              className="p-5 md:p-6 border-l-4 border-l-[#00E676]"
-            >
-              <div className="flex items-start justify-between gap-4 mb-5">
-                <div>
-                  <div className="text-[10px] uppercase font-black text-white/45 tracking-widest mb-2">
-                    {row.fixture
-                      ? `${row.fixture.day} ${row.fixture.dateLabel} @ ${row.fixture.aedt} AEST`
-                      : "Time TBC"}
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <TeamLogo
-                      teamName={row.predictedWinner}
-                      className="w-11 h-11 rounded-sm shadow-[2px_2px_0_0_rgba(255,255,255,0.1)]"
-                    />
-                    <div>
-                      <div className="text-2xl md:text-3xl font-black text-white uppercase tracking-tight">
-                        {row.predictedWinner}
-                      </div>
-                      <div className="text-[10px] md:text-xs font-black text-[#FFEA00] uppercase tracking-widest">
-                        {row.homeTeam} v {row.awayTeam}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <span className="bg-[#FF2E63] text-white px-3 py-1.5 text-[10px] font-black uppercase tracking-widest">
-                  Model Read
-                </span>
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                <div className="bg-[#1E232B] p-3">
-                  <div className="text-[9px] font-black text-white/45 uppercase tracking-widest mb-1">
-                    Score
-                  </div>
-                  <div className="text-lg font-black text-white">
-                    {Math.round(row.predictedHomeScore)}-{Math.round(row.predictedAwayScore)}
-                  </div>
-                </div>
-                <div className="bg-[#1E232B] p-3">
-                  <div className="text-[9px] font-black text-white/45 uppercase tracking-widest mb-1">
-                    Model %
-                  </div>
-                  <div className="text-lg font-black text-[#00E676]">
-                    {formatPercent(winPct, 1)}
-                  </div>
-                </div>
-                <div className="bg-[#1E232B] p-3">
-                  <div className="text-[9px] font-black text-white/45 uppercase tracking-widest mb-1">
-                    Best Odds
-                  </div>
-                  <div className="text-lg font-black text-[#FFEA00]">
-                    {odds ? `$${odds.toFixed(2)}` : "—"}
-                  </div>
-                </div>
-              </div>
-              <div className="mt-4 text-xs font-bold text-white/45 uppercase tracking-widest">
-                Projected margin: {margin} points
-              </div>
-            </GlassCard>
+            {matchReads.map((play) => (
+              <PremiumMarketPlayCard key={play.id} play={play} />
             ))}
           </div>
         )}
