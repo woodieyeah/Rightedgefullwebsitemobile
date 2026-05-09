@@ -876,6 +876,10 @@ async function fetchLiveOddsRaw(force = false) {
 
   if (!response.ok) {
     const text = await response.text();
+    if (parsedCachedOdds) {
+      console.warn(`[OddsAPI] Returning cached match odds after API error: ${text}`);
+      return await applyPrematchOddsLocks(parsedCachedOdds, "cache");
+    }
     throw new Error(`Failed to fetch from The Odds API: ${text}`);
   }
 
@@ -1045,8 +1049,9 @@ async function fetchTryScorerEventOdds(event: any, force = false) {
     };
   }
 
-  // Player props are fetched event-by-event, so cache a little longer than h2h.
-  if (!force && parsedCachedOdds && cacheTime && (now - Number(cacheTime)) < 300000) {
+  // Player props are fetched event-by-event and are expensive on the free plan.
+  // Keep them aligned with the main odds cache unless explicitly refreshed.
+  if (!force && parsedCachedOdds && cacheTime && (now - Number(cacheTime)) < MATCH_ODDS_CACHE_MS) {
     return parsedCachedOdds;
   }
 
@@ -1055,6 +1060,10 @@ async function fetchTryScorerEventOdds(event: any, force = false) {
 
   if (!response.ok) {
     const text = await response.text();
+    if (parsedCachedOdds) {
+      console.warn(`[TryScorerOdds] Returning cached event ${eventId} after API error: ${text}`);
+      return parsedCachedOdds;
+    }
     console.warn(`[TryScorerOdds] Failed event ${eventId}: ${text}`);
     return {
       id: eventId,
@@ -1150,9 +1159,31 @@ async function refreshBestTryScorerOdds(force = false) {
   return payload;
 }
 
+function allowOddsForceRefresh(c: any) {
+  if (c.req.query("force") !== "true") return false;
+
+  const configuredToken = Deno.env.get("ODDS_REFRESH_TOKEN");
+  if (!configuredToken) {
+    console.warn("[OddsAPI] Ignoring force=true because ODDS_REFRESH_TOKEN is not configured.");
+    return false;
+  }
+
+  const requestToken =
+    c.req.header("x-rightedge-odds-refresh-token") ||
+    c.req.query("refreshToken") ||
+    "";
+
+  if (requestToken !== configuredToken) {
+    console.warn("[OddsAPI] Ignoring force=true because refresh token did not match.");
+    return false;
+  }
+
+  return true;
+}
+
 app.get("/live-odds", async (c) => {
   try {
-    const force = c.req.query("force") === "true";
+    const force = allowOddsForceRefresh(c);
     const data = await fetchLiveOddsRaw(force);
     return c.json(data);
   } catch (err: any) {
@@ -1163,7 +1194,7 @@ app.get("/live-odds", async (c) => {
 
 app.get("/best-match-odds", async (c) => {
   try {
-    const force = c.req.query("force") === "true";
+    const force = allowOddsForceRefresh(c);
     const format = c.req.query("format") || "json";
     const payload = await refreshBestMatchOdds(force);
 
@@ -1192,7 +1223,7 @@ app.get("/best-match-odds", async (c) => {
 
 app.get("/best-try-scorer-odds", async (c) => {
   try {
-    const force = c.req.query("force") === "true";
+    const force = allowOddsForceRefresh(c);
     const format = c.req.query("format") || "json";
     const payload = await refreshBestTryScorerOdds(force);
 
