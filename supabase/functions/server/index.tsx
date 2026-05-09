@@ -728,10 +728,10 @@ app.get("/kv-namespace-scan", async (c) => {
 function normalizeNrlTeamName(team: string) {
   const t = String(team || "").toLowerCase();
   if (t.includes("bronco") || t.includes("brisbane")) return "Brisbane Broncos";
+  if (t.includes("rabbitoh") || t.includes("south")) return "South Sydney Rabbitohs";
   if (t.includes("rooster") || t.includes("sydney")) return "Sydney Roosters";
   if (t.includes("storm") || t.includes("melbourne")) return "Melbourne Storm";
   if (t.includes("panther") || t.includes("penrith")) return "Penrith Panthers";
-  if (t.includes("rabbitoh") || t.includes("south")) return "South Sydney Rabbitohs";
   if (t.includes("eel") || t.includes("parramatta")) return "Parramatta Eels";
   if (t.includes("shark") || t.includes("cronulla")) return "Cronulla Sharks";
   if (t.includes("cowboy") || t.includes("north queensland") || t.includes("north qld")) return "North Queensland Cowboys";

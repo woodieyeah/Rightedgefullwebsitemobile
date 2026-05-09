@@ -2414,14 +2414,14 @@ function mapTeamToOddsApi(team: string): string {
   const t = team.toLowerCase();
   if (t.includes("bronco") || t.includes("brisbane"))
     return "Brisbane Broncos";
+  if (t.includes("rabbitoh") || t.includes("south"))
+    return "South Sydney Rabbitohs";
   if (t.includes("rooster") || t.includes("sydney"))
     return "Sydney Roosters";
   if (t.includes("storm") || t.includes("melbourne"))
     return "Melbourne Storm";
   if (t.includes("panther") || t.includes("penrith"))
     return "Penrith Panthers";
-  if (t.includes("rabbitoh") || t.includes("south"))
-    return "South Sydney Rabbitohs";
   if (t.includes("eel") || t.includes("parramatta"))
     return "Parramatta Eels";
   if (t.includes("shark") || t.includes("cronulla"))

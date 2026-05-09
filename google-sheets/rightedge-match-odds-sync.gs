@@ -265,10 +265,10 @@ function syncRightEdgeTryScorerOdds() {
 function normalizeRightEdgeSheetTeam(team) {
   const t = String(team || '').toLowerCase().trim();
   if (t.includes('bronco') || t.includes('brisbane')) return 'Brisbane';
+  if (t.includes('rabbitoh') || t === 'souths' || t.includes('south sydney')) return 'Souths';
   if (t.includes('rooster') || t.includes('sydney')) return 'Sydney';
   if (t.includes('storm') || t.includes('melbourne')) return 'Melbourne';
   if (t.includes('panther') || t.includes('penrith')) return 'Penrith';
-  if (t.includes('rabbitoh') || t === 'souths' || t.includes('south sydney')) return 'Souths';
   if (t.includes('eel') || t.includes('parramatta')) return 'Parramatta';
   if (t.includes('shark') || t.includes('cronulla')) return 'Cronulla';
   if (t.includes('cowboy') || t.includes('north queensland') || t.includes('north qld')) return 'North Qld';
