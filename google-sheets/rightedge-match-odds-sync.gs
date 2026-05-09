@@ -13,9 +13,9 @@
  */
 
 const RIGHTEDGE_MATCH_ODDS_URL =
-  'https://spahmuawycgohcznathc.supabase.co/functions/v1/make-server-3b84b96c/best-match-odds?format=sheets&force=true';
+  'https://spahmuawycgohcznathc.supabase.co/functions/v1/make-server-3b84b96c/best-match-odds?format=sheets';
 const RIGHTEDGE_TRY_SCORER_ODDS_URL =
-  'https://spahmuawycgohcznathc.supabase.co/functions/v1/make-server-3b84b96c/best-try-scorer-odds?format=sheets&force=true';
+  'https://spahmuawycgohcznathc.supabase.co/functions/v1/make-server-3b84b96c/best-try-scorer-odds?format=sheets';
 
 function onOpen() {
   SpreadsheetApp.getUi()
@@ -55,11 +55,24 @@ function syncRightEdgeMatchOdds() {
   oddsRows.forEach(row => {
     const home = normalizeRightEdgeSheetTeam(row[0]);
     const away = normalizeRightEdgeSheetTeam(row[1]);
-    oddsByMatch[home + ' v ' + away] = {
+    const exactKey = home + ' v ' + away;
+    const reverseKey = away + ' v ' + home;
+
+    oddsByMatch[exactKey] = {
       homeOdds: Number(row[2]) || '',
       awayOdds: Number(row[3]) || '',
       homeBookmaker: row[4] || '',
       awayBookmaker: row[5] || '',
+      updatedAt: row[7] || payload.updatedAt || '',
+    };
+
+    // If the sheet has the teams reversed, still match the fixture but swap
+    // the prices. If the sheet has the wrong opponent, it will remain unmatched.
+    oddsByMatch[reverseKey] = {
+      homeOdds: Number(row[3]) || '',
+      awayOdds: Number(row[2]) || '',
+      homeBookmaker: row[5] || '',
+      awayBookmaker: row[4] || '',
       updatedAt: row[7] || payload.updatedAt || '',
     };
   });
@@ -68,6 +81,8 @@ function syncRightEdgeMatchOdds() {
   const currentOdds = sh.getRange(2, 9, lastRow - 1, 2).getValues();
   const nextOdds = [];
   let updatedCount = 0;
+  let clearedCount = 0;
+  const unmatchedMatches = [];
 
   matches.forEach((row, idx) => {
     const home = normalizeRightEdgeSheetTeam(row[0]);
@@ -78,7 +93,11 @@ function syncRightEdgeMatchOdds() {
       nextOdds.push([matchOdds.homeOdds, matchOdds.awayOdds]);
       updatedCount++;
     } else {
-      nextOdds.push(currentOdds[idx]);
+      // Clear stale prices for fixtures that no longer exist in the API feed.
+      // Keeping old odds here can make the sheet look like it synced the wrong game.
+      nextOdds.push(['', '']);
+      if (currentOdds[idx][0] || currentOdds[idx][1]) clearedCount++;
+      unmatchedMatches.push(home + ' v ' + away);
     }
   });
 
@@ -92,7 +111,10 @@ function syncRightEdgeMatchOdds() {
   const stamp = payload.updatedAt
     ? new Date(payload.updatedAt).toLocaleString()
     : new Date().toLocaleString();
-  ss.toast(`Updated ${updatedCount} match odds from RightEdge. Last sync: ${stamp}`, 'RightEdge Odds', 8);
+  const unmatchedNote = unmatchedMatches.length
+    ? ` Cleared ${clearedCount} stale unmatched row(s): ${unmatchedMatches.slice(0, 3).join(', ')}${unmatchedMatches.length > 3 ? '...' : ''}`
+    : '';
+  ss.toast(`Updated ${updatedCount} match odds from RightEdge.${unmatchedNote} Last sync: ${stamp}`, 'RightEdge Odds', 12);
 }
 
 function createRightEdgeMatchOddsTrigger() {
