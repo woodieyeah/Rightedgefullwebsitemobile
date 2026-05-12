@@ -777,6 +777,12 @@ function buildMatchKey(homeTeam: string, awayTeam: string) {
   return `${normalizeTeamName(homeTeam)}__${normalizeTeamName(awayTeam)}`;
 }
 
+function buildTeamPairKey(teamA: string, teamB: string) {
+  return [normalizeTeamName(teamA), normalizeTeamName(teamB)]
+    .sort((a, b) => a.localeCompare(b))
+    .join("__");
+}
+
 function buildMatchLabelKey(match: string) {
   const parts = String(match || "").split(/\s+v\s+/i);
   if (parts.length === 2) {
@@ -929,6 +935,21 @@ function sortPredictionsByFixture(a: PredictionRow, b: PredictionRow) {
   const timeDiff = getFixtureSortValue(a) - getFixtureSortValue(b);
   if (timeDiff !== 0) return timeDiff;
   return a.match.localeCompare(b.match);
+}
+
+function chooseBestFixtureCandidate(candidates: FixtureRow[], now = Date.now()) {
+  if (!candidates.length) return null;
+
+  return [...candidates].sort((a, b) => {
+    const aKickoff = getFixtureUtcKickoffMs(a);
+    const bKickoff = getFixtureUtcKickoffMs(b);
+    const aUpcoming = aKickoff >= now;
+    const bUpcoming = bKickoff >= now;
+
+    if (aUpcoming !== bUpcoming) return aUpcoming ? -1 : 1;
+    if (aUpcoming && bUpcoming) return aKickoff - bKickoff;
+    return bKickoff - aKickoff;
+  })[0];
 }
 
 function getTryScorerKey(row: TryScorerRow) {
@@ -1084,12 +1105,19 @@ function parsePredictions(
   rows: RawRow[],
   fixtures: FixtureRow[],
 ): PredictionRow[] {
-  const fixtureMap = new Map(
-    fixtures.map((fixture) => [
-      buildMatchKey(fixture.homeTeam, fixture.awayTeam),
-      fixture,
-    ]),
-  );
+  const fixtureMap = new Map<string, FixtureRow[]>();
+  const fixturePairMap = new Map<string, FixtureRow[]>();
+
+  fixtures.forEach((fixture) => {
+    const matchKey = buildMatchKey(fixture.homeTeam, fixture.awayTeam);
+    const pairKey = buildTeamPairKey(fixture.homeTeam, fixture.awayTeam);
+
+    if (!fixtureMap.has(matchKey)) fixtureMap.set(matchKey, []);
+    fixtureMap.get(matchKey)!.push(fixture);
+
+    if (!fixturePairMap.has(pairKey)) fixturePairMap.set(pairKey, []);
+    fixturePairMap.get(pairKey)!.push(fixture);
+  });
 
   return rows
     .map((row) => {
@@ -1173,9 +1201,11 @@ function parsePredictions(
           ? ""
           : cleanedBestBet;
       const bestEdge = Math.max(homeOverlay, awayOverlay, 0);
-      const fixture =
-        fixtureMap.get(buildMatchKey(homeTeam, awayTeam)) ||
-        null;
+      const exactFixtures = fixtureMap.get(buildMatchKey(homeTeam, awayTeam)) || [];
+      const pairFixtures = fixturePairMap.get(buildTeamPairKey(homeTeam, awayTeam)) || [];
+      const exactFixture = chooseBestFixtureCandidate(exactFixtures);
+      const pairFixture = chooseBestFixtureCandidate(pairFixtures);
+      const fixture = pairFixture || exactFixture;
 
       return {
         match:
