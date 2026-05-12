@@ -1481,6 +1481,22 @@ function buildDashboardData(
   const currentRound = rounds.length
     ? rounds[rounds.length - 1]
     : null;
+
+  const modelRoundNumbers = [
+    ...predictions
+      .map((row) => row.fixture?.roundNumber || 0)
+      .filter((round) => Number.isFinite(round) && round > 0),
+    ...tryScorers
+      .map((row) => row.round)
+      .filter((round) => Number.isFinite(round) && round > 0),
+  ];
+  const latestModelRound = modelRoundNumbers.length
+    ? Math.max(...modelRoundNumbers)
+    : 0;
+  const currentRoundLabel = latestModelRound
+    ? `Round ${latestModelRound}`
+    : currentRound?.round || "Round 1";
+
   const averageEdge = predictions.length
     ? predictions.reduce((sum, row) => sum + row.bestEdge, 0) /
       predictions.length
@@ -1524,7 +1540,7 @@ function buildDashboardData(
     losses,
     avgClv,
     beatClosingCount,
-    currentRoundLabel: currentRound?.round || "Round 1",
+    currentRoundLabel,
     currentRoundOpenBets: pendingBets,
     currentRoundStake: currentRound?.staked || 0,
     trackerValues,
