@@ -48,7 +48,6 @@ import {
   Tornado,
   Crown,
   Unlock,
-  ExternalLink,
   ChevronLeft,
   ChevronDown,
   Mail,
@@ -2822,15 +2821,6 @@ function OfficialPlayCard({ row }: { row: PredictionRow }) {
                     >
                       ${bookie.odds.toFixed(2)}
                     </span>
-                    <a
-                      href={bookie.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="bg-white/10 hover:bg-white text-white hover:text-black p-1.5 transition-colors group"
-                      title={`Bet at ${bookie.name}`}
-                    >
-                      <ExternalLink className="w-4 h-4" />
-                    </a>
                   </div>
                 </div>
               ))
@@ -3113,17 +3103,6 @@ function MatchLiveOddsPanel({
                 >
                   {locked ? <BlurredText>${bookie.odds.toFixed(2)}</BlurredText> : `$${bookie.odds.toFixed(2)}`}
                 </span>
-                {!locked && (
-                  <a
-                    href={bookie.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="bg-white/10 hover:bg-white text-white hover:text-black p-1.5 transition-colors group"
-                    title={`Bet at ${bookie.name}`}
-                  >
-                    <ExternalLink className="w-4 h-4" />
-                  </a>
-                )}
               </div>
             </div>
           ))
