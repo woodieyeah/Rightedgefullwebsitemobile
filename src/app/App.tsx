@@ -615,6 +615,45 @@ function ResponsibleGamblingNotice({
   );
 }
 
+function BetrPartnerStrip({ compact = false }: { compact?: boolean }) {
+  if (!isBetrBrandPreviewUser()) return null;
+
+  return (
+    <div
+      className={`relative overflow-hidden border-2 border-[#73F4DB] bg-[#113bd8] shadow-[6px_6px_0_0_#73F4DB] ${
+        compact ? "p-3" : "p-4 md:p-5"
+      }`}
+    >
+      <div className="absolute inset-0 bg-[linear-gradient(120deg,rgba(115,244,219,0.22),transparent_42%,rgba(255,255,255,0.08))]" />
+      <div className="relative z-10 flex items-center justify-between gap-4">
+        <div className="flex items-center gap-3 md:gap-4 min-w-0">
+          <img
+            src="/betr-aqua.avif"
+            alt="Betr"
+            className={`${compact ? "h-9 w-9" : "h-12 w-12 md:h-14 md:w-14"} rounded-xl border-2 border-[#73F4DB] bg-[#113bd8] object-cover shrink-0`}
+          />
+          <div className="min-w-0">
+            <div className="text-[9px] md:text-[10px] font-black uppercase tracking-[0.22em] text-[#73F4DB]">
+              Partner preview
+            </div>
+            <div className="text-sm md:text-xl font-black uppercase tracking-tight text-white truncate">
+              Betr integrated with RightEdge live odds
+            </div>
+          </div>
+        </div>
+        <div className="hidden md:block text-right">
+          <div className="text-[10px] font-black uppercase tracking-widest text-[#73F4DB]">
+            Best price placement
+          </div>
+          <div className="text-xs font-bold uppercase tracking-wider text-white/75">
+            Utility-first, not banner spam
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function toPublishedCsvUrl(gid: string) {
   return `https://docs.google.com/spreadsheets/d/e/${PUBLISHED_SHEET_ID}/pub?gid=${gid}&single=true&output=csv`;
 }
@@ -1698,12 +1737,18 @@ function getUserEmail(): string | null {
     if (!val) return null;
     if (val.startsWith("{")) {
       const data = JSON.parse(val);
-      return data.email || null;
+      return data.email ? String(data.email).trim().toLowerCase() : null;
     }
     return null;
   } catch {
     return null;
   }
+}
+
+function isBetrBrandPreviewUser(): boolean {
+  const allowedEmails = new Set(["elliott@woodbry.com", "betr@rightedge.com.au"]);
+  const email = getUserEmail() || getPaidUserEmail();
+  return email ? allowedEmails.has(email.trim().toLowerCase()) : false;
 }
 
 function isUserAdmin(): boolean {
@@ -1716,15 +1761,16 @@ function isUserAdmin(): boolean {
 
 function setEmailAccess(email: string) {
   try {
+    const normalizedEmail = email.trim().toLowerCase();
     localStorage.setItem(
       EMAIL_ACCESS_KEY,
-      JSON.stringify({ email, subscribed: true }),
+      JSON.stringify({ email: normalizedEmail, subscribed: true }),
     );
     // Permanently stamp this browser as internal if the email is ours.
     // This means all future sessions from this device are correctly excluded
     // from the Real Users view — even before email entry.
     const INTERNAL_EMAILS = ['elliott@woodbry.com', 'ewoodbry@gmail.com'];
-    if (INTERNAL_EMAILS.includes(email.trim().toLowerCase())) {
+    if (INTERNAL_EMAILS.includes(normalizedEmail)) {
       localStorage.setItem('rightedge_internal_visitor', 'true');
     }
   } catch {}
@@ -2843,6 +2889,28 @@ function OfficialPlayCard({ row }: { row: PredictionRow }) {
               <span className="relative inline-flex rounded-full h-2 w-2 bg-[#00E676]"></span>
             </span>
           </div>
+          {isBetrBrandPreviewUser() && (
+            <div className="mb-3 border-2 border-[#73F4DB] bg-[#113bd8] p-2.5 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <img
+                  src="/betr-aqua.avif"
+                  alt="Betr"
+                  className="h-8 w-8 rounded-lg object-cover border border-[#73F4DB]"
+                />
+                <div className="min-w-0">
+                  <div className="text-[8px] font-black uppercase tracking-widest text-[#73F4DB]">
+                    Partner preview
+                  </div>
+                  <div className="text-xs font-black uppercase tracking-tight text-white truncate">
+                    Betr best-price placement
+                  </div>
+                </div>
+              </div>
+              <span className="shrink-0 bg-[#73F4DB] px-2 py-1 text-[8px] font-black uppercase tracking-widest text-[#113bd8]">
+                Featured
+              </span>
+            </div>
+          )}
           <div className="flex flex-col gap-2 mb-6 min-h-[160px]">
             {isLoadingOdds ? (
               <div className="flex flex-col gap-2 h-full justify-center opacity-50">
@@ -3119,6 +3187,25 @@ function MatchLiveOddsPanel({
           <span className="relative inline-flex rounded-full h-2 w-2 bg-[#00E676]" />
         </span>
       </div>
+      {isBetrBrandPreviewUser() && (
+        <div className="mb-2.5 border-2 border-[#73F4DB] bg-[#113bd8] p-2.5 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <img
+              src="/betr-aqua.avif"
+              alt="Betr"
+              className="h-7 w-7 rounded-lg object-cover border border-[#73F4DB]"
+            />
+            <div className="min-w-0">
+              <div className="text-[8px] font-black uppercase tracking-widest text-[#73F4DB]">
+                Partner preview
+              </div>
+              <div className="text-[11px] font-black uppercase tracking-tight text-white truncate">
+                Featured if Betr is top price
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="flex flex-col gap-2 min-h-[136px]">
         {isLoadingOdds ? (
           <div className="flex flex-col gap-2 opacity-50">
@@ -4160,6 +4247,8 @@ function PredictionsPage({
         subtitle="Full round model predictions, projected scores and live best odds"
       />
 
+      <BetrPartnerStrip />
+
       <ResponsibleGamblingNotice />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6 md:gap-8">
@@ -4680,6 +4769,8 @@ function BestBetsPage({
           </div>
         </div>
       </div>
+
+      <BetrPartnerStrip compact />
 
       <div className="flex flex-col gap-4">
         <div>
