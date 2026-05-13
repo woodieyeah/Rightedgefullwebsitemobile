@@ -1713,7 +1713,7 @@ function isBetrBrandPreviewUser(): boolean {
 }
 
 function getPreviewBookmakerName(bookmaker?: string) {
-  return isBetrBrandPreviewUser() ? "Betr" : bookmaker || "—";
+  return bookmaker || "—";
 }
 
 function BetrLogoMark({ className = "h-7 w-7" }: { className?: string }) {
@@ -1737,20 +1737,21 @@ function getBetrPreviewOddsRows<T extends { name: string; odds: number; isBest?:
 
   const sorted = [...rows].sort((a, b) => b.odds - a.odds);
   const betrRow = sorted.find((row) => isBetrBookmaker(row.name));
-  const bestOdds = betrRow?.odds || sorted[0]?.odds || 0;
+  if (!betrRow) return sorted.slice(0, 3);
+
+  const bestOdds = Math.max(...sorted.map((row) => row.odds));
   const rest = sorted.filter((row) => !isBetrBookmaker(row.name)).slice(0, 2);
 
   return [
     {
-      ...(betrRow || sorted[0]),
+      ...betrRow,
       name: "Betr",
-      odds: bestOdds,
-      isBest: true,
-      url: "#",
+      odds: betrRow.odds,
+      isBest: betrRow.odds === bestOdds,
     } as T,
     ...rest.map((row) => ({
       ...row,
-      isBest: false,
+      isBest: row.odds === bestOdds,
     })),
   ];
 }
@@ -2765,19 +2766,18 @@ function OfficialPlayCard({ row }: { row: PredictionRow }) {
         if (formattedOdds.length === 0)
           throw new Error("No odds found");
 
-        // Get Top 3 bookmakers
-        const top3 = formattedOdds
+        const sortedOdds = formattedOdds
           .sort((a: any, b: any) => b.odds - a.odds)
-          .slice(0, 3);
+        const displayOdds = getBetrPreviewOddsRows(sortedOdds).slice(0, 3);
         const bestOdd = Math.max(
-          ...top3.map((b: any) => b.odds),
+          ...sortedOdds.map((b: any) => b.odds),
         );
 
         setLiveOdds(
-          getBetrPreviewOddsRows(top3.map((b: any) => ({
+          displayOdds.map((b: any) => ({
             ...b,
             isBest: b.odds === bestOdd,
-          }))),
+          })),
         );
       } catch (e) {
         if (!isMounted) return;
@@ -2815,10 +2815,10 @@ function OfficialPlayCard({ row }: { row: PredictionRow }) {
           ...randomized.map((b) => b.odds),
         );
         setLiveOdds(
-          getBetrPreviewOddsRows(randomized.map((b) => ({
+          randomized.map((b) => ({
             ...b,
             isBest: b.odds === bestOdd,
-          }))),
+          })),
         );
       } finally {
         if (isMounted) setIsLoadingOdds(false);
@@ -3132,16 +3132,16 @@ function MatchLiveOddsPanel({
           throw new Error("No odds found");
         }
 
-        const top3 = formattedOdds
+        const sortedOdds = formattedOdds
           .sort((a: any, b: any) => b.odds - a.odds)
-          .slice(0, 3);
-        const bestOdd = Math.max(...top3.map((bookie: any) => bookie.odds));
+        const displayOdds = getBetrPreviewOddsRows(sortedOdds).slice(0, 3);
+        const bestOdd = Math.max(...sortedOdds.map((bookie: any) => bookie.odds));
 
         setLiveOdds(
-          getBetrPreviewOddsRows(top3.map((bookie: any) => ({
+          displayOdds.map((bookie: any) => ({
             ...bookie,
             isBest: bookie.odds === bestOdd,
-          }))),
+          })),
         );
       } catch (e) {
         if (!isMounted) return;
@@ -3172,10 +3172,10 @@ function MatchLiveOddsPanel({
         const bestOdd = Math.max(...randomized.map((bookie) => bookie.odds));
 
         setLiveOdds(
-          getBetrPreviewOddsRows(randomized.map((bookie) => ({
+          randomized.map((bookie) => ({
             ...bookie,
             isBest: bookie.odds === bestOdd,
-          }))),
+          })),
         );
       } finally {
         if (isMounted) setIsLoadingOdds(false);
@@ -4527,13 +4527,19 @@ function getBestPremiumMarketPlayForMatch(
     return null;
   }
 
-  return candidates.sort((a, b) => {
+  const rankedCandidates = candidates.sort((a, b) => {
     const typeRank = (play: PremiumMarketPlay) =>
       play.type === "Line" ? 3 : play.type === "Total" ? 2 : 1;
     const aScore = a.modelPct + Math.min(8, Math.max(0, (a.odds - 1.8) * 6)) + typeRank(a);
     const bScore = b.modelPct + Math.min(8, Math.max(0, (b.odds - 1.8) * 6)) + typeRank(b);
     return bScore - aScore;
-  })[0];
+  });
+
+  if (isBetrBrandPreviewUser()) {
+    return rankedCandidates.find((candidate) => isBetrBookmaker(candidate.bookmaker)) || rankedCandidates[0];
+  }
+
+  return rankedCandidates[0];
 }
 
 function buildPremiumMarketPlays(
@@ -5217,7 +5223,7 @@ function normalizeBookmakerName(name: string) {
   if (!key || key.includes("multiple")) return "";
   if (key.includes("pointsbet")) return "pointsbet";
   if (key.includes("betright")) return "betright";
-  if (key === "betr" || key.includes("betrapp")) return "betr";
+  if (key === "betr" || key.startsWith("betr") || key.includes("betrapp")) return "betr";
   if (key.includes("ladbrokes")) return "ladbrokes";
   if (key.includes("sportsbet")) return "sportsbet";
   if (key.includes("bet365")) return "bet365";
