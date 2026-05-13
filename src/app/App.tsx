@@ -571,6 +571,50 @@ function SectionHeader({
   );
 }
 
+function ResponsibleGamblingNotice({
+  compact = false,
+}: {
+  compact?: boolean;
+}) {
+  return (
+    <div
+      className={`border-2 border-white/10 bg-[#05070B] ${
+        compact ? "p-4" : "p-4 md:p-5"
+      }`}
+    >
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 md:gap-4">
+        <div>
+          <div className="text-[10px] md:text-xs font-black text-white uppercase tracking-widest mb-1">
+            What's gambling really costing you?
+          </div>
+          <div className="text-[10px] md:text-xs font-bold text-white/55 uppercase tracking-wider leading-relaxed">
+            For free and confidential support call{" "}
+            <a
+              href="tel:1800858858"
+              className="text-white hover:text-[#FFEA00] transition-colors"
+            >
+              1800 858 858
+            </a>{" "}
+            or visit{" "}
+            <a
+              href="https://www.gamblinghelponline.org.au/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-white hover:text-[#FFEA00] transition-colors"
+            >
+              gamblinghelponline.org.au
+            </a>
+            .
+          </div>
+        </div>
+        <div className="text-[10px] md:text-xs font-black text-[#FFEA00] uppercase tracking-widest whitespace-nowrap">
+          18+ only · Gamble responsibly
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function toPublishedCsvUrl(gid: string) {
   return `https://docs.google.com/spreadsheets/d/e/${PUBLISHED_SHEET_ID}/pub?gid=${gid}&single=true&output=csv`;
 }
@@ -4116,6 +4160,8 @@ function PredictionsPage({
         subtitle="Full round model predictions, projected scores and live best odds"
       />
 
+      <ResponsibleGamblingNotice />
+
       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6 md:gap-8">
         {rows.map((row, i) => {
           const predictedScore =
@@ -7079,6 +7125,7 @@ export default function App() {
                 endorsed by, or licensed by the National Rugby
                 League or its clubs.
               </p>
+              <ResponsibleGamblingNotice compact />
               <div className="flex items-center gap-4">
                 <button
                   onClick={() => {
