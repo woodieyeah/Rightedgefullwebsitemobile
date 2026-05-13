@@ -578,20 +578,20 @@ function ResponsibleGamblingNotice({
 }) {
   return (
     <div
-      className={`border-2 border-white/10 bg-[#05070B] ${
-        compact ? "p-4" : "p-4 md:p-5"
+      className={`border-2 border-black bg-white text-black ${
+        compact ? "p-4" : "p-5 md:p-6"
       }`}
     >
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 md:gap-4">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 md:gap-5">
         <div>
-          <div className="text-[10px] md:text-xs font-black text-white uppercase tracking-widest mb-1">
-            What's gambling really costing you?
+          <div className="text-sm md:text-xl font-black uppercase tracking-tight mb-1">
+            What&apos;s gambling really costing you?
           </div>
-          <div className="text-[10px] md:text-xs font-bold text-white/55 uppercase tracking-wider leading-relaxed">
+          <div className="text-[11px] md:text-sm font-bold leading-relaxed">
             For free and confidential support call{" "}
             <a
               href="tel:1800858858"
-              className="text-white hover:text-[#FFEA00] transition-colors"
+              className="underline decoration-2 underline-offset-2 hover:text-[#0047FF] transition-colors"
             >
               1800 858 858
             </a>{" "}
@@ -600,15 +600,15 @@ function ResponsibleGamblingNotice({
               href="https://www.gamblinghelponline.org.au/"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-white hover:text-[#FFEA00] transition-colors"
+              className="underline decoration-2 underline-offset-2 hover:text-[#0047FF] transition-colors"
             >
               gamblinghelponline.org.au
             </a>
             .
           </div>
         </div>
-        <div className="text-[10px] md:text-xs font-black text-[#FFEA00] uppercase tracking-widest whitespace-nowrap">
-          18+ only · Gamble responsibly
+        <div className="text-[10px] md:text-xs font-black uppercase tracking-widest whitespace-nowrap">
+          18+ only
         </div>
       </div>
     </div>
