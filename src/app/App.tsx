@@ -1719,9 +1719,9 @@ function getPreviewBookmakerName(bookmaker?: string) {
 function BetrLogoMark({ className = "h-7 w-7" }: { className?: string }) {
   return (
     <img
-      src="/betr-aqua.avif"
+      src="/betr-square.png"
       alt="Betr"
-      className={`${className} rounded-lg border border-[#73F4DB] bg-[#113bd8] object-cover shrink-0`}
+      className={`${className} rounded-lg border border-[#73F4DB] bg-[#113bd8] object-contain shrink-0`}
     />
   );
 }
