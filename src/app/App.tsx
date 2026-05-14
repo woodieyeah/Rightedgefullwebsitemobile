@@ -1730,6 +1730,10 @@ function isBetrBookmaker(name?: string) {
   return normalizeBookmakerName(name || "") === "betr";
 }
 
+function shouldShowBetrBranding(name?: string) {
+  return isBetrBrandPreviewUser() && isBetrBookmaker(name);
+}
+
 function getBetrPreviewOddsRows<T extends { name: string; odds: number; isBest?: boolean; url?: string }>(
   rows: T[],
 ) {
@@ -1763,7 +1767,7 @@ function BookmakerName({
   name: string;
   className?: string;
 }) {
-  if (!isBetrBookmaker(name)) {
+  if (!shouldShowBetrBranding(name)) {
     return <span className={className}>{name}</span>;
   }
 
@@ -2924,7 +2928,7 @@ function OfficialPlayCard({ row }: { row: PredictionRow }) {
                 <div
                   key={bookie.name}
                   className={`flex items-center justify-between p-3 border-2 ${
-                    isBetrBookmaker(bookie.name)
+                    shouldShowBetrBranding(bookie.name)
                       ? "border-[#73F4DB] bg-[#113bd8]"
                       : bookie.isBest
                         ? "border-[#00E676] bg-[rgba(0,230,118,0.05)]"
@@ -2935,7 +2939,7 @@ function OfficialPlayCard({ row }: { row: PredictionRow }) {
                   <div className="flex items-center gap-3">
                     <span
                       className={`text-lg font-black ${
-                        isBetrBookmaker(bookie.name)
+                        shouldShowBetrBranding(bookie.name)
                           ? "text-[#73F4DB]"
                           : bookie.isBest
                             ? "text-[#00E676]"
@@ -3210,7 +3214,7 @@ function MatchLiveOddsPanel({
             <div
               key={bookie.name}
               className={`flex items-center justify-between p-3 border-2 ${
-                isBetrBookmaker(bookie.name)
+                shouldShowBetrBranding(bookie.name)
                   ? "border-[#73F4DB] bg-[#113bd8]"
                   : bookie.isBest
                   ? "border-[#00E676] bg-[rgba(0,230,118,0.05)]"
@@ -3221,7 +3225,7 @@ function MatchLiveOddsPanel({
               <div className="flex items-center gap-3">
                 <span
                   className={`text-lg font-black ${
-                    isBetrBookmaker(bookie.name)
+                    shouldShowBetrBranding(bookie.name)
                       ? "text-[#73F4DB]"
                       : bookie.isBest ? "text-[#00E676]" : "text-white/70"
                   }`}
