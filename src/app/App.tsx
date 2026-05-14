@@ -7031,15 +7031,15 @@ export default function App() {
   <meta name="google-site-verification" content="wb31UE7IgqZ6wAT2M2iIJ8YK1dZjdQc_LSYaiuRBsd0" />
 
   {/* ── Primary SEO ── */}
-  <title>RightEdge NRL Predictions & Best Bets</title>
-  <meta name="description" content="RightEdge is Australia's NRL analytics platform for match predictions, win probabilities, model-aligned best bets and try scorer plays every round." />
-  <meta name="keywords" content="RightEdge, RightEdge NRL, RightEdge NRL Best Bets, NRL best bets, NRL analytics, NRL predictions, NRL betting tips, NRL match predictions, NRL odds, rugby league betting, NRL 2026" />
+  <title>RightEdge NRL Analytics and Value Insights</title>
+  <meta name="description" content="RightEdge is Australia's NRL analytics platform for match predictions, projected scores, model probabilities and value insights every round." />
+  <meta name="keywords" content="RightEdge, RightEdge NRL, NRL analytics, NRL predictions, NRL match intelligence, NRL match predictions, NRL projected scores, NRL odds, NRL model probabilities, rugby league analytics, NRL 2026" />
   <meta name="robots" content="index, follow" />
   <link rel="canonical" href="https://www.rightedge.com.au/" />
 
   {/* ── Open Graph / Facebook ── */}
   <meta property="og:url" content="https://www.rightedge.com.au/" />
-  <meta property="og:title" content="RightEdge NRL Predictions & Best Bets" />
+  <meta property="og:title" content="RightEdge NRL Analytics and Value Insights" />
   <meta property="og:image" content="https://www.rightedge.com.au/logo-square.png" />
   
   {/* UPDATED: Points to your new square logo */}
@@ -7048,7 +7048,7 @@ export default function App() {
 
   {/* ── Twitter / X Card ── */}
   <meta name="twitter:card" content="summary" />
-  <meta name="twitter:title" content="RightEdge NRL Predictions & Best Bets" />
+  <meta name="twitter:title" content="RightEdge NRL Analytics and Value Insights" />
   <meta name="twitter:image" content="https://www.rightedge.com.au/logo-square.png" />
   
   {/* UPDATED: Points to your new square logo */}
@@ -7059,9 +7059,9 @@ export default function App() {
     "@context": "https://schema.org",
     "@type": "WebSite",
     "name": "RightEdge",
-    "alternateName": ["RightEdge NRL", "RightEdge NRL Best Bets"],
+    "alternateName": ["RightEdge NRL", "RightEdge NRL Analytics"],
     "url": "https://www.rightedge.com.au/",
-    "description": "Australia's NRL analytics platform for match predictions, win probabilities, model-aligned best bets and try scorer plays every round.",
+    "description": "Australia's NRL analytics platform for match predictions, projected scores, model probabilities and value insights every round.",
     "inLanguage": "en-AU"
   })}</script>
 </Helmet>
