@@ -601,6 +601,21 @@ function parseAestKickoffMs(dateISO: string, timeText: string) {
   return Date.UTC(year, month - 1, day, hours - 10, minutes, 0, 0);
 }
 
+function getNurtureRoundPhase(firstKickoffMs: number, lastKickoffMs: number) {
+  const now = Date.now();
+  const twoDaysMs = 48 * 60 * 60 * 1000;
+  const postGameBufferMs = 3 * 60 * 60 * 1000;
+
+  if (!Number.isFinite(firstKickoffMs) || firstKickoffMs === Number.MAX_SAFE_INTEGER) {
+    return "unknown";
+  }
+
+  if (now < firstKickoffMs - twoDaysMs) return "early_week";
+  if (now < firstKickoffMs) return "pre_round";
+  if (Number.isFinite(lastKickoffMs) && now <= lastKickoffMs + postGameBufferMs) return "in_round";
+  return "post_round";
+}
+
 async function loadNurtureRoundContext() {
   const [predictionRows, fixtureRows, tryScorerRows] = await Promise.all([
     fetchPublishedSheetRows(SHEET_GIDS.matchPredictions),
@@ -638,6 +653,8 @@ async function loadNurtureRoundContext() {
   const currentRound = upcomingFixture?.round || fixtures[fixtures.length - 1]?.round || 0;
   const roundFixtures = fixtures.filter((fixture) => fixture.round === currentRound);
   const nextFixture = roundFixtures.find((fixture) => fixture.kickoffMs >= now) || roundFixtures[0] || null;
+  const firstKickoffMs = roundFixtures[0]?.kickoffMs || Number.MAX_SAFE_INTEGER;
+  const lastKickoffMs = roundFixtures[roundFixtures.length - 1]?.kickoffMs || Number.MAX_SAFE_INTEGER;
 
   const predictions = predictionRows
     .map((row) => {
@@ -686,14 +703,34 @@ async function loadNurtureRoundContext() {
   const premiumScorerCount = tryScorers.filter((row) =>
     row.modelPct >= 42 || row.edgePct >= 3
   ).length;
+  const requiredPredictionCount = Math.min(2, roundFixtures.length || 2);
+  const dataReady = topModelReads.length >= requiredPredictionCount;
 
   return {
     round: currentRound,
     matchCount: roundFixtures.length || roundPredictions.length,
+    roundPhase: getNurtureRoundPhase(firstKickoffMs, lastKickoffMs),
+    dataReady,
+    predictionCount: roundPredictions.length,
     nextFixture,
     topModelReads,
     premiumScorerCount,
   };
+}
+
+function getLeadNurtureHoldReason(
+  stepId: LeadNurtureStepId,
+  ctx: Awaited<ReturnType<typeof loadNurtureRoundContext>>,
+) {
+  if (!ctx.dataReady) {
+    return `latest_round_data_not_ready:${ctx.predictionCount}/${ctx.matchCount || "unknown"}`;
+  }
+
+  if (stepId === "conversion-window" && ctx.roundPhase !== "pre_round") {
+    return `conversion_window_waiting_for_pre_round:${ctx.roundPhase}`;
+  }
+
+  return "";
 }
 
 function formatNurtureNextKickoff(ctx: Awaited<ReturnType<typeof loadNurtureRoundContext>>) {
@@ -884,6 +921,12 @@ async function runLeadNurture({ dryRun = false, limit = 250 } = {}) {
 
     if (!nextStep) {
       results.push({ email, skipped: true, reason: "not_due", ageDays });
+      continue;
+    }
+
+    const holdReason = getLeadNurtureHoldReason(nextStep.id, ctx);
+    if (holdReason) {
+      results.push({ email, skipped: true, reason: holdReason, step: nextStep.id, ageDays });
       continue;
     }
 
