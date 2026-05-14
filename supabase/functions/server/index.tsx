@@ -861,6 +861,51 @@ async function sendLeadNurtureEmail(email: string, stepId: LeadNurtureStepId, ct
   return emailContent.subject;
 }
 
+async function sendLeadNurtureTestEmails(toEmail: string) {
+  const cleanEmail = toEmail.trim().toLowerCase();
+  if (cleanEmail !== "elliott@woodbry.com") {
+    throw new Error("Lead nurture test emails are locked to elliott@woodbry.com only.");
+  }
+
+  const resend = getResendClient();
+  const from = getFromEmail();
+  const ctx = await loadNurtureRoundContext();
+  const labels: Record<LeadNurtureStepId, string> = {
+    "proof-round": "TEST - Day 3 - Model proof",
+    "premium-explainer": "TEST - Day 7 - Premium explainer",
+    "inside-premium": "TEST - Day 10 - Inside premium",
+    "conversion-window": "TEST - Day 14 - Conversion window",
+  };
+  const sent: Array<{ step: LeadNurtureStepId; subject: string }> = [];
+
+  for (const step of LEAD_NURTURE_STEPS) {
+    const emailContent = buildNurtureEmail(step.id, ctx);
+    const subject = `[${labels[step.id]}] ${emailContent.subject}`;
+    const html = emailContent.html.replace(
+      '<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">',
+      `<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">${labels[step.id]} preview. `,
+    );
+
+    const { error } = await resend.emails.send({
+      from,
+      to: [cleanEmail],
+      subject,
+      html,
+    });
+
+    if (error) throw new Error(`Resend test failed for ${step.id}: ${JSON.stringify(error)}`);
+    sent.push({ step: step.id, subject });
+  }
+
+  return {
+    to: cleanEmail,
+    round: ctx.round,
+    roundPhase: ctx.roundPhase,
+    dataReady: ctx.dataReady,
+    sent,
+  };
+}
+
 async function runLeadNurture({ dryRun = false, limit = 250 } = {}) {
   if (!LEAD_NURTURE_SENDS_APPROVED) {
     dryRun = true;
@@ -2393,6 +2438,23 @@ app.post("/admin/run-lead-nurture", async (c) => {
     return c.json(result);
   } catch (err: any) {
     console.error("[admin/run-lead-nurture] error:", err);
+    return c.json({ error: "Internal server error", message: err?.message }, 500);
+  }
+});
+
+app.post("/admin/send-lead-nurture-tests", async (c) => {
+  try {
+    const authHeader = c.req.header("Authorization");
+    if (!authHeader) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+
+    const body = await c.req.json().catch(() => ({}));
+    const email = String(body?.email || "elliott@woodbry.com").trim().toLowerCase();
+    const result = await sendLeadNurtureTestEmails(email);
+    return c.json(result);
+  } catch (err: any) {
+    console.error("[admin/send-lead-nurture-tests] error:", err);
     return c.json({ error: "Internal server error", message: err?.message }, 500);
   }
 });
