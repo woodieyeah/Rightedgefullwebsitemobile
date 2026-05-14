@@ -331,9 +331,28 @@ function freeWelcomeHtml() {
         </table>
 
 
+        ${responsibleGamblingEmailFooterHtml()}
+
         <div style="margin-top:24px;text-align:center;font-size:12px;color:#6f7f99;font-weight:700;letter-spacing:2px;text-transform:uppercase;">Backed by data, not guesswork.</div>
       </div>
-    </div>`;
+    </div>
+  </div>`;
+}
+
+
+function responsibleGamblingEmailFooterHtml() {
+  return `
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:22px;background:#ffffff;border:2px solid #05070b;border-bottom:4px solid #0a4dff;">
+          <tr>
+            <td style="padding:16px 18px;font-family:Arial,Helvetica,sans-serif;color:#05070b;">
+              <div style="font-family:Arial Black,Impact,Helvetica,sans-serif;font-size:16px;line-height:1.2;color:#05070b;font-weight:900;letter-spacing:-0.2px;text-transform:uppercase;">What&apos;s gambling really costing you?</div>
+              <div style="margin-top:8px;font-size:13px;line-height:1.6;color:#20242d;font-weight:700;">
+                For free and confidential support call <a href="tel:1800858858" style="color:#05070b;text-decoration:underline;font-weight:900;">1800 858 858</a> or visit <a href="https://www.gamblinghelponline.org.au/" target="_blank" rel="noopener noreferrer" style="color:#05070b;text-decoration:underline;font-weight:900;">gamblinghelponline.org.au</a>.
+              </div>
+              <div style="margin-top:10px;font-size:11px;line-height:1.2;color:#05070b;font-weight:900;letter-spacing:1.5px;text-transform:uppercase;">18+ only</div>
+            </td>
+          </tr>
+        </table>`;
 }
 
 
@@ -411,9 +430,12 @@ function premiumWelcomeHtml() {
           <div style="margin-top:8px;font-size:15px;line-height:1.7;color:#d4dae5;">Use the Premium Login button anytime. Enter your subscriber email and RightEdge will take you straight to the full premium card — no code needed.</div>
         </div>
 
+        ${responsibleGamblingEmailFooterHtml()}
+
         <div style="margin-top:24px;text-align:center;font-size:12px;color:#6f7f99;font-weight:700;letter-spacing:2px;text-transform:uppercase;">Backed by data, not guesswork.</div>
       </div>
-    </div>`;
+    </div>
+  </div>`;
 }
 
 async function sendWelcomeEmail(type: "free" | "premium", email: string) {
