@@ -466,6 +466,468 @@ async function sendWelcomeEmail(type: "free" | "premium", email: string) {
   }
 }
 
+type SheetRow = Record<string, string>;
+
+const PUBLISHED_SHEET_ID =
+  "2PACX-1vTKzRm_dhMcH-2sf_Yf3O6hqQE0_t13TeanTOJF0wwHSTv8Lb8gmR9zlJ1TceW106fM3e6-LHBVCjF8";
+
+const SHEET_GIDS = {
+  matchPredictions: "1090622164",
+  fixtures2026: "2096464205",
+  tryScorers: "222068410",
+} as const;
+
+const LEAD_NURTURE_STEPS = [
+  { id: "proof-round", minAgeDays: 3 },
+  { id: "premium-explainer", minAgeDays: 7 },
+  { id: "inside-premium", minAgeDays: 10 },
+  { id: "conversion-window", minAgeDays: 14 },
+] as const;
+
+const LEAD_NURTURE_SENDS_APPROVED = false;
+
+type LeadNurtureStepId = typeof LEAD_NURTURE_STEPS[number]["id"];
+
+function parseCsvLine(line: string): string[] {
+  const result: string[] = [];
+  let current = "";
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    const next = line[i + 1];
+
+    if (char === '"' && inQuotes && next === '"') {
+      current += '"';
+      i++;
+    } else if (char === '"') {
+      inQuotes = !inQuotes;
+    } else if (char === "," && !inQuotes) {
+      result.push(current);
+      current = "";
+    } else {
+      current += char;
+    }
+  }
+
+  result.push(current);
+  return result.map((value) => value.replace(/\r/g, "").trim());
+}
+
+function parseCsv(text: string): SheetRow[] {
+  const lines = text
+    .replace(/^\uFEFF/, "")
+    .split(/\r?\n/)
+    .filter((line) => line.trim() !== "");
+
+  if (!lines.length) return [];
+
+  const headers = parseCsvLine(lines[0]).map((header, idx) => header || `col_${idx}`);
+
+  return lines.slice(1).map((line) => {
+    const values = parseCsvLine(line);
+    const row: SheetRow = {};
+    headers.forEach((header, idx) => {
+      row[header] = values[idx] ?? "";
+    });
+    return row;
+  });
+}
+
+async function fetchPublishedSheetRows(gid: string): Promise<SheetRow[]> {
+  const url = `https://docs.google.com/spreadsheets/d/e/${PUBLISHED_SHEET_ID}/pub?gid=${gid}&single=true&output=csv&t=${Date.now()}`;
+  const res = await fetch(url, { headers: { Accept: "text/csv,text/plain,*/*" } });
+
+  if (!res.ok) {
+    throw new Error(`Failed to fetch published sheet ${gid}: ${res.status} ${res.statusText}`);
+  }
+
+  const text = await res.text();
+  if (!text.trim() || text.trim().startsWith("<")) {
+    throw new Error(`Published sheet ${gid} did not return CSV content`);
+  }
+
+  return parseCsv(text);
+}
+
+function getSheetValue(row: SheetRow, possibleKeys: string[]) {
+  for (const key of possibleKeys) {
+    const value = row[key];
+    if (value !== undefined && value !== null && String(value).trim() !== "") {
+      return String(value).trim();
+    }
+  }
+  return "";
+}
+
+function toSheetNumber(value: unknown) {
+  const cleaned = String(value ?? "").replace(/[$,%]/g, "").trim();
+  const number = Number(cleaned);
+  return Number.isFinite(number) ? number : 0;
+}
+
+function toSheetRound(value: unknown) {
+  const text = String(value ?? "").trim();
+  const direct = toSheetNumber(text);
+  if (direct > 0) return direct;
+  const match = text.match(/\d+/);
+  return match ? Number(match[0]) : 0;
+}
+
+function toSheetPercent(value: unknown) {
+  const number = toSheetNumber(value);
+  if (!number) return 0;
+  return number > 1 ? number : number * 100;
+}
+
+function parseAestKickoffMs(dateISO: string, timeText: string) {
+  if (!dateISO) return Number.MAX_SAFE_INTEGER;
+
+  const [year, month, day] = dateISO.split("-").map(Number);
+  if (!year || !month || !day) return Number.MAX_SAFE_INTEGER;
+
+  let hours = 0;
+  let minutes = 0;
+  const match = String(timeText || "").trim().match(/^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)?$/i);
+  if (match) {
+    hours = Number(match[1]);
+    minutes = Number(match[2] || 0);
+    const meridian = (match[3] || "").toUpperCase();
+    if (meridian === "PM" && hours < 12) hours += 12;
+    if (meridian === "AM" && hours === 12) hours = 0;
+  }
+
+  // AEST is UTC+10. The fixture sheet stores NRL kickoff labels in AEST.
+  return Date.UTC(year, month - 1, day, hours - 10, minutes, 0, 0);
+}
+
+async function loadNurtureRoundContext() {
+  const [predictionRows, fixtureRows, tryScorerRows] = await Promise.all([
+    fetchPublishedSheetRows(SHEET_GIDS.matchPredictions),
+    fetchPublishedSheetRows(SHEET_GIDS.fixtures2026),
+    fetchPublishedSheetRows(SHEET_GIDS.tryScorers),
+  ]);
+
+  const fixtures = fixtureRows
+    .map((row) => {
+      const round = toSheetRound(getSheetValue(row, ["Round Number", "RoundNumber", "Round"]));
+      const homeTeam = shortNrlTeamName(getSheetValue(row, ["Home Team", "Home"]));
+      const awayTeam = shortNrlTeamName(getSheetValue(row, ["Away Team", "Away"]));
+      const kickoffMs = parseAestKickoffMs(
+        getSheetValue(row, ["Date ISO", "DateISO"]),
+        getSheetValue(row, ["AEST", "Time", "Kickoff"]),
+      );
+
+      return {
+        round,
+        homeTeam,
+        awayTeam,
+        match: homeTeam && awayTeam ? `${homeTeam} v ${awayTeam}` : "",
+        day: getSheetValue(row, ["Day"]),
+        dateLabel: getSheetValue(row, ["Date"]),
+        timeLabel: getSheetValue(row, ["AEST", "Time", "Kickoff"]),
+        stadium: getSheetValue(row, ["Stadium", "Venue"]),
+        kickoffMs,
+      };
+    })
+    .filter((row) => row.round && row.match)
+    .sort((a, b) => a.kickoffMs - b.kickoffMs);
+
+  const now = Date.now();
+  const upcomingFixture = fixtures.find((fixture) => fixture.kickoffMs >= now);
+  const currentRound = upcomingFixture?.round || fixtures[fixtures.length - 1]?.round || 0;
+  const roundFixtures = fixtures.filter((fixture) => fixture.round === currentRound);
+  const nextFixture = roundFixtures.find((fixture) => fixture.kickoffMs >= now) || roundFixtures[0] || null;
+
+  const predictions = predictionRows
+    .map((row) => {
+      const homeTeam = shortNrlTeamName(getSheetValue(row, ["Home Team", "Home"]));
+      const awayTeam = shortNrlTeamName(getSheetValue(row, ["Away Team", "Away"]));
+      const predictedWinner = shortNrlTeamName(getSheetValue(row, ["Predicted Winner", "Winner", "Projected Winner"]));
+      const homeScore = toSheetNumber(getSheetValue(row, ["Predicted Home Score", "Home Score", "Projected Home Score"]));
+      const awayScore = toSheetNumber(getSheetValue(row, ["Predicted Away Score", "Away Score", "Projected Away Score"]));
+      const homeModelOdds = toSheetNumber(getSheetValue(row, ["Home Implied Odds", "Home Model Odds", "Model Home Odds"]));
+      const awayModelOdds = toSheetNumber(getSheetValue(row, ["Away Implied Odds", "Away Model Odds", "Model Away Odds"]));
+      const winnerModelOdds = predictedWinner === homeTeam ? homeModelOdds : awayModelOdds;
+      const winnerModelPct = winnerModelOdds > 1 ? (1 / winnerModelOdds) * 100 : 0;
+      const margin = Math.abs(homeScore - awayScore);
+
+      return {
+        homeTeam,
+        awayTeam,
+        match: homeTeam && awayTeam ? `${homeTeam} v ${awayTeam}` : "",
+        predictedWinner,
+        projectedScore: homeScore && awayScore ? `${homeScore}-${awayScore}` : "",
+        winnerModelPct,
+        margin,
+      };
+    })
+    .filter((row) => row.match && row.predictedWinner);
+
+  const roundMatchSet = new Set(roundFixtures.map((fixture) => fixture.match.toLowerCase()));
+  const roundPredictions = predictions.filter((prediction) =>
+    !roundMatchSet.size || roundMatchSet.has(prediction.match.toLowerCase())
+  );
+
+  const topModelReads = [...roundPredictions]
+    .sort((a, b) => (b.winnerModelPct - a.winnerModelPct) || (b.margin - a.margin))
+    .slice(0, 3);
+
+  const tryScorers = tryScorerRows
+    .map((row) => ({
+      round: toSheetRound(getSheetValue(row, ["Round", "Round Number", "RoundNumber", "NRL Round"])),
+      player: getSheetValue(row, ["Player"]),
+      match: getSheetValue(row, ["Match"]),
+      modelPct: toSheetPercent(getSheetValue(row, ["StatsInsider %", "Stats Insider %", "Model %"])),
+      edgePct: toSheetPercent(getSheetValue(row, ["Edge %"])),
+    }))
+    .filter((row) => row.round === currentRound && row.player && row.match);
+
+  const premiumScorerCount = tryScorers.filter((row) =>
+    row.modelPct >= 42 || row.edgePct >= 3
+  ).length;
+
+  return {
+    round: currentRound,
+    matchCount: roundFixtures.length || roundPredictions.length,
+    nextFixture,
+    topModelReads,
+    premiumScorerCount,
+  };
+}
+
+function formatNurtureNextKickoff(ctx: Awaited<ReturnType<typeof loadNurtureRoundContext>>) {
+  if (!ctx.nextFixture) return "The next NRL kickoff is coming up.";
+  const parts = [
+    ctx.nextFixture.day,
+    ctx.nextFixture.dateLabel,
+    ctx.nextFixture.timeLabel ? `${ctx.nextFixture.timeLabel} AEST` : "",
+  ].filter(Boolean);
+  return `${ctx.nextFixture.match}${parts.length ? ` — ${parts.join(" ")}` : ""}`;
+}
+
+function nurtureModelReadList(ctx: Awaited<ReturnType<typeof loadNurtureRoundContext>>) {
+  if (!ctx.topModelReads.length) {
+    return "The model is waiting on the latest round data to publish this week's strongest reads.";
+  }
+
+  return ctx.topModelReads
+    .map((row) => `${row.match}: ${row.predictedWinner} ${row.projectedScore ? `(${row.projectedScore})` : ""}`)
+    .join("<br/>");
+}
+
+function buildNurtureEmail(stepId: LeadNurtureStepId, ctx: Awaited<ReturnType<typeof loadNurtureRoundContext>>) {
+  const nextKickoff = formatNurtureNextKickoff(ctx);
+  const modelReads = nurtureModelReadList(ctx);
+  const premiumScorerLine = ctx.premiumScorerCount
+    ? `${ctx.premiumScorerCount} Try Scorer signals currently qualify for Round ${ctx.round}.`
+    : `The Try Scorer model will update as Round ${ctx.round} prices and team lists settle.`;
+
+  const copy: Record<LeadNurtureStepId, { subject: string; eyebrow: string; headline: string; body: string; cta: string; href: string }> = {
+    "proof-round": {
+      subject: `What the model is seeing in Round ${ctx.round}`,
+      eyebrow: "Model Proof",
+      headline: "The model reads the round before kickoff.",
+      body: `Each round, RightEdge turns team form, projected scores and market prices into a simple match read.<br/><br/><strong>Current model reads:</strong><br/>${modelReads}<br/><br/>The point is not to guess louder. It is to see the round clearly before the market moves.`,
+      cta: "View Match Predictions",
+      href: "https://www.rightedge.com.au/#matches",
+    },
+    "premium-explainer": {
+      subject: "What Premium unlocks inside RightEdge",
+      eyebrow: "Premium Layer",
+      headline: "Free shows the model. Premium shows the signals.",
+      body: `Free members can follow the match predictions. Premium unlocks the full round of model plays, Try Scorer signals and live prices in one place.<br/><br/>${premiumScorerLine}`,
+      cta: "Unlock Premium",
+      href: "https://www.rightedge.com.au/#best-bets",
+    },
+    "inside-premium": {
+      subject: "What premium members see each round",
+      eyebrow: "Inside Premium",
+      headline: "This is the action layer.",
+      body: `Premium is built for the people who want the model's strongest signals, not just the public match view.<br/><br/>Inside the premium section, members can see model plays, Try Scorer Best Bets, high-probability scorers and live pricing context for Round ${ctx.round}.`,
+      cta: "See Premium Plays",
+      href: "https://www.rightedge.com.au/#best-bets",
+    },
+    "conversion-window": {
+      subject: `Round ${ctx.round} model plays are live`,
+      eyebrow: "Before Kickoff",
+      headline: "Don't go in blind this NRL round.",
+      body: `Round ${ctx.round} is live in RightEdge with projected scores, model probabilities and premium signals updated from the sheet data.<br/><br/>${nextKickoff}`,
+      cta: "Unlock Round Access",
+      href: "https://www.rightedge.com.au/#best-bets",
+    },
+  };
+
+  const selected = copy[stepId];
+
+  return {
+    subject: selected.subject,
+    html: `
+  <div style="margin:0;padding:0;background:#05070b;">
+    <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">${selected.subject}</div>
+    <div style="background:#05070b;padding:30px 14px;font-family:Inter,Arial,Helvetica,sans-serif;color:#ffffff;">
+      <div style="max-width:680px;margin:0 auto;">
+        <div style="background:#0a0d14;border:2px solid #f5f7fb;box-shadow:6px 6px 0 #0a4dff;padding:22px 20px;">
+          <div style="font-family:Arial Black,Impact,Helvetica,sans-serif;font-size:30px;line-height:1;color:#ffffff;font-weight:900;letter-spacing:-1px;text-transform:uppercase;">RIGHTEDGE</div>
+          <div style="margin-top:8px;font-size:12px;line-height:1.2;color:#00f0a8;font-weight:700;letter-spacing:1.8px;text-transform:uppercase;">NRL Analytics and Value Insights</div>
+        </div>
+        <div style="margin-top:24px;background:#0a0d14;border-left:4px solid #ff2f7d;padding:28px 26px;">
+          <div style="display:inline-block;background:#ff2f7d;color:#ffffff;font-size:11px;font-weight:900;letter-spacing:1px;text-transform:uppercase;padding:8px 10px;">${selected.eyebrow}</div>
+          <div style="margin-top:18px;font-family:Arial Black,Impact,Helvetica,sans-serif;font-size:34px;line-height:1.02;color:#ffffff;font-weight:900;letter-spacing:-1px;text-transform:uppercase;">${selected.headline}</div>
+          <div style="margin-top:18px;font-size:16px;line-height:1.65;color:#c9cfdb;">${selected.body}</div>
+          <table role="presentation" cellspacing="0" cellpadding="0" style="margin-top:24px;">
+            <tr>
+              <td style="background:#ffe600;border:2px solid #ffe600;box-shadow:4px 4px 0 #0a4dff;">
+                <a href="${selected.href}" style="display:inline-block;padding:16px 22px;color:#05070b;text-decoration:none;font-size:15px;font-weight:900;letter-spacing:0.3px;text-transform:uppercase;">${selected.cta} →</a>
+              </td>
+            </tr>
+          </table>
+        </div>
+        ${responsibleGamblingEmailFooterHtml()}
+        <div style="margin-top:24px;text-align:center;font-size:12px;color:#6f7f99;font-weight:700;letter-spacing:2px;text-transform:uppercase;">Backed by data, not guesswork.</div>
+      </div>
+    </div>
+  </div>`,
+  };
+}
+
+async function ensureLeadNurtureState(email: string, source = "free_access") {
+  const cleanEmail = email.trim().toLowerCase();
+  if (!cleanEmail || !cleanEmail.includes("@")) return;
+
+  const key = `lead_nurture:${cleanEmail}`;
+  const existing = await kv.get(key);
+  if (existing) return;
+
+  await kv.set(key, JSON.stringify({
+    email: cleanEmail,
+    source,
+    startedAt: new Date().toISOString(),
+    sentSteps: [],
+    completed: false,
+  }));
+}
+
+async function sendLeadNurtureEmail(email: string, stepId: LeadNurtureStepId, ctx: Awaited<ReturnType<typeof loadNurtureRoundContext>>) {
+  const resend = getResendClient();
+  const from = getFromEmail();
+  const emailContent = buildNurtureEmail(stepId, ctx);
+
+  const { error } = await resend.emails.send({
+    from,
+    to: [email],
+    subject: emailContent.subject,
+    html: emailContent.html,
+  });
+
+  if (error) throw new Error(`Resend failed for ${email}: ${JSON.stringify(error)}`);
+  return emailContent.subject;
+}
+
+async function runLeadNurture({ dryRun = false, limit = 250 } = {}) {
+  if (!LEAD_NURTURE_SENDS_APPROVED) {
+    dryRun = true;
+  }
+
+  const [freeRegistrationsRaw, checkoutLeadsRaw] = await Promise.all([
+    kv.getByPrefix("free_access:"),
+    kv.getByPrefix("checkout_lead:"),
+  ]);
+  const freeRegistrations = freeRegistrationsRaw || [];
+  const checkoutLeads = checkoutLeadsRaw || [];
+
+  for (const rawLead of [...freeRegistrations, ...checkoutLeads]) {
+    try {
+      const lead: any = typeof rawLead === "string" ? JSON.parse(rawLead) : rawLead;
+      const email = String(lead?.email || "").trim().toLowerCase();
+      if (!email || lead?.completed_subscription) continue;
+      await ensureLeadNurtureState(email, lead?.source || "existing_lead_backfill");
+    } catch {
+      // Ignore malformed legacy lead records.
+    }
+  }
+
+  const states = (await kv.getByPrefix("lead_nurture:")) || [];
+  const now = Date.now();
+  const ctx = await loadNurtureRoundContext();
+  const results: any[] = [];
+
+  for (const rawState of states.slice(0, limit)) {
+    let state: any;
+    try {
+      state = typeof rawState === "string" ? JSON.parse(rawState) : rawState;
+    } catch {
+      continue;
+    }
+
+    const email = String(state?.email || "").trim().toLowerCase();
+    if (!email || state.completed) continue;
+
+    const premium = await kv.get(`subscriber:${email}`);
+    if (premium) {
+      state.completed = true;
+      state.completedReason = "premium";
+      state.completedAt = new Date().toISOString();
+      if (!dryRun) await kv.set(`lead_nurture:${email}`, JSON.stringify(state));
+      results.push({ email, skipped: true, reason: "premium" });
+      continue;
+    }
+
+    const startedAtMs = Date.parse(state.startedAt || state.registeredAt || "");
+    const ageDays = Number.isFinite(startedAtMs)
+      ? Math.floor((now - startedAtMs) / (24 * 60 * 60 * 1000))
+      : 0;
+    const sentSteps: string[] = Array.isArray(state.sentSteps) ? state.sentSteps : [];
+    const nextStep = LEAD_NURTURE_STEPS.find((step) =>
+      ageDays >= step.minAgeDays && !sentSteps.includes(step.id)
+    );
+
+    if (!nextStep) {
+      results.push({ email, skipped: true, reason: "not_due", ageDays });
+      continue;
+    }
+
+    if (dryRun) {
+      results.push({ email, step: nextStep.id, dryRun: true, ageDays });
+      continue;
+    }
+
+    try {
+      const subject = await sendLeadNurtureEmail(email, nextStep.id, ctx);
+      state.sentSteps = [...sentSteps, nextStep.id];
+      state.lastSentAt = new Date().toISOString();
+      state.lastSubject = subject;
+      if (state.sentSteps.length >= LEAD_NURTURE_STEPS.length) {
+        state.completed = true;
+        state.completedReason = "sequence_complete";
+        state.completedAt = new Date().toISOString();
+      }
+      await kv.set(`lead_nurture:${email}`, JSON.stringify(state));
+      results.push({ email, step: nextStep.id, subject, sent: true });
+    } catch (err: any) {
+      console.error(`[LeadNurture] Failed for ${email}`, err);
+      results.push({ email, step: nextStep.id, error: err?.message || "send_failed" });
+    }
+  }
+
+  await kv.set(`lead_nurture_run:${Date.now()}`, JSON.stringify({
+    ranAt: new Date().toISOString(),
+    dryRun,
+    round: ctx.round,
+    processed: results.length,
+    sent: results.filter((result) => result.sent).length,
+    results: results.slice(0, 100),
+  }));
+
+  return {
+    dryRun,
+    round: ctx.round,
+    processed: results.length,
+    sent: results.filter((result) => result.sent).length,
+    results,
+  };
+}
+
 
 // Register a free featured-match email (no payment, just collects the address)
 app.post("/register-free-access", async (c) => {
@@ -492,6 +954,7 @@ app.post("/register-free-access", async (c) => {
     }
 
     await syncResendLifecycle(email, "free");
+    await ensureLeadNurtureState(email, source);
 
     if (isNewFreeRegistration) {
       try {
@@ -549,6 +1012,7 @@ app.post("/register-checkout-lead", async (c) => {
     console.log(`[register-checkout-lead] Lead saved: ${email} (attempt ${record.attempt_count})`);
 
     await syncResendLifecycle(email, "lead");
+    await ensureLeadNurtureState(email, "checkout_lead");
 
     return c.json({ success: true });
   } catch (e) {
@@ -1872,6 +2336,24 @@ app.get("/admin/broadcasts", async (c) => {
   }
 });
 
+app.post("/admin/run-lead-nurture", async (c) => {
+  try {
+    const authHeader = c.req.header("Authorization");
+    if (!authHeader) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+
+    const body = await c.req.json().catch(() => ({}));
+    const dryRun = body?.dryRun !== false;
+    const limit = Math.max(1, Math.min(Number(body?.limit) || 250, 1000));
+    const result = await runLeadNurture({ dryRun, limit });
+    return c.json(result);
+  } catch (err: any) {
+    console.error("[admin/run-lead-nurture] error:", err);
+    return c.json({ error: "Internal server error", message: err?.message }, 500);
+  }
+});
+
 // Debug endpoint: test KV write and read
 app.get("/test-kv", async (c) => {
   try {
@@ -1917,7 +2399,23 @@ app.get("/health", async (c) => {  return c.json({ status: "ok" });
 
 // Configure Cron Jobs for automated emails
 if (typeof Deno.cron === "function") {
+  Deno.cron("Daily Lead Nurture", "0 22 * * *", async () => {
+    console.log("[CRON] Daily Lead Nurture is paused pending approval.");
+
+    try {
+      const result = await runLeadNurture({ dryRun: true, limit: 500 });
+      console.log(`[CRON] Daily Lead Nurture dry run complete. Would send ${result.results.filter((item: any) => item.dryRun).length}/${result.processed} for Round ${result.round}.`);
+    } catch (error) {
+      console.error("[CRON] Daily Lead Nurture Error:", error);
+    }
+  });
+}
+
+if (typeof Deno.cron === "function") {
   Deno.cron("Thursday Lookahead Plays", "0 4 * * 4", async () => {
+  console.log("[CRON] Thursday Lookahead Plays paused pending approval.");
+  return;
+
   console.log("[CRON] Executing Thursday Lookahead Plays...");
   
   const resendApiKey = Deno.env.get("RESEND_API_KEY");
@@ -2037,6 +2535,9 @@ if (typeof Deno.cron === "function") {
 
 if (typeof Deno.cron === "function") {
 Deno.cron("Sunday Ledger Review", "0 8 * * 0", async () => {
+  console.log("[CRON] Sunday Ledger Review paused pending approval.");
+  return;
+
   console.log("[CRON] Executing Sunday Ledger Review...");
   
   const resendApiKey = Deno.env.get("RESEND_API_KEY");
