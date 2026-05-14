@@ -580,7 +580,7 @@ function toSheetPercent(value: unknown) {
   return number > 1 ? number : number * 100;
 }
 
-function parseAestKickoffMs(dateISO: string, timeText: string) {
+function parseAestKickoffMs(dateISO: string, timeText: string, timezoneText = "AEST") {
   if (!dateISO) return Number.MAX_SAFE_INTEGER;
 
   const [year, month, day] = dateISO.split("-").map(Number);
@@ -597,8 +597,9 @@ function parseAestKickoffMs(dateISO: string, timeText: string) {
     if (meridian === "AM" && hours === 12) hours = 0;
   }
 
-  // AEST is UTC+10. The fixture sheet stores NRL kickoff labels in AEST.
-  return Date.UTC(year, month - 1, day, hours - 10, minutes, 0, 0);
+  const timezone = String(timezoneText || "").toUpperCase();
+  const utcOffsetHours = timezone === "AEDT" ? 11 : 10;
+  return Date.UTC(year, month - 1, day, hours - utcOffsetHours, minutes, 0, 0);
 }
 
 function getNurtureRoundPhase(firstKickoffMs: number, lastKickoffMs: number) {
@@ -628,9 +629,12 @@ async function loadNurtureRoundContext() {
       const round = toSheetRound(getSheetValue(row, ["Round Number", "RoundNumber", "Round"]));
       const homeTeam = shortNrlTeamName(getSheetValue(row, ["Home Team", "Home"]));
       const awayTeam = shortNrlTeamName(getSheetValue(row, ["Away Team", "Away"]));
+      const timeLabel = getSheetValue(row, ["AEST", "AEDT", "Time", "Kickoff"]);
+      const timezoneLabel = getSheetValue(row, ["TZ", "Timezone", "Time Zone"]) || "AEST";
       const kickoffMs = parseAestKickoffMs(
         getSheetValue(row, ["Date ISO", "DateISO"]),
-        getSheetValue(row, ["AEST", "Time", "Kickoff"]),
+        timeLabel,
+        timezoneLabel,
       );
 
       return {
@@ -638,9 +642,11 @@ async function loadNurtureRoundContext() {
         homeTeam,
         awayTeam,
         match: homeTeam && awayTeam ? `${homeTeam} v ${awayTeam}` : "",
+        displayMatch: homeTeam && awayTeam ? `${publicNrlTeamName(homeTeam)} v ${publicNrlTeamName(awayTeam)}` : "",
         day: getSheetValue(row, ["Day"]),
         dateLabel: getSheetValue(row, ["Date"]),
-        timeLabel: getSheetValue(row, ["AEST", "Time", "Kickoff"]),
+        timeLabel,
+        timezoneLabel,
         stadium: getSheetValue(row, ["Stadium", "Venue"]),
         kickoffMs,
       };
@@ -738,14 +744,14 @@ function getLeadNurtureHoldReason(
   return "";
 }
 
-function formatNurtureNextKickoff(ctx: Awaited<ReturnType<typeof loadNurtureRoundContext>>) {
-  if (!ctx.nextFixture) return "The next NRL kickoff is coming up.";
+function formatNurtureKickoffTime(ctx: Awaited<ReturnType<typeof loadNurtureRoundContext>>) {
+  if (!ctx.nextFixture) return "coming up";
   const parts = [
     ctx.nextFixture.day,
     ctx.nextFixture.dateLabel,
-    ctx.nextFixture.timeLabel ? `${ctx.nextFixture.timeLabel} AEST` : "",
+    ctx.nextFixture.timeLabel ? `${ctx.nextFixture.timeLabel} ${ctx.nextFixture.timezoneLabel || "AEST"}` : "",
   ].filter(Boolean);
-  return `${ctx.nextFixture.match}${parts.length ? ` — ${parts.join(" ")}` : ""}`;
+  return parts.join(" ");
 }
 
 function nurtureModelReadList(ctx: Awaited<ReturnType<typeof loadNurtureRoundContext>>) {
@@ -759,13 +765,16 @@ function nurtureModelReadList(ctx: Awaited<ReturnType<typeof loadNurtureRoundCon
 }
 
 function buildNurtureEmail(stepId: LeadNurtureStepId, ctx: Awaited<ReturnType<typeof loadNurtureRoundContext>>) {
-  const nextKickoff = formatNurtureNextKickoff(ctx);
+  const nextKickoffTime = formatNurtureKickoffTime(ctx);
   const modelReads = nurtureModelReadList(ctx);
   const tryScorerCount = ctx.premiumScorerCount || 0;
   const nextKickoffDay = ctx.nextFixture
-    ? [ctx.nextFixture.day, ctx.nextFixture.timeLabel ? `${ctx.nextFixture.timeLabel} AEST` : ""].filter(Boolean).join(" ")
+    ? [
+      ctx.nextFixture.day,
+      ctx.nextFixture.timeLabel ? `${ctx.nextFixture.timeLabel} ${ctx.nextFixture.timezoneLabel || "AEST"}` : "",
+    ].filter(Boolean).join(" ")
     : "soon";
-  const nextMatch = ctx.nextFixture?.match || "the next NRL match";
+  const nextMatch = ctx.nextFixture?.displayMatch || ctx.nextFixture?.match || "the next NRL match";
 
   const copy: Record<LeadNurtureStepId, { subject: string; eyebrow: string; headline: string; body: string; cta: string; href: string; secondaryCta?: string; secondaryHref?: string }> = {
     "proof-round": {
@@ -798,7 +807,7 @@ function buildNurtureEmail(stepId: LeadNurtureStepId, ctx: Awaited<ReturnType<ty
       subject: `Round ${ctx.round} starts ${nextKickoffDay} — premium view is live`,
       eyebrow: "Day 14 - Before Kickoff",
       headline: `The premium view for Round ${ctx.round} is live.`,
-      body: `First game is <strong>${nextMatch}</strong> — ${nextKickoff}.<br/><br/>If you want the full model read before kickoff — the plays, the try scorer value, the filtered signals — this is the window.<br/><br/>After the first game starts, the round's already underway and some prices will have moved.<br/><br/>The model has identified ${tryScorerCount} try scorer signals for Round ${ctx.round}.<br/><br/>One week access is $9. No lock-in.`,
+      body: `First game is <strong>${nextMatch}</strong> — ${nextKickoffTime}.<br/><br/>If you want the full model read before kickoff — the plays, the try scorer value, the filtered signals — this is the window.<br/><br/>After the first game starts, the round's already underway and some prices will have moved.<br/><br/>The model has identified ${tryScorerCount} try scorer signals for Round ${ctx.round}.<br/><br/>One week access is $9. No lock-in.`,
       cta: `Unlock Round ${ctx.round} Access`,
       href: "https://www.rightedge.com.au/#best-bets",
     },
@@ -1353,6 +1362,30 @@ function shortNrlTeamName(team: string) {
     "Dolphins": "Dolphins",
   };
   return shortNames[normalized] || normalized;
+}
+
+function publicNrlTeamName(team: string) {
+  const normalized = normalizeNrlTeamName(team);
+  const publicNames: Record<string, string> = {
+    "Brisbane Broncos": "Broncos",
+    "Sydney Roosters": "Roosters",
+    "Melbourne Storm": "Storm",
+    "Penrith Panthers": "Panthers",
+    "South Sydney Rabbitohs": "Rabbitohs",
+    "Parramatta Eels": "Eels",
+    "Cronulla Sharks": "Sharks",
+    "North Queensland Cowboys": "Cowboys",
+    "Manly Sea Eagles": "Sea Eagles",
+    "Newcastle Knights": "Knights",
+    "St George Illawarra Dragons": "Dragons",
+    "Gold Coast Titans": "Titans",
+    "Canterbury Bulldogs": "Bulldogs",
+    "New Zealand Warriors": "Warriors",
+    "Canberra Raiders": "Raiders",
+    "Wests Tigers": "Wests Tigers",
+    "Dolphins": "Dolphins",
+  };
+  return publicNames[normalized] || shortNrlTeamName(team);
 }
 
 function buildOddsMatchKey(home: string, away: string) {
