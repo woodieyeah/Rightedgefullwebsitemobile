@@ -2450,6 +2450,10 @@ app.post("/admin/send-lead-nurture-tests", async (c) => {
     }
 
     const body = await c.req.json().catch(() => ({}));
+    if (body?.confirm !== "SEND_NURTURE_TESTS_TO_ELLIOTT_ONLY") {
+      return c.json({ error: "Confirmation phrase required." }, 400);
+    }
+
     const email = String(body?.email || "elliott@woodbry.com").trim().toLowerCase();
     const result = await sendLeadNurtureTestEmails(email);
     return c.json(result);
