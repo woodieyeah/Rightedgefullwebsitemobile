@@ -1730,10 +1730,6 @@ function isBetrBookmaker(name?: string) {
   return normalizeBookmakerName(name || "") === "betr";
 }
 
-function shouldShowBetrBranding(name?: string) {
-  return isBetrBrandPreviewUser() && isBetrBookmaker(name);
-}
-
 function getBetrPreviewOddsRows<T extends { name: string; odds: number; isBest?: boolean; url?: string }>(
   rows: T[],
 ) {
@@ -1767,7 +1763,7 @@ function BookmakerName({
   name: string;
   className?: string;
 }) {
-  if (!shouldShowBetrBranding(name)) {
+  if (!isBetrBookmaker(name)) {
     return <span className={className}>{name}</span>;
   }
 
@@ -2928,7 +2924,7 @@ function OfficialPlayCard({ row }: { row: PredictionRow }) {
                 <div
                   key={bookie.name}
                   className={`flex items-center justify-between p-3 border-2 ${
-                    shouldShowBetrBranding(bookie.name)
+                    isBetrBookmaker(bookie.name)
                       ? "border-[#73F4DB] bg-[#113bd8]"
                       : bookie.isBest
                         ? "border-[#00E676] bg-[rgba(0,230,118,0.05)]"
@@ -2939,7 +2935,7 @@ function OfficialPlayCard({ row }: { row: PredictionRow }) {
                   <div className="flex items-center gap-3">
                     <span
                       className={`text-lg font-black ${
-                        shouldShowBetrBranding(bookie.name)
+                        isBetrBookmaker(bookie.name)
                           ? "text-[#73F4DB]"
                           : bookie.isBest
                             ? "text-[#00E676]"
@@ -3004,15 +3000,15 @@ function PublicHero({
       <div className="relative z-10 max-w-[800px]">
         <div className="inline-flex items-center gap-2 bg-[#FF2E63]/15 border border-[#FF2E63]/50 px-3 py-1.5 text-[10px] sm:text-xs font-bold text-[#FFEA00] sm:text-white mb-4 uppercase tracking-wider">
           <Sparkles className="w-3.5 h-3.5" />
-          NRL Betting Intelligence
+          NRL Match Intelligence
         </div>
 
         <h1 className="text-3xl sm:text-4xl md:text-5xl font-black tracking-tighter text-white leading-[1.05] mb-4">
-          What to Bet This NRL Round – Backed by Data, Not Guesswork.
+          The Model&apos;s Read on Every NRL Match – Backed by Data, Not Guesswork.
         </h1>
         
         <p className="text-sm sm:text-base md:text-lg text-white/70 leading-relaxed mb-6 font-bold max-w-[680px]">
-          See projected scores, model odds and premium plays for every NRL round.
+          See projected scores, model probabilities and match analysis for every NRL round.
         </p>
 
         <div className="flex flex-col sm:flex-row flex-wrap gap-3">
@@ -3214,7 +3210,7 @@ function MatchLiveOddsPanel({
             <div
               key={bookie.name}
               className={`flex items-center justify-between p-3 border-2 ${
-                shouldShowBetrBranding(bookie.name)
+                isBetrBookmaker(bookie.name)
                   ? "border-[#73F4DB] bg-[#113bd8]"
                   : bookie.isBest
                   ? "border-[#00E676] bg-[rgba(0,230,118,0.05)]"
@@ -3225,7 +3221,7 @@ function MatchLiveOddsPanel({
               <div className="flex items-center gap-3">
                 <span
                   className={`text-lg font-black ${
-                    shouldShowBetrBranding(bookie.name)
+                    isBetrBookmaker(bookie.name)
                       ? "text-[#73F4DB]"
                       : bookie.isBest ? "text-[#00E676]" : "text-white/70"
                   }`}
@@ -3414,7 +3410,7 @@ function FeaturedMatchPreview({
             {isOfficialPlay && (
               <div className="mb-10 inline-flex flex-col items-start border-l-[6px] border-[#00E676] bg-[#00E676]/10 px-6 py-5 shadow-[4px_4px_0_0_rgba(0,230,118,0.2)]">
                 <span className="text-xs font-black text-[#00E676] uppercase tracking-widest mb-1">
-                  Best Bet
+                  Model Play
                 </span>
                 <span className="text-3xl md:text-4xl font-black text-white uppercase tracking-tight">
                   {hasFeaturedAccess ? displayBestBet : <BlurredText>{displayBestBet}</BlurredText>}
@@ -3504,7 +3500,7 @@ function HomeMethodology({ onGoApp }: { onGoApp: (source: string) => void }) {
             How it works
           </h2>
           <div className="text-[#00E676] font-bold uppercase tracking-widest text-xs mt-1">
-            Mathematical edge betting
+            How the model works
           </div>
         </div>
         <button
@@ -3546,13 +3542,12 @@ function HomeMethodology({ onGoApp }: { onGoApp: (source: string) => void }) {
             03
           </div>
           <h3 className="text-xl font-black text-white uppercase mb-2">
-            Value Staking
+            Model Plays
           </h3>
           <p className="text-white/70 font-bold text-sm leading-relaxed">
-            When the edge is large enough, it becomes an
-            official play. We use strict Kelly Criterion
-            bankroll management to exploit the bookmaker's
-            pricing errors.
+            When the model identifies a meaningful gap
+            between its probability and the market price,
+            it becomes a model play.
           </p>
         </HomeCard>
       </div>
@@ -4978,7 +4973,7 @@ function TryScorersPage({
               Premium Content
             </h2>
             <p className="text-sm md:text-base text-white/70 font-bold leading-relaxed mb-8">
-              Try Scorer plays are included with RightEdge Premium. Unlock the full round to see Best Bets, Try Scorer signals, live prices and staking guidance.
+              Try Scorer plays are included with RightEdge Premium. Unlock the full round to see model plays, Try Scorer signals and live prices.
             </p>
             <button
               onClick={() => onRequestAccess("try-scorers")}
@@ -7229,8 +7224,8 @@ export default function App() {
             <div className="text-xs text-white/50 leading-relaxed font-bold max-w-[720px] uppercase tracking-wider">
               <p className="mb-4">
                 RightEdge provides projected scores, win
-                probabilities, model odds, official H2H plays,
-                Try Scorer signals and staking guidance for the
+                probabilities, model odds, premium match plays,
+                and Try Scorer signals for the
                 NRL. Premium plays are filtered to match the
                 model's strongest weekly reads.
               </p>
