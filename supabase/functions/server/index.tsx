@@ -695,6 +695,7 @@ async function loadNurtureRoundContext() {
       round: toSheetRound(getSheetValue(row, ["Round", "Round Number", "RoundNumber", "NRL Round"])),
       player: getSheetValue(row, ["Player"]),
       match: getSheetValue(row, ["Match"]),
+      bookmaker: getSheetValue(row, ["Bookmaker", "Best Bookmaker"]),
       modelPct: toSheetPercent(getSheetValue(row, ["StatsInsider %", "Stats Insider %", "Model %"])),
       edgePct: toSheetPercent(getSheetValue(row, ["Edge %"])),
     }))
@@ -703,6 +704,9 @@ async function loadNurtureRoundContext() {
   const premiumScorerCount = tryScorers.filter((row) =>
     row.modelPct >= 42 || row.edgePct >= 3
   ).length;
+  const bookmakers = [...new Set(tryScorers.map((row) => row.bookmaker).filter(Boolean))]
+    .slice(0, 4)
+    .join(", ");
   const requiredPredictionCount = Math.min(2, roundFixtures.length || 2);
   const dataReady = topModelReads.length >= requiredPredictionCount;
 
@@ -715,6 +719,7 @@ async function loadNurtureRoundContext() {
     nextFixture,
     topModelReads,
     premiumScorerCount,
+    bookmakers,
   };
 }
 
@@ -756,41 +761,44 @@ function nurtureModelReadList(ctx: Awaited<ReturnType<typeof loadNurtureRoundCon
 function buildNurtureEmail(stepId: LeadNurtureStepId, ctx: Awaited<ReturnType<typeof loadNurtureRoundContext>>) {
   const nextKickoff = formatNurtureNextKickoff(ctx);
   const modelReads = nurtureModelReadList(ctx);
-  const premiumScorerLine = ctx.premiumScorerCount
-    ? `${ctx.premiumScorerCount} Try Scorer signals currently qualify for Round ${ctx.round}.`
-    : `The Try Scorer model will update as Round ${ctx.round} prices and team lists settle.`;
+  const bookmakerLine = ctx.bookmakers || "the major bookmakers";
+  const tryScorerCount = ctx.premiumScorerCount || 0;
+  const nextKickoffDay = ctx.nextFixture
+    ? [ctx.nextFixture.day, ctx.nextFixture.timeLabel ? `${ctx.nextFixture.timeLabel} AEST` : ""].filter(Boolean).join(" ")
+    : "soon";
+  const nextMatch = ctx.nextFixture?.match || "the next NRL match";
 
   const copy: Record<LeadNurtureStepId, { subject: string; eyebrow: string; headline: string; body: string; cta: string; href: string }> = {
     "proof-round": {
-      subject: `What the model is seeing in Round ${ctx.round}`,
-      eyebrow: "Model Proof",
-      headline: "The model reads the round before kickoff.",
-      body: `Each round, RightEdge turns team form, projected scores and market prices into a simple match read.<br/><br/><strong>Current model reads:</strong><br/>${modelReads}<br/><br/>The point is not to guess louder. It is to see the round clearly before the market moves.`,
-      cta: "View Match Predictions",
+      subject: "How to actually read the RightEdge model",
+      eyebrow: "Day 3 - Model Read",
+      headline: `The model is already reading Round ${ctx.round}.`,
+      body: `Most people look at NRL odds and ask "who's going to win?"<br/><br/>The model asks a different question: where is the market mispricing the probability?<br/><br/>Here's how to read what you already have access to for free:<br/><br/><strong>Projected score</strong> — this is the model's expected scoreline based on team form, travel, rest days, and recent defensive shape. It's not a tip. It's a probability estimate.<br/><br/><strong>Model probability</strong> — the percentage chance the model assigns to each team winning. If the market has a team at 60% implied probability and the model has them at 72%, that's where the edge lives.<br/><br/><strong>Current round reads:</strong><br/>${modelReads}<br/><br/>You don't need Premium to read these. Start here.`,
+      cta: `View Round ${ctx.round} Predictions`,
       href: "https://www.rightedge.com.au/#matches",
     },
     "premium-explainer": {
       subject: "What Premium unlocks inside RightEdge",
-      eyebrow: "Premium Layer",
-      headline: "Free shows the model. Premium shows the signals.",
-      body: `Free members can follow the match predictions. Premium unlocks the full round of model plays, Try Scorer signals and live prices in one place.<br/><br/>${premiumScorerLine}`,
+      eyebrow: "Day 7 - Premium Layer",
+      headline: "Free shows you the read. Premium shows you the play.",
+      body: `There's a reason the free predictions don't include a "play this" recommendation.<br/><br/>Not every match with a model edge is worth acting on. The line might have already moved. The market might have already priced it in. The edge might be too small to be meaningful at current odds.<br/><br/>Premium exists to filter that down.<br/><br/>Each round, Premium members see:<br/><br/>— <strong>Model plays</strong> — matches where the model edge exceeds the threshold and the market hasn't closed the gap<br/><br/>— <strong>Try scorer value</strong> — player props where our probability estimate beats the best available market price by a meaningful margin<br/><br/>— <strong>Live odds context</strong> — so you know if the price has shifted since the model ran<br/><br/>It's the difference between knowing the model's read and knowing which reads are actually worth something.<br/><br/>Round ${ctx.round} has ${tryScorerCount} try scorer signals that qualify.`,
       cta: "Unlock Premium",
       href: "https://www.rightedge.com.au/#best-bets",
     },
     "inside-premium": {
       subject: "What premium members see each round",
-      eyebrow: "Inside Premium",
-      headline: "This is the action layer.",
-      body: `Premium is built for the people who want the model's strongest signals, not just the public match view.<br/><br/>Inside the premium section, members can see model plays, Try Scorer Best Bets, high-probability scorers and live pricing context for Round ${ctx.round}.`,
+      eyebrow: "Day 10 - Inside Premium",
+      headline: "What premium members see each round.",
+      body: `Each round, Premium members get three things free users don't.<br/><br/><strong>1. Model plays</strong><br/>Filtered matches where the model edge is strong enough and the market hasn't corrected. Not every game — typically 2 to 5 per round depending on how sharp the market is.<br/><br/><strong>2. Try scorer value plays</strong><br/>Player props where the model probability beats the best available market price by our minimum edge threshold. This round there are ${tryScorerCount} qualifying signals across ${bookmakerLine}.<br/><br/><strong>3. Live pricing context</strong><br/>The model runs before the market opens. Premium shows you how the price has moved since — so you know if you're early or if the edge is already gone.<br/><br/>That's the full picture. Everything in one place, updated each round.<br/><br/>$9/week. Cancel any time.`,
       cta: "See Premium Plays",
       href: "https://www.rightedge.com.au/#best-bets",
     },
     "conversion-window": {
-      subject: `Round ${ctx.round} model plays are live`,
-      eyebrow: "Before Kickoff",
-      headline: "Don't go in blind this NRL round.",
-      body: `Round ${ctx.round} is live in RightEdge with projected scores, model probabilities and premium signals updated from the sheet data.<br/><br/>${nextKickoff}`,
-      cta: "Unlock Round Access",
+      subject: `Round ${ctx.round} kicks off ${nextKickoffDay}`,
+      eyebrow: "Day 14 - Before Kickoff",
+      headline: `The premium view for Round ${ctx.round} is live.`,
+      body: `First game is <strong>${nextMatch}</strong> — ${nextKickoff}.<br/><br/>If you want the full model read before kickoff — the plays, the try scorer value, the filtered signals — this is the window.<br/><br/>After the first game starts, the round's already underway and some prices will have moved.<br/><br/>The model has identified ${tryScorerCount} try scorer signals for Round ${ctx.round}.<br/><br/>One week access is $9. No lock-in.`,
+      cta: `Unlock Round ${ctx.round} Access`,
       href: "https://www.rightedge.com.au/#best-bets",
     },
   };
