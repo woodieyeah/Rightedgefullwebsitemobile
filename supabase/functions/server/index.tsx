@@ -479,8 +479,8 @@ const SHEET_GIDS = {
 
 const LEAD_NURTURE_STEPS = [
   { id: "proof-round", minAgeDays: 3 },
-  { id: "premium-explainer", minAgeDays: 7 },
-  { id: "inside-premium", minAgeDays: 10 },
+  { id: "track-record", minAgeDays: 6 },
+  { id: "premium-explainer", minAgeDays: 10 },
   { id: "conversion-window", minAgeDays: 14 },
 ] as const;
 
@@ -761,14 +761,13 @@ function nurtureModelReadList(ctx: Awaited<ReturnType<typeof loadNurtureRoundCon
 function buildNurtureEmail(stepId: LeadNurtureStepId, ctx: Awaited<ReturnType<typeof loadNurtureRoundContext>>) {
   const nextKickoff = formatNurtureNextKickoff(ctx);
   const modelReads = nurtureModelReadList(ctx);
-  const bookmakerLine = ctx.bookmakers || "the major bookmakers";
   const tryScorerCount = ctx.premiumScorerCount || 0;
   const nextKickoffDay = ctx.nextFixture
     ? [ctx.nextFixture.day, ctx.nextFixture.timeLabel ? `${ctx.nextFixture.timeLabel} AEST` : ""].filter(Boolean).join(" ")
     : "soon";
   const nextMatch = ctx.nextFixture?.match || "the next NRL match";
 
-  const copy: Record<LeadNurtureStepId, { subject: string; eyebrow: string; headline: string; body: string; cta: string; href: string }> = {
+  const copy: Record<LeadNurtureStepId, { subject: string; eyebrow: string; headline: string; body: string; cta: string; href: string; secondaryCta?: string; secondaryHref?: string }> = {
     "proof-round": {
       subject: "How to actually read the RightEdge model",
       eyebrow: "Day 3 - Model Read",
@@ -777,24 +776,26 @@ function buildNurtureEmail(stepId: LeadNurtureStepId, ctx: Awaited<ReturnType<ty
       cta: `View Round ${ctx.round} Predictions`,
       href: "https://www.rightedge.com.au/#matches",
     },
-    "premium-explainer": {
-      subject: "What Premium unlocks inside RightEdge",
-      eyebrow: "Day 7 - Premium Layer",
-      headline: "Free shows you the read. Premium shows you the play.",
-      body: `There's a reason the free predictions don't include a "play this" recommendation.<br/><br/>Not every match with a model edge is worth acting on. The line might have already moved. The market might have already priced it in. The edge might be too small to be meaningful at current odds.<br/><br/>Premium exists to filter that down.<br/><br/>Each round, Premium members see:<br/><br/>— <strong>Model plays</strong> — matches where the model edge exceeds the threshold and the market hasn't closed the gap<br/><br/>— <strong>Try scorer value</strong> — player props where our probability estimate beats the best available market price by a meaningful margin<br/><br/>— <strong>Live odds context</strong> — so you know if the price has shifted since the model ran<br/><br/>It's the difference between knowing the model's read and knowing which reads are actually worth something.<br/><br/>Round ${ctx.round} has ${tryScorerCount} try scorer signals that qualify.`,
-      cta: "Unlock Premium",
-      href: "https://www.rightedge.com.au/#best-bets",
+    "track-record": {
+      subject: "Round 8 returned 40% ROI. Here's how.",
+      eyebrow: "DAY 6 - PROOF OF CONCEPT",
+      headline: "THE MODEL FOUND AN EDGE IN ROUND 8.",
+      body: `Round 8 was a good example of what the model is actually for.<br/><br/>Not every game. Not a tip on every match. Just the rounds where the model identified a meaningful gap between its probability estimate and the market price — and acted on it.<br/><br/>Round 8 produced a 40% ROI across the model plays.<br/><br/>We wrote up exactly how it happened — which matches qualified, what the model saw that the market hadn't priced in, and what the final result looked like.`,
+      cta: "Read the Round 8 Breakdown",
+      href: "https://articles.rightedge.com.au/nrl-round-8-2026-results/",
+      secondaryCta: "View Current Round Predictions",
+      secondaryHref: "https://www.rightedge.com.au",
     },
-    "inside-premium": {
-      subject: "What premium members see each round",
-      eyebrow: "Day 10 - Inside Premium",
-      headline: "What premium members see each round.",
-      body: `Each round, Premium members get three things free users don't.<br/><br/><strong>1. Model plays</strong><br/>Filtered matches where the model edge is strong enough and the market hasn't corrected. Not every game — typically 2 to 5 per round depending on how sharp the market is.<br/><br/><strong>2. Try scorer value plays</strong><br/>Player props where the model probability beats the best available market price by our minimum edge threshold. This round there are ${tryScorerCount} qualifying signals across ${bookmakerLine}.<br/><br/><strong>3. Live pricing context</strong><br/>The model runs before the market opens. Premium shows you how the price has moved since — so you know if you're early or if the edge is already gone.<br/><br/>That's the full picture. Everything in one place, updated each round.<br/><br/>$9/week. Cancel any time.`,
-      cta: "See Premium Plays",
-      href: "https://www.rightedge.com.au/#best-bets",
+    "premium-explainer": {
+      subject: "Free shows the read. Premium shows the play.",
+      eyebrow: "DAY 10 - PREMIUM LAYER",
+      headline: "FREE SHOWS YOU THE READ. PREMIUM SHOWS YOU THE PLAY.",
+      body: `There's a reason the free predictions don't include a "play this" recommendation.<br/><br/>Not every match with a model edge is worth acting on. The line might have already moved. The market might have already priced it in. The edge might be too small to be meaningful at current odds.<br/><br/>Premium exists to filter that down.<br/><br/>Each round, Premium members see:<br/><br/>— <strong>Model plays</strong> — matches where the model edge exceeds the threshold and the market hasn't closed the gap<br/><br/>— <strong>Try scorer value</strong> — player props where our probability estimate beats the best available market price by a meaningful margin<br/><br/>— <strong>Live odds context</strong> — so you know if the price has shifted since the model ran<br/><br/>It's the difference between knowing the model's read and knowing which reads are actually worth something.<br/><br/>Round ${ctx.round} has ${tryScorerCount} try scorer signals that qualify.`,
+      cta: "See what Premium includes",
+      href: "https://www.rightedge.com.au",
     },
     "conversion-window": {
-      subject: `Round ${ctx.round} kicks off ${nextKickoffDay}`,
+      subject: `Round ${ctx.round} starts ${nextKickoffDay} — premium view is live`,
       eyebrow: "Day 14 - Before Kickoff",
       headline: `The premium view for Round ${ctx.round} is live.`,
       body: `First game is <strong>${nextMatch}</strong> — ${nextKickoff}.<br/><br/>If you want the full model read before kickoff — the plays, the try scorer value, the filtered signals — this is the window.<br/><br/>After the first game starts, the round's already underway and some prices will have moved.<br/><br/>The model has identified ${tryScorerCount} try scorer signals for Round ${ctx.round}.<br/><br/>One week access is $9. No lock-in.`,
@@ -827,6 +828,7 @@ function buildNurtureEmail(stepId: LeadNurtureStepId, ctx: Awaited<ReturnType<ty
               </td>
             </tr>
           </table>
+          ${selected.secondaryCta && selected.secondaryHref ? `<div style="margin-top:18px;font-size:13px;line-height:1.4;font-weight:900;letter-spacing:1px;text-transform:uppercase;"><a href="${selected.secondaryHref}" style="color:#ffe600;text-decoration:none;">${selected.secondaryCta} →</a></div>` : ""}
         </div>
         ${responsibleGamblingEmailFooterHtml()}
         <div style="margin-top:24px;text-align:center;font-size:12px;color:#6f7f99;font-weight:700;letter-spacing:2px;text-transform:uppercase;">Backed by data, not guesswork.</div>
@@ -880,8 +882,8 @@ async function sendLeadNurtureTestEmails(toEmail: string) {
   const ctx = await loadNurtureRoundContext();
   const labels: Record<LeadNurtureStepId, string> = {
     "proof-round": "TEST - Day 3 - Model proof",
-    "premium-explainer": "TEST - Day 7 - Premium explainer",
-    "inside-premium": "TEST - Day 10 - Inside premium",
+    "track-record": "TEST - Day 6 - Track record",
+    "premium-explainer": "TEST - Day 10 - Premium explainer",
     "conversion-window": "TEST - Day 14 - Conversion window",
   };
   const sent: Array<{ step: LeadNurtureStepId; subject: string }> = [];
