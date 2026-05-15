@@ -115,7 +115,7 @@ app.post("/track-event", async (c) => {
 function getFromEmail() {
   const envFrom = Deno.env.get("RESEND_FROM_EMAIL");
   if (envFrom && envFrom.includes("@")) return envFrom;
-  return "RightEdge Support <elliott@rightedge.com.au>";
+  return "RightEdge <elliott@rightedge.com.au>";
 }
 
 function getResendClient() {
@@ -2339,7 +2339,7 @@ app.post("/admin/broadcast", async (c) => {
     const resendApiKey = Deno.env.get("RESEND_API_KEY");
     let fromEmail = Deno.env.get("RESEND_FROM_EMAIL");
     if (!fromEmail || !fromEmail.includes("@")) {
-      fromEmail = 'RightEdge Support <elliott@rightedge.com.au>';
+      fromEmail = 'RightEdge <elliott@rightedge.com.au>';
     }
     if (!resendApiKey) {
       return c.json({ error: "RESEND_API_KEY not configured" }, 500);
@@ -2650,7 +2650,7 @@ if (typeof Deno.cron === "function") {
     
     let fromEmail = Deno.env.get("RESEND_FROM_EMAIL");
     if (!fromEmail || !fromEmail.includes("@")) {
-      fromEmail = 'RightEdge Support <elliott@rightedge.com.au>';
+      fromEmail = 'RightEdge <elliott@rightedge.com.au>';
     }
     
     for (let i = 0; i < emailsToSend.length; i += BATCH_SIZE) {
@@ -2755,7 +2755,7 @@ Deno.cron("Sunday Ledger Review", "0 8 * * 0", async () => {
     
     let fromEmail = Deno.env.get("RESEND_FROM_EMAIL");
     if (!fromEmail || !fromEmail.includes("@")) {
-      fromEmail = 'RightEdge Support <elliott@rightedge.com.au>';
+      fromEmail = 'RightEdge <elliott@rightedge.com.au>';
     }
     
     for (let i = 0; i < emailsToSend.length; i += BATCH_SIZE) {
