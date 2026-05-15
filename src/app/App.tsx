@@ -2609,7 +2609,7 @@ function mapTeamToOddsApi(team: string): string {
 
 // Module level cache to prevent concurrent fetch requests from multiple cards
 let fetchOddsPromise: Promise<any> | null = null;
-const ODDS_CACHE_KEY = "rightedge_odds_cache_v4_prematch_locked";
+const ODDS_CACHE_KEY = "rightedge_odds_cache_v5_no_betfair";
 const ODDS_CACHE_DURATION = 30 * 60 * 1000; // Protect the 500/month free Odds API quota
 
 async function fetchLiveOddsCached() {
@@ -2723,6 +2723,7 @@ function OfficialPlayCard({ row }: { row: PredictionRow }) {
         }
 
         const formattedOdds = match.bookmakers
+          .filter((bookie: any) => !isExcludedMatchOddsBookmaker(bookie))
           .map((bookie: any) => {
             const h2hMarket = bookie.markets.find(
               (m: any) => m.key === "h2h",
@@ -3099,6 +3100,7 @@ function MatchLiveOddsPanel({
         }
 
         const formattedOdds = match.bookmakers
+          .filter((bookie: any) => !isExcludedMatchOddsBookmaker(bookie))
           .map((bookie: any) => {
             const h2hMarket = bookie.markets?.find((market: any) => market.key === "h2h");
             if (!h2hMarket) return null;
@@ -5223,6 +5225,7 @@ function normalizeBookmakerName(name: string) {
   if (key.includes("pointsbet")) return "pointsbet";
   if (key.includes("betright")) return "betright";
   if (key === "betr" || key.startsWith("betr") || key.includes("betrapp")) return "betr";
+  if (key.includes("betfair")) return "betfair";
   if (key.includes("ladbrokes")) return "ladbrokes";
   if (key.includes("sportsbet")) return "sportsbet";
   if (key.includes("bet365")) return "bet365";
@@ -5249,6 +5252,11 @@ function displayBookmakerName(name: string) {
   return labels[normalized] || name || "Best available";
 }
 
+function isExcludedMatchOddsBookmaker(bookmaker: any) {
+  const normalized = normalizeBookmakerName(bookmaker?.title || bookmaker?.key || "");
+  return normalized === "betfair";
+}
+
 function buildSgmMarketMap(rawOdds: any[]): SgmMarketMap {
   const prices: SgmMarketMap = {};
 
@@ -5259,6 +5267,8 @@ function buildSgmMarketMap(rawOdds: any[]): SgmMarketMap {
 
     const matchKey = buildMatchKey(homeTeam, awayTeam);
     for (const bookmaker of event.bookmakers || []) {
+      if (isExcludedMatchOddsBookmaker(bookmaker)) continue;
+
       const bookKey = normalizeBookmakerName(bookmaker.title || bookmaker.key || "");
       if (!bookKey) continue;
       if (!prices[matchKey]) prices[matchKey] = {};

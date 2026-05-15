@@ -1467,6 +1467,21 @@ async function applyPrematchOddsLocks(rawOdds: any[], source: string) {
   }));
 }
 
+function isExcludedMatchOddsBookmaker(bookmaker: any) {
+  const label = `${bookmaker?.key || ""} ${bookmaker?.title || ""}`.toLowerCase();
+  return label.includes("betfair");
+}
+
+function removeExcludedMatchOddsBookmakers(rawOdds: any) {
+  if (!Array.isArray(rawOdds)) return rawOdds;
+  return rawOdds.map((event: any) => ({
+    ...event,
+    bookmakers: (event.bookmakers || []).filter(
+      (bookmaker: any) => !isExcludedMatchOddsBookmaker(bookmaker),
+    ),
+  }));
+}
+
 async function fetchLiveOddsRaw(force = false) {
   const apiKey = Deno.env.get("ODDS_API_KEY");
   if (!apiKey) {
@@ -1479,9 +1494,10 @@ async function fetchLiveOddsRaw(force = false) {
   const parsedCachedOdds = cachedOdds
     ? (typeof cachedOdds === "string" ? JSON.parse(cachedOdds) : cachedOdds)
     : null;
+  const sanitizedCachedOdds = removeExcludedMatchOddsBookmakers(parsedCachedOdds);
 
-  if (parsedCachedOdds) {
-    const lockedCachedOdds = await applyPrematchOddsLocks(parsedCachedOdds, "cache");
+  if (sanitizedCachedOdds) {
+    const lockedCachedOdds = await applyPrematchOddsLocks(sanitizedCachedOdds, "cache");
     await kv.set("live_odds_cache", JSON.stringify(lockedCachedOdds));
 
     if (!force && cacheTime && (now - Number(cacheTime)) < MATCH_ODDS_CACHE_MS) {
@@ -1493,9 +1509,9 @@ async function fetchLiveOddsRaw(force = false) {
 
   if (!response.ok) {
     const text = await response.text();
-    if (parsedCachedOdds) {
+    if (sanitizedCachedOdds) {
       console.warn(`[OddsAPI] Returning cached match odds after API error: ${text}`);
-      return await applyPrematchOddsLocks(parsedCachedOdds, "cache");
+      return await applyPrematchOddsLocks(sanitizedCachedOdds, "cache");
     }
     throw new Error(`Failed to fetch from The Odds API: ${text}`);
   }
@@ -1503,7 +1519,7 @@ async function fetchLiveOddsRaw(force = false) {
   const data = await response.json();
 
   const lockedData = Array.isArray(data)
-    ? await applyPrematchOddsLocks(data, "fresh-api")
+    ? removeExcludedMatchOddsBookmakers(await applyPrematchOddsLocks(data, "fresh-api"))
     : data;
 
   if (Array.isArray(lockedData)) {
@@ -1526,6 +1542,8 @@ function buildBestMatchOdds(rawOdds: any[]) {
     let bestAwayBookmaker = "";
 
     for (const bookmaker of event.bookmakers || []) {
+      if (isExcludedMatchOddsBookmaker(bookmaker)) continue;
+
       const h2hMarket = (bookmaker.markets || []).find((market: any) => market.key === "h2h");
       if (!h2hMarket) continue;
 
