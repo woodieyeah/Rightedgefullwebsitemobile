@@ -2370,16 +2370,16 @@ function EmailGateModal({
           </div>
           <div>
             <h3 className="text-xl font-black text-white uppercase tracking-tight">
-              Access The Model For Free
+              UNLOCK INSTANT ACCESS
             </h3>
             <p className="text-[10px] font-bold text-[#FFEA00] uppercase tracking-widest">
-              Enter email — no credit card needed
+              FREE — NO CREDIT CARD NEEDED
             </p>
           </div>
         </div>
 
         <p className="text-sm text-white/70 font-bold leading-relaxed mb-6">
-          Enter your email to unlock the free RightEdge match model now. You will also get round updates by email. Free, no spam, unsubscribe anytime.
+          Enter your email to access full model predictions, projected scores and live odds instantly. Free, no credit card needed.
         </p>
 
         <form
@@ -2442,7 +2442,7 @@ function EmailGateModal({
               <RefreshCw className="w-5 h-5 animate-spin" />
             ) : step === "email" ? (
               <>
-                Unlock Free Access
+                ACCESS THE MODEL NOW
                 <ArrowRight className="w-5 h-5 stroke-[3px]" />
               </>
             ) : (
@@ -2464,13 +2464,13 @@ function EmailGateModal({
         {step === "email" && (
           <div className="mt-6 text-center">
             <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest">
-              Instant model access plus round updates
+              INSTANT ACCESS. NO WAITING.
             </p>
           </div>
         )}
 
         <p className="text-[10px] text-white/30 font-bold uppercase tracking-wider mt-4 text-center">
-          No spam ever. Just NRL model reads.
+          FREE FOREVER. UNSUBSCRIBE ANYTIME.
         </p>
       </div>
     </div>
