@@ -2769,7 +2769,7 @@ function OfficialPlayCard({ row }: { row: PredictionRow }) {
 
         const sortedOdds = formattedOdds
           .sort((a: any, b: any) => b.odds - a.odds)
-        const displayOdds = getBetrPreviewOddsRows(sortedOdds).slice(0, 3);
+        const displayOdds = sortedOdds.slice(0, 3);
         const bestOdd = Math.max(
           ...sortedOdds.map((b: any) => b.odds),
         );
@@ -3136,7 +3136,7 @@ function MatchLiveOddsPanel({
 
         const sortedOdds = formattedOdds
           .sort((a: any, b: any) => b.odds - a.odds)
-        const displayOdds = getBetrPreviewOddsRows(sortedOdds).slice(0, 3);
+        const displayOdds = sortedOdds.slice(0, 3);
         const bestOdd = Math.max(...sortedOdds.map((bookie: any) => bookie.odds));
 
         setLiveOdds(
