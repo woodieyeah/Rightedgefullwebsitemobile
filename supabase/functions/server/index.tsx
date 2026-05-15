@@ -282,7 +282,7 @@ function freeWelcomeHtml() {
             Welcome to RightEdge. You already have the free model view for the round — but the real edge comes from knowing when the market price is wrong, not just who the model thinks wins.
           </div>
           <div style="margin-top:16px;max-width:560px;font-size:17px;line-height:1.7;color:#c9cfdb;">
-            Premium turns the model into action: Best Bets, Try Scorer value, live bookmaker odds, edge % and suggested stakes — the exact layer built to help you stop guessing and start betting numbers properly.
+            Premium turns the model into action: Best Plays, Try Scorer probabilities & value, live bookmaker odds, edge % — the exact layer built to help you stop guessing and start making plays properly.
           </div>
 
           <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:24px;">
@@ -324,7 +324,7 @@ function freeWelcomeHtml() {
               <div style="background:#0a0d14;border-top:4px solid #ff2f7d;padding:22px 18px;height:100%;">
                 <div style="font-size:13px;color:#ff2f7d;font-weight:900;text-transform:uppercase;letter-spacing:0.7px;">03</div>
                 <div style="margin-top:10px;font-family:Arial Black,Impact,Helvetica,sans-serif;font-size:19px;line-height:1.1;color:#ffffff;text-transform:uppercase;">Value Detection</div>
-                <div style="margin-top:10px;font-size:14px;line-height:1.6;color:#c9cfdb;">Premium shows you what to bet so you get the edge on the bookies.</div>
+                <div style="margin-top:10px;font-size:14px;line-height:1.6;color:#c9cfdb;">Premium shows you what to play so you get the edge on the bookies.</div>
               </div>
             </td>
           </tr>
