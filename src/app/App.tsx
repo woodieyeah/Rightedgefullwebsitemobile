@@ -3024,7 +3024,7 @@ function PublicHero({
             onClick={() => onGoApp('hero_unlock_best_bets')}
             className="order-2 sm:order-1 inline-flex w-full sm:w-auto items-center justify-center gap-2 bg-[#1E232B] sm:bg-[#FFEA00] text-white sm:text-black border-2 border-[#FFEA00]/70 sm:border-0 px-8 py-3 text-base font-black hover:border-[#FFEA00] sm:hover:bg-[#FFD600] transition-colors uppercase tracking-wide sm:shadow-[4px_4px_0_0_#FF2E63]"
           >
-            View Match Predictions
+            View Free Match Predictions
             <ArrowRight className="w-4 h-4 stroke-[3px]" />
           </button>
         </div>
