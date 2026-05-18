@@ -1732,6 +1732,30 @@ function getAffiliateButtonClass(bookmaker: string | undefined, sizeClasses: str
   return `inline-flex max-w-full items-center justify-center gap-2 border-2 ${sizeClasses} font-black uppercase tracking-wider ${colorClasses} transition hover:-translate-y-0.5 hover:brightness-110`;
 }
 
+function AffiliateOddsButton({
+  payload,
+  bookmaker,
+  odds,
+  sizeClasses,
+  logoClassName = "h-5 w-5",
+}: {
+  payload: string;
+  bookmaker?: string;
+  odds: number;
+  sizeClasses: string;
+  logoClassName?: string;
+}) {
+  return (
+    <BetrAffiliateLink
+      payload={payload}
+      className={getAffiliateButtonClass(bookmaker, sizeClasses)}
+    >
+      {isBetrBookmaker(bookmaker) && <BetrLogoMark className={logoClassName} />}
+      <span>${odds.toFixed(2)}</span>
+    </BetrAffiliateLink>
+  );
+}
+
 const BETR_AFFILIATE_BASE_URL =
   "https://record.betraffiliates.com.au/_Bk4P0TFHeOiYNevImT-MDGNd7ZgqdRLk/1/";
 
@@ -4628,12 +4652,13 @@ function PremiumMarketPlayCard({ play }: { play: PremiumMarketPlay }) {
           <div className="text-[9px] font-black text-white/45 uppercase tracking-widest mb-1">
             Odds
           </div>
-          <BetrAffiliateLink
+          <AffiliateOddsButton
             payload="rightedge_premium_play"
-            className={getAffiliateButtonClass(play.bookmaker, "px-3 py-1.5 text-base md:text-lg")}
-          >
-            ${play.odds.toFixed(2)}
-          </BetrAffiliateLink>
+            bookmaker={play.bookmaker}
+            odds={play.odds}
+            sizeClasses="px-3 py-1.5 text-base md:text-lg"
+            logoClassName="h-5 w-5 md:h-6 md:w-6"
+          />
         </div>
         <div className="bg-[#1E232B] p-2.5 md:p-3">
           <div className="text-[9px] font-black text-white/45 uppercase tracking-widest mb-1">
@@ -4874,12 +4899,13 @@ function BestBetsPage({
                     <div className="text-[9px] font-black text-white/45 uppercase tracking-widest mb-1">
                       Odds
                     </div>
-                    <BetrAffiliateLink
+                    <AffiliateOddsButton
                       payload="rightedge_try_scorer"
-                      className={getAffiliateButtonClass(row.bookmaker, "px-3 py-1.5 text-base md:text-lg")}
-                    >
-                      ${row.bestOdds.toFixed(2)}
-                    </BetrAffiliateLink>
+                      bookmaker={row.bookmaker}
+                      odds={row.bestOdds}
+                      sizeClasses="px-3 py-1.5 text-base md:text-lg"
+                      logoClassName="h-5 w-5 md:h-6 md:w-6"
+                    />
                   </div>
                   <div className="bg-[#1E232B] p-2.5 md:p-3">
                     <div className="text-[9px] font-black text-white/45 uppercase tracking-widest mb-1">
@@ -5123,12 +5149,13 @@ function TryScorersPage({
                             {formatPercent(row.marketImpliedPct, 1)}
                           </td>
                           <td className="py-4 px-3">
-                            <BetrAffiliateLink
+                            <AffiliateOddsButton
                               payload="rightedge_try_scorer"
-                              className={getAffiliateButtonClass(row.bookmaker, "px-2.5 py-1 text-xs")}
-                            >
-                            ${row.bestOdds.toFixed(2)}
-                            </BetrAffiliateLink>
+                              bookmaker={row.bookmaker}
+                              odds={row.bestOdds}
+                              sizeClasses="px-2.5 py-1 text-xs"
+                              logoClassName="h-4 w-4"
+                            />
                           </td>
                           <td className="py-4 px-3 text-xs font-bold text-[#FFEA00] uppercase tracking-wider">
                             <BetrAffiliateLink
@@ -5174,12 +5201,13 @@ function TryScorersPage({
                           </div>
                         </div>
                         <div className="flex flex-col items-end gap-1 shrink-0">
-                          <BetrAffiliateLink
+                          <AffiliateOddsButton
                             payload="rightedge_try_scorer"
-                            className={getAffiliateButtonClass(row.bookmaker, "px-3 py-1.5 text-lg")}
-                          >
-                            ${row.bestOdds.toFixed(2)}
-                          </BetrAffiliateLink>
+                            bookmaker={row.bookmaker}
+                            odds={row.bestOdds}
+                            sizeClasses="px-3 py-1.5 text-lg"
+                            logoClassName="h-5 w-5"
+                          />
                           <BetrAffiliateLink
                             payload="rightedge_try_scorer"
                             className={getAffiliateButtonClass(row.bookmaker, "px-2 py-1 text-[9px]")}
