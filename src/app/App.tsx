@@ -1730,6 +1730,45 @@ function isBetrBookmaker(name?: string) {
   return normalizeBookmakerName(name || "") === "betr";
 }
 
+const BETR_AFFILIATE_BASE_URL =
+  "https://record.betraffiliates.com.au/_Bk4P0TFHeOiYNevImT-MDGNd7ZgqdRLk/1/";
+
+function getBetrAffiliateUrl(payload: string) {
+  const url = new URL(BETR_AFFILIATE_BASE_URL);
+  url.searchParams.set("payload", payload);
+  return url.toString();
+}
+
+function getBetrAffiliateUrlForBookmaker(bookmaker: string | undefined, payload: string) {
+  return isBetrBookmaker(bookmaker) ? getBetrAffiliateUrl(payload) : undefined;
+}
+
+function BetrAffiliateLink({
+  bookmaker,
+  payload,
+  className,
+  children,
+}: {
+  bookmaker?: string;
+  payload: string;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  const href = getBetrAffiliateUrlForBookmaker(bookmaker, payload);
+  if (!href) return <>{children}</>;
+
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="sponsored noopener noreferrer"
+      className={className}
+    >
+      {children}
+    </a>
+  );
+}
+
 function getBetrPreviewOddsRows<T extends { name: string; odds: number; isBest?: boolean; url?: string }>(
   rows: T[],
 ) {
@@ -2744,7 +2783,8 @@ function OfficialPlayCard({ row }: { row: PredictionRow }) {
             let name = bookie.title;
             let url = "#";
 
-            // These URLs would eventually be replaced with your actual affiliate tracking links
+            if (isBetrBookmaker(bookie.title || bookie.key))
+              url = getBetrAffiliateUrl("rightedge_match_odds");
             if (bookie.key === "sportsbet")
               url = `https://www.sportsbet.com.au/?aff=rightedge`;
             if (bookie.key === "tab")
@@ -2921,33 +2961,50 @@ function OfficialPlayCard({ row }: { row: PredictionRow }) {
                 <div className="h-12 bg-white/5 animate-pulse border-2 border-white/5" />
               </div>
             ) : (
-              liveOdds.map((bookie) => (
-                <div
-                  key={bookie.name}
-                  className={`flex items-center justify-between p-3 border-2 ${
-                    isBetrBookmaker(bookie.name)
-                      ? "border-[#73F4DB] bg-[#113bd8]"
-                      : bookie.isBest
-                        ? "border-[#00E676] bg-[rgba(0,230,118,0.05)]"
-                        : "border-white/5 bg-[#111317]"
-                  }`}
-                >
-                  <BookmakerName name={bookie.name} />
-                  <div className="flex items-center gap-3">
-                    <span
-                      className={`text-lg font-black ${
-                        isBetrBookmaker(bookie.name)
-                          ? "text-[#73F4DB]"
-                          : bookie.isBest
-                            ? "text-[#00E676]"
-                            : "text-white/70"
-                      }`}
-                    >
-                      ${bookie.odds.toFixed(2)}
-                    </span>
+              liveOdds.map((bookie) => {
+                const isBetr = isBetrBookmaker(bookie.name);
+                const className = `flex items-center justify-between p-3 border-2 ${
+                  isBetr
+                    ? "border-[#73F4DB] bg-[#113bd8] transition hover:brightness-110"
+                    : bookie.isBest
+                      ? "border-[#00E676] bg-[rgba(0,230,118,0.05)]"
+                      : "border-white/5 bg-[#111317]"
+                }`;
+                const content = (
+                  <>
+                    <BookmakerName name={bookie.name} />
+                    <div className="flex items-center gap-3">
+                      <span
+                        className={`text-lg font-black ${
+                          isBetr
+                            ? "text-[#73F4DB]"
+                            : bookie.isBest
+                              ? "text-[#00E676]"
+                              : "text-white/70"
+                        }`}
+                      >
+                        ${bookie.odds.toFixed(2)}
+                      </span>
+                    </div>
+                  </>
+                );
+
+                return isBetr ? (
+                  <a
+                    key={bookie.name}
+                    href={bookie.url}
+                    target="_blank"
+                    rel="sponsored noopener noreferrer"
+                    className={className}
+                  >
+                    {content}
+                  </a>
+                ) : (
+                  <div key={bookie.name} className={className}>
+                    {content}
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>
@@ -3111,6 +3168,8 @@ function MatchLiveOddsPanel({
             if (!outcome) return null;
 
             let url = "#";
+            if (isBetrBookmaker(bookie.title || bookie.key))
+              url = getBetrAffiliateUrl("rightedge_match_odds");
             if (bookie.key === "sportsbet")
               url = `https://www.sportsbet.com.au/?aff=rightedge`;
             if (bookie.key === "tab")
@@ -3208,31 +3267,48 @@ function MatchLiveOddsPanel({
             <div className="h-10 bg-white/5 animate-pulse border-2 border-white/5" />
           </div>
         ) : (
-          liveOdds.map((bookie) => (
-            <div
-              key={bookie.name}
-              className={`flex items-center justify-between p-3 border-2 ${
-                isBetrBookmaker(bookie.name)
-                  ? "border-[#73F4DB] bg-[#113bd8]"
-                  : bookie.isBest
-                  ? "border-[#00E676] bg-[rgba(0,230,118,0.05)]"
-                  : "border-white/5 bg-[#111317]"
-              }`}
-            >
-              <BookmakerName name={bookie.name} />
-              <div className="flex items-center gap-3">
-                <span
-                  className={`text-lg font-black ${
-                    isBetrBookmaker(bookie.name)
-                      ? "text-[#73F4DB]"
-                      : bookie.isBest ? "text-[#00E676]" : "text-white/70"
-                  }`}
-                >
-                  {locked ? <BlurredText>${bookie.odds.toFixed(2)}</BlurredText> : `$${bookie.odds.toFixed(2)}`}
-                </span>
+          liveOdds.map((bookie) => {
+            const isBetr = isBetrBookmaker(bookie.name);
+            const className = `flex items-center justify-between p-3 border-2 ${
+              isBetr
+                ? "border-[#73F4DB] bg-[#113bd8] transition hover:brightness-110"
+                : bookie.isBest
+                ? "border-[#00E676] bg-[rgba(0,230,118,0.05)]"
+                : "border-white/5 bg-[#111317]"
+            }`;
+            const content = (
+              <>
+                <BookmakerName name={bookie.name} />
+                <div className="flex items-center gap-3">
+                  <span
+                    className={`text-lg font-black ${
+                      isBetr
+                        ? "text-[#73F4DB]"
+                        : bookie.isBest ? "text-[#00E676]" : "text-white/70"
+                    }`}
+                  >
+                    {locked ? <BlurredText>${bookie.odds.toFixed(2)}</BlurredText> : `$${bookie.odds.toFixed(2)}`}
+                  </span>
+                </div>
+              </>
+            );
+
+            return isBetr ? (
+              <a
+                key={bookie.name}
+                href={bookie.url}
+                target="_blank"
+                rel="sponsored noopener noreferrer"
+                className={className}
+              >
+                {content}
+              </a>
+            ) : (
+              <div key={bookie.name} className={className}>
+                {content}
               </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
     </div>
@@ -4638,10 +4714,16 @@ function PremiumMarketPlayCard({ play }: { play: PremiumMarketPlay }) {
               isBetrBrandPreviewUser() ? "text-[#73F4DB]" : "text-white"
             }`}
           >
-            <BookmakerName
-              name={getPreviewBookmakerName(play.bookmaker)}
-              className="text-[11px] md:text-xs font-black uppercase"
-            />
+            <BetrAffiliateLink
+              bookmaker={play.bookmaker}
+              payload="rightedge_premium_play"
+              className="inline-flex max-w-full transition hover:brightness-110"
+            >
+              <BookmakerName
+                name={getPreviewBookmakerName(play.bookmaker)}
+                className="text-[11px] md:text-xs font-black uppercase"
+              />
+            </BetrAffiliateLink>
           </div>
         </div>
       </div>
@@ -4878,10 +4960,16 @@ function BestBetsPage({
                         isBetrBrandPreviewUser() ? "text-[#73F4DB]" : "text-[#FFEA00]"
                       }`}
                     >
-                      <BookmakerName
-                        name={getPreviewBookmakerName(row.bookmaker)}
-                        className="text-[11px] md:text-xs font-black uppercase"
-                      />
+                      <BetrAffiliateLink
+                        bookmaker={row.bookmaker}
+                        payload="rightedge_try_scorer"
+                        className="inline-flex max-w-full transition hover:brightness-110"
+                      >
+                        <BookmakerName
+                          name={getPreviewBookmakerName(row.bookmaker)}
+                          className="text-[11px] md:text-xs font-black uppercase"
+                        />
+                      </BetrAffiliateLink>
                     </div>
                   </div>
                 </div>
@@ -5111,12 +5199,18 @@ function TryScorersPage({
                             ${row.bestOdds.toFixed(2)}
                           </td>
                           <td className="py-4 px-3 text-xs font-bold text-[#FFEA00] uppercase tracking-wider">
-                            <BookmakerName
-                              name={getPreviewBookmakerName(row.bookmaker)}
-                              className={`text-xs font-bold uppercase tracking-wider ${
-                                isBetrBrandPreviewUser() ? "text-[#73F4DB]" : "text-[#FFEA00]"
-                              }`}
-                            />
+                            <BetrAffiliateLink
+                              bookmaker={row.bookmaker}
+                              payload="rightedge_try_scorer"
+                              className="inline-flex max-w-full transition hover:brightness-110"
+                            >
+                              <BookmakerName
+                                name={getPreviewBookmakerName(row.bookmaker)}
+                                className={`text-xs font-bold uppercase tracking-wider ${
+                                  isBetrBrandPreviewUser() ? "text-[#73F4DB]" : "text-[#FFEA00]"
+                                }`}
+                              />
+                            </BetrAffiliateLink>
                           </td>
                           <td className="py-4 px-3">
                             <span className={`inline-flex px-2 py-1 text-xs font-black uppercase tracking-widest ${getTryScorerSignalClass(signal?.label)}`}>
@@ -5152,12 +5246,18 @@ function TryScorersPage({
                         </div>
                         <div className="flex flex-col items-end gap-1 shrink-0">
                           <span className="text-2xl font-black text-white">${row.bestOdds.toFixed(2)}</span>
-                          <BookmakerName
-                            name={getPreviewBookmakerName(row.bookmaker)}
-                            className={`text-[10px] uppercase tracking-wider ${
-                              isBetrBrandPreviewUser() ? "text-[#73F4DB]" : "text-white/40"
-                            }`}
-                          />
+                          <BetrAffiliateLink
+                            bookmaker={row.bookmaker}
+                            payload="rightedge_try_scorer"
+                            className="inline-flex transition hover:brightness-110"
+                          >
+                            <BookmakerName
+                              name={getPreviewBookmakerName(row.bookmaker)}
+                              className={`text-[10px] uppercase tracking-wider ${
+                                isBetrBrandPreviewUser() ? "text-[#73F4DB]" : "text-white/40"
+                              }`}
+                            />
+                          </BetrAffiliateLink>
                           <span className={`px-2 py-1 text-[10px] font-black uppercase tracking-widest ${getTryScorerSignalClass(signal?.label)}`}>
                             {signal?.label || "Watch"}
                           </span>
