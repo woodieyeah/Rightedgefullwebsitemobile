@@ -1724,8 +1724,12 @@ function isBetrBookmaker(name?: string) {
   return normalizeBookmakerName(name || "") === "betr";
 }
 
-function getBookmakerOddsTextClass(bookmaker: string | undefined, fallbackClass: string) {
-  return isBetrBookmaker(bookmaker) ? "text-[#73F4DB]" : fallbackClass;
+function getAffiliateButtonClass(bookmaker: string | undefined, sizeClasses: string) {
+  const colorClasses = isBetrBookmaker(bookmaker)
+    ? "border-[#73F4DB] bg-[#113bd8] text-[#73F4DB] shadow-[2px_2px_0_0_rgba(115,244,219,0.7)]"
+    : "border-[#FFEA00] bg-[#111418] text-[#FFEA00] shadow-[2px_2px_0_0_#0047FF]";
+
+  return `inline-flex max-w-full items-center justify-center gap-2 border-2 ${sizeClasses} font-black uppercase tracking-wider ${colorClasses} transition hover:-translate-y-0.5 hover:brightness-110`;
 }
 
 const BETR_AFFILIATE_BASE_URL =
@@ -4626,7 +4630,7 @@ function PremiumMarketPlayCard({ play }: { play: PremiumMarketPlay }) {
           </div>
           <BetrAffiliateLink
             payload="rightedge_premium_play"
-            className={`inline-flex text-base md:text-lg font-black ${getBookmakerOddsTextClass(play.bookmaker, "text-[#FFEA00]")} transition hover:brightness-110`}
+            className={getAffiliateButtonClass(play.bookmaker, "px-3 py-1.5 text-base md:text-lg")}
           >
             ${play.odds.toFixed(2)}
           </BetrAffiliateLink>
@@ -4640,7 +4644,7 @@ function PremiumMarketPlayCard({ play }: { play: PremiumMarketPlay }) {
           >
             <BetrAffiliateLink
               payload="rightedge_premium_play"
-              className="inline-flex max-w-full transition hover:brightness-110"
+              className={getAffiliateButtonClass(play.bookmaker, "px-2.5 py-1.5 text-[10px] md:text-xs")}
             >
               <BookmakerName
                 name={getPreviewBookmakerName(play.bookmaker)}
@@ -4872,7 +4876,7 @@ function BestBetsPage({
                     </div>
                     <BetrAffiliateLink
                       payload="rightedge_try_scorer"
-                      className={`inline-flex text-base md:text-lg font-black ${getBookmakerOddsTextClass(row.bookmaker, "text-[#00E676]")} transition hover:brightness-110`}
+                      className={getAffiliateButtonClass(row.bookmaker, "px-3 py-1.5 text-base md:text-lg")}
                     >
                       ${row.bestOdds.toFixed(2)}
                     </BetrAffiliateLink>
@@ -4886,7 +4890,7 @@ function BestBetsPage({
                     >
                       <BetrAffiliateLink
                         payload="rightedge_try_scorer"
-                        className="inline-flex max-w-full transition hover:brightness-110"
+                        className={getAffiliateButtonClass(row.bookmaker, "px-2.5 py-1.5 text-[10px] md:text-xs")}
                       >
                         <BookmakerName
                           name={getPreviewBookmakerName(row.bookmaker)}
@@ -5121,7 +5125,7 @@ function TryScorersPage({
                           <td className="py-4 px-3">
                             <BetrAffiliateLink
                               payload="rightedge_try_scorer"
-                              className={`inline-flex text-sm font-black ${getBookmakerOddsTextClass(row.bookmaker, "text-[#00E676]")} transition hover:brightness-110`}
+                              className={getAffiliateButtonClass(row.bookmaker, "px-2.5 py-1 text-xs")}
                             >
                             ${row.bestOdds.toFixed(2)}
                             </BetrAffiliateLink>
@@ -5129,11 +5133,11 @@ function TryScorersPage({
                           <td className="py-4 px-3 text-xs font-bold text-[#FFEA00] uppercase tracking-wider">
                             <BetrAffiliateLink
                               payload="rightedge_try_scorer"
-                              className="inline-flex max-w-full transition hover:brightness-110"
+                              className={getAffiliateButtonClass(row.bookmaker, "px-2.5 py-1 text-[10px]")}
                             >
                               <BookmakerName
                                 name={getPreviewBookmakerName(row.bookmaker)}
-                                className="text-xs font-bold uppercase tracking-wider text-[#FFEA00]"
+                                className="text-xs font-bold uppercase tracking-wider"
                               />
                             </BetrAffiliateLink>
                           </td>
@@ -5172,17 +5176,17 @@ function TryScorersPage({
                         <div className="flex flex-col items-end gap-1 shrink-0">
                           <BetrAffiliateLink
                             payload="rightedge_try_scorer"
-                            className={`inline-flex text-2xl font-black ${getBookmakerOddsTextClass(row.bookmaker, "text-white")} transition hover:brightness-110`}
+                            className={getAffiliateButtonClass(row.bookmaker, "px-3 py-1.5 text-lg")}
                           >
                             ${row.bestOdds.toFixed(2)}
                           </BetrAffiliateLink>
                           <BetrAffiliateLink
                             payload="rightedge_try_scorer"
-                            className="inline-flex transition hover:brightness-110"
+                            className={getAffiliateButtonClass(row.bookmaker, "px-2 py-1 text-[9px]")}
                           >
                             <BookmakerName
                               name={getPreviewBookmakerName(row.bookmaker)}
-                              className="text-[10px] uppercase tracking-wider text-white/40"
+                              className="text-[10px] uppercase tracking-wider"
                             />
                           </BetrAffiliateLink>
                           <span className={`px-2 py-1 text-[10px] font-black uppercase tracking-widest ${getTryScorerSignalClass(signal?.label)}`}>
