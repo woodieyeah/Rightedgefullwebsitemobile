@@ -1706,24 +1706,8 @@ function getUserEmail(): string | null {
   }
 }
 
-function isBetrBrandPreviewUser(): boolean {
-  const allowedEmails = new Set(["elliott@woodbry.com", "betr@rightedge.com.au"]);
-  const email = getUserEmail() || getPaidUserEmail();
-  return email ? allowedEmails.has(email.trim().toLowerCase()) : false;
-}
-
 function getPreviewBookmakerName(bookmaker?: string) {
   return bookmaker || "—";
-}
-
-function BetrLogoMark({ className = "h-7 w-7" }: { className?: string }) {
-  return (
-    <img
-      src="/betr-square.png"
-      alt="Betr"
-      className={`${className} rounded-lg border border-[#73F4DB] bg-[#113bd8] object-contain shrink-0`}
-    />
-  );
 }
 
 function isBetrBookmaker(name?: string) {
@@ -1739,27 +1723,18 @@ function getBetrAffiliateUrl(payload: string) {
   return url.toString();
 }
 
-function getBetrAffiliateUrlForBookmaker(bookmaker: string | undefined, payload: string) {
-  return isBetrBookmaker(bookmaker) ? getBetrAffiliateUrl(payload) : undefined;
-}
-
 function BetrAffiliateLink({
-  bookmaker,
   payload,
   className,
   children,
 }: {
-  bookmaker?: string;
   payload: string;
   className?: string;
   children: React.ReactNode;
 }) {
-  const href = getBetrAffiliateUrlForBookmaker(bookmaker, payload);
-  if (!href) return <>{children}</>;
-
   return (
     <a
-      href={href}
+      href={getBetrAffiliateUrl(payload)}
       target="_blank"
       rel="sponsored noopener noreferrer"
       className={className}
@@ -1769,32 +1744,6 @@ function BetrAffiliateLink({
   );
 }
 
-function getBetrPreviewOddsRows<T extends { name: string; odds: number; isBest?: boolean; url?: string }>(
-  rows: T[],
-) {
-  if (!isBetrBrandPreviewUser() || !rows.length) return rows;
-
-  const sorted = [...rows].sort((a, b) => b.odds - a.odds);
-  const betrRow = sorted.find((row) => isBetrBookmaker(row.name));
-  if (!betrRow) return sorted.slice(0, 3);
-
-  const bestOdds = Math.max(...sorted.map((row) => row.odds));
-  const rest = sorted.filter((row) => !isBetrBookmaker(row.name)).slice(0, 2);
-
-  return [
-    {
-      ...betrRow,
-      name: "Betr",
-      odds: betrRow.odds,
-      isBest: betrRow.odds === bestOdds,
-    } as T,
-    ...rest.map((row) => ({
-      ...row,
-      isBest: row.odds === bestOdds,
-    })),
-  ];
-}
-
 function BookmakerName({
   name,
   className = "text-sm font-bold text-white",
@@ -1802,16 +1751,7 @@ function BookmakerName({
   name: string;
   className?: string;
 }) {
-  if (!isBetrBookmaker(name)) {
-    return <span className={className}>{name}</span>;
-  }
-
-  return (
-    <span className={`${className} inline-flex items-center gap-2 min-w-0`}>
-      <BetrLogoMark className="h-7 w-7" />
-      <span className="truncate">Betr</span>
-    </span>
-  );
+  return <span className={className}>{isBetrBookmaker(name) ? "Betr" : name}</span>;
 }
 
 function isUserAdmin(): boolean {
@@ -2781,24 +2721,10 @@ function OfficialPlayCard({ row }: { row: PredictionRow }) {
 
             // Map odds api bookie keys to readable names and links
             let name = bookie.title;
-            let url = "#";
-
-            if (isBetrBookmaker(bookie.title || bookie.key))
-              url = getBetrAffiliateUrl("rightedge_match_odds");
-            if (bookie.key === "sportsbet")
-              url = `https://www.sportsbet.com.au/?aff=rightedge`;
-            if (bookie.key === "tab")
-              url = `https://www.tab.com.au/?affiliate=rightedge`;
-            if (bookie.key === "neds")
-              url = `https://www.neds.com.au/?ref=rightedge`;
-            if (bookie.key === "pointsbetau")
-              url = `https://pointsbet.com.au/?aff=rightedge`;
-            if (bookie.key === "ladbrokes_au")
-              url = `https://www.ladbrokes.com.au/?ref=rightedge`;
 
             return {
               name,
-              url,
+              url: getBetrAffiliateUrl("rightedge_match_odds"),
               odds: outcome.price,
             };
           })
@@ -2827,17 +2753,17 @@ function OfficialPlayCard({ row }: { row: PredictionRow }) {
         const bookies = [
           {
             name: "Sportsbet",
-            url: `https://www.sportsbet.com.au/?aff=rightedge`,
+            url: getBetrAffiliateUrl("rightedge_match_odds"),
             odds: base,
           },
           {
             name: "TAB",
-            url: `https://www.tab.com.au/?affiliate=rightedge`,
+            url: getBetrAffiliateUrl("rightedge_match_odds"),
             odds: base - 0.05,
           },
           {
             name: "Neds",
-            url: `https://www.neds.com.au/?ref=rightedge`,
+            url: getBetrAffiliateUrl("rightedge_match_odds"),
             odds: base + 0.05,
           },
         ];
@@ -2962,23 +2888,18 @@ function OfficialPlayCard({ row }: { row: PredictionRow }) {
               </div>
             ) : (
               liveOdds.map((bookie) => {
-                const isBetr = isBetrBookmaker(bookie.name);
                 const className = `flex items-center justify-between p-3 border-2 ${
-                  isBetr
-                    ? "border-[#73F4DB] bg-[#113bd8] transition hover:brightness-110"
-                    : bookie.isBest
+                  bookie.isBest
                       ? "border-[#00E676] bg-[rgba(0,230,118,0.05)]"
                       : "border-white/5 bg-[#111317]"
-                }`;
+                } transition hover:brightness-110`;
                 const content = (
                   <>
                     <BookmakerName name={bookie.name} />
                     <div className="flex items-center gap-3">
                       <span
                         className={`text-lg font-black ${
-                          isBetr
-                            ? "text-[#73F4DB]"
-                            : bookie.isBest
+                          bookie.isBest
                               ? "text-[#00E676]"
                               : "text-white/70"
                         }`}
@@ -2989,7 +2910,7 @@ function OfficialPlayCard({ row }: { row: PredictionRow }) {
                   </>
                 );
 
-                return isBetr ? (
+                return (
                   <a
                     key={bookie.name}
                     href={bookie.url}
@@ -2999,10 +2920,6 @@ function OfficialPlayCard({ row }: { row: PredictionRow }) {
                   >
                     {content}
                   </a>
-                ) : (
-                  <div key={bookie.name} className={className}>
-                    {content}
-                  </div>
                 );
               })
             )}
@@ -3167,23 +3084,9 @@ function MatchLiveOddsPanel({
             );
             if (!outcome) return null;
 
-            let url = "#";
-            if (isBetrBookmaker(bookie.title || bookie.key))
-              url = getBetrAffiliateUrl("rightedge_match_odds");
-            if (bookie.key === "sportsbet")
-              url = `https://www.sportsbet.com.au/?aff=rightedge`;
-            if (bookie.key === "tab")
-              url = `https://www.tab.com.au/?affiliate=rightedge`;
-            if (bookie.key === "neds")
-              url = `https://www.neds.com.au/?ref=rightedge`;
-            if (bookie.key === "pointsbetau")
-              url = `https://pointsbet.com.au/?aff=rightedge`;
-            if (bookie.key === "ladbrokes_au")
-              url = `https://www.ladbrokes.com.au/?ref=rightedge`;
-
             return {
               name: bookie.title,
-              url,
+              url: getBetrAffiliateUrl("rightedge_match_odds"),
               odds: outcome.price,
             };
           })
@@ -3210,17 +3113,17 @@ function MatchLiveOddsPanel({
         const bookies = [
           {
             name: "Sportsbet",
-            url: `https://www.sportsbet.com.au/?aff=rightedge`,
+            url: getBetrAffiliateUrl("rightedge_match_odds"),
             odds: base,
           },
           {
             name: "TAB",
-            url: `https://www.tab.com.au/?affiliate=rightedge`,
+            url: getBetrAffiliateUrl("rightedge_match_odds"),
             odds: base - 0.05,
           },
           {
             name: "Neds",
-            url: `https://www.neds.com.au/?ref=rightedge`,
+            url: getBetrAffiliateUrl("rightedge_match_odds"),
             odds: base + 0.05,
           },
         ];
@@ -3268,23 +3171,18 @@ function MatchLiveOddsPanel({
           </div>
         ) : (
           liveOdds.map((bookie) => {
-            const isBetr = isBetrBookmaker(bookie.name);
             const className = `flex items-center justify-between p-3 border-2 ${
-              isBetr
-                ? "border-[#73F4DB] bg-[#113bd8] transition hover:brightness-110"
-                : bookie.isBest
+              bookie.isBest
                 ? "border-[#00E676] bg-[rgba(0,230,118,0.05)]"
                 : "border-white/5 bg-[#111317]"
-            }`;
+            } transition hover:brightness-110`;
             const content = (
               <>
                 <BookmakerName name={bookie.name} />
                 <div className="flex items-center gap-3">
                   <span
                     className={`text-lg font-black ${
-                      isBetr
-                        ? "text-[#73F4DB]"
-                        : bookie.isBest ? "text-[#00E676]" : "text-white/70"
+                      bookie.isBest ? "text-[#00E676]" : "text-white/70"
                     }`}
                   >
                     {locked ? <BlurredText>${bookie.odds.toFixed(2)}</BlurredText> : `$${bookie.odds.toFixed(2)}`}
@@ -3293,7 +3191,7 @@ function MatchLiveOddsPanel({
               </>
             );
 
-            return isBetr ? (
+            return (
               <a
                 key={bookie.name}
                 href={bookie.url}
@@ -3303,10 +3201,6 @@ function MatchLiveOddsPanel({
               >
                 {content}
               </a>
-            ) : (
-              <div key={bookie.name} className={className}>
-                {content}
-              </div>
             );
           })
         )}
@@ -4612,10 +4506,6 @@ function getBestPremiumMarketPlayForMatch(
     return bScore - aScore;
   });
 
-  if (isBetrBrandPreviewUser()) {
-    return rankedCandidates.find((candidate) => isBetrBookmaker(candidate.bookmaker)) || rankedCandidates[0];
-  }
-
   return rankedCandidates[0];
 }
 
@@ -4701,21 +4591,21 @@ function PremiumMarketPlayCard({ play }: { play: PremiumMarketPlay }) {
           <div className="text-[9px] font-black text-white/45 uppercase tracking-widest mb-1">
             Odds
           </div>
-          <div className="text-base md:text-lg font-black text-[#FFEA00]">
+          <BetrAffiliateLink
+            payload="rightedge_premium_play"
+            className="inline-flex text-base md:text-lg font-black text-[#FFEA00] transition hover:brightness-110"
+          >
             ${play.odds.toFixed(2)}
-          </div>
+          </BetrAffiliateLink>
         </div>
         <div className="bg-[#1E232B] p-2.5 md:p-3">
           <div className="text-[9px] font-black text-white/45 uppercase tracking-widest mb-1">
             Bookie
           </div>
           <div
-            className={`text-[11px] md:text-xs font-black uppercase truncate ${
-              isBetrBrandPreviewUser() ? "text-[#73F4DB]" : "text-white"
-            }`}
+            className="text-[11px] md:text-xs font-black uppercase truncate text-white"
           >
             <BetrAffiliateLink
-              bookmaker={play.bookmaker}
               payload="rightedge_premium_play"
               className="inline-flex max-w-full transition hover:brightness-110"
             >
@@ -4947,21 +4837,21 @@ function BestBetsPage({
                     <div className="text-[9px] font-black text-white/45 uppercase tracking-widest mb-1">
                       Odds
                     </div>
-                    <div className="text-base md:text-lg font-black text-[#00E676]">
+                    <BetrAffiliateLink
+                      payload="rightedge_try_scorer"
+                      className="inline-flex text-base md:text-lg font-black text-[#00E676] transition hover:brightness-110"
+                    >
                       ${row.bestOdds.toFixed(2)}
-                    </div>
+                    </BetrAffiliateLink>
                   </div>
                   <div className="bg-[#1E232B] p-2.5 md:p-3">
                     <div className="text-[9px] font-black text-white/45 uppercase tracking-widest mb-1">
                       Bookie
                     </div>
                     <div
-                      className={`text-[11px] md:text-xs font-black uppercase truncate ${
-                        isBetrBrandPreviewUser() ? "text-[#73F4DB]" : "text-[#FFEA00]"
-                      }`}
+                      className="text-[11px] md:text-xs font-black uppercase truncate text-[#FFEA00]"
                     >
                       <BetrAffiliateLink
-                        bookmaker={row.bookmaker}
                         payload="rightedge_try_scorer"
                         className="inline-flex max-w-full transition hover:brightness-110"
                       >
@@ -5195,20 +5085,22 @@ function TryScorersPage({
                           <td className="py-4 px-3 text-sm font-bold text-white/50">
                             {formatPercent(row.marketImpliedPct, 1)}
                           </td>
-                          <td className="py-4 px-3 text-sm font-black text-[#00E676]">
+                          <td className="py-4 px-3">
+                            <BetrAffiliateLink
+                              payload="rightedge_try_scorer"
+                              className="inline-flex text-sm font-black text-[#00E676] transition hover:brightness-110"
+                            >
                             ${row.bestOdds.toFixed(2)}
+                            </BetrAffiliateLink>
                           </td>
                           <td className="py-4 px-3 text-xs font-bold text-[#FFEA00] uppercase tracking-wider">
                             <BetrAffiliateLink
-                              bookmaker={row.bookmaker}
                               payload="rightedge_try_scorer"
                               className="inline-flex max-w-full transition hover:brightness-110"
                             >
                               <BookmakerName
                                 name={getPreviewBookmakerName(row.bookmaker)}
-                                className={`text-xs font-bold uppercase tracking-wider ${
-                                  isBetrBrandPreviewUser() ? "text-[#73F4DB]" : "text-[#FFEA00]"
-                                }`}
+                                className="text-xs font-bold uppercase tracking-wider text-[#FFEA00]"
                               />
                             </BetrAffiliateLink>
                           </td>
@@ -5245,17 +5137,19 @@ function TryScorersPage({
                           </div>
                         </div>
                         <div className="flex flex-col items-end gap-1 shrink-0">
-                          <span className="text-2xl font-black text-white">${row.bestOdds.toFixed(2)}</span>
                           <BetrAffiliateLink
-                            bookmaker={row.bookmaker}
+                            payload="rightedge_try_scorer"
+                            className="inline-flex text-2xl font-black text-white transition hover:brightness-110"
+                          >
+                            ${row.bestOdds.toFixed(2)}
+                          </BetrAffiliateLink>
+                          <BetrAffiliateLink
                             payload="rightedge_try_scorer"
                             className="inline-flex transition hover:brightness-110"
                           >
                             <BookmakerName
                               name={getPreviewBookmakerName(row.bookmaker)}
-                              className={`text-[10px] uppercase tracking-wider ${
-                                isBetrBrandPreviewUser() ? "text-[#73F4DB]" : "text-white/40"
-                              }`}
+                              className="text-[10px] uppercase tracking-wider text-white/40"
                             />
                           </BetrAffiliateLink>
                           <span className={`px-2 py-1 text-[10px] font-black uppercase tracking-widest ${getTryScorerSignalClass(signal?.label)}`}>
