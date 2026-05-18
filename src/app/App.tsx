@@ -1710,8 +1710,22 @@ function getPreviewBookmakerName(bookmaker?: string) {
   return bookmaker || "—";
 }
 
+function BetrLogoMark({ className = "h-7 w-7" }: { className?: string }) {
+  return (
+    <img
+      src="/betr-square.png"
+      alt="Betr"
+      className={`${className} rounded-lg border border-[#73F4DB] bg-[#113bd8] object-contain shrink-0`}
+    />
+  );
+}
+
 function isBetrBookmaker(name?: string) {
   return normalizeBookmakerName(name || "") === "betr";
+}
+
+function getBookmakerOddsTextClass(bookmaker: string | undefined, fallbackClass: string) {
+  return isBetrBookmaker(bookmaker) ? "text-[#73F4DB]" : fallbackClass;
 }
 
 const BETR_AFFILIATE_BASE_URL =
@@ -1751,7 +1765,16 @@ function BookmakerName({
   name: string;
   className?: string;
 }) {
-  return <span className={className}>{isBetrBookmaker(name) ? "Betr" : name}</span>;
+  if (!isBetrBookmaker(name)) {
+    return <span className={className}>{name}</span>;
+  }
+
+  return (
+    <span className={`${className} inline-flex items-center gap-2 min-w-0`}>
+      <BetrLogoMark className="h-7 w-7" />
+      <span className="truncate">Betr</span>
+    </span>
+  );
 }
 
 function isUserAdmin(): boolean {
@@ -2888,8 +2911,11 @@ function OfficialPlayCard({ row }: { row: PredictionRow }) {
               </div>
             ) : (
               liveOdds.map((bookie) => {
+                const isBetr = isBetrBookmaker(bookie.name);
                 const className = `flex items-center justify-between p-3 border-2 ${
-                  bookie.isBest
+                  isBetr
+                    ? "border-[#73F4DB] bg-[#113bd8]"
+                    : bookie.isBest
                       ? "border-[#00E676] bg-[rgba(0,230,118,0.05)]"
                       : "border-white/5 bg-[#111317]"
                 } transition hover:brightness-110`;
@@ -2899,7 +2925,9 @@ function OfficialPlayCard({ row }: { row: PredictionRow }) {
                     <div className="flex items-center gap-3">
                       <span
                         className={`text-lg font-black ${
-                          bookie.isBest
+                          isBetr
+                            ? "text-[#73F4DB]"
+                            : bookie.isBest
                               ? "text-[#00E676]"
                               : "text-white/70"
                         }`}
@@ -3171,8 +3199,11 @@ function MatchLiveOddsPanel({
           </div>
         ) : (
           liveOdds.map((bookie) => {
+            const isBetr = isBetrBookmaker(bookie.name);
             const className = `flex items-center justify-between p-3 border-2 ${
-              bookie.isBest
+              isBetr
+                ? "border-[#73F4DB] bg-[#113bd8]"
+                : bookie.isBest
                 ? "border-[#00E676] bg-[rgba(0,230,118,0.05)]"
                 : "border-white/5 bg-[#111317]"
             } transition hover:brightness-110`;
@@ -3182,7 +3213,9 @@ function MatchLiveOddsPanel({
                 <div className="flex items-center gap-3">
                   <span
                     className={`text-lg font-black ${
-                      bookie.isBest ? "text-[#00E676]" : "text-white/70"
+                      isBetr
+                        ? "text-[#73F4DB]"
+                        : bookie.isBest ? "text-[#00E676]" : "text-white/70"
                     }`}
                   >
                     {locked ? <BlurredText>${bookie.odds.toFixed(2)}</BlurredText> : `$${bookie.odds.toFixed(2)}`}
@@ -4593,7 +4626,7 @@ function PremiumMarketPlayCard({ play }: { play: PremiumMarketPlay }) {
           </div>
           <BetrAffiliateLink
             payload="rightedge_premium_play"
-            className="inline-flex text-base md:text-lg font-black text-[#FFEA00] transition hover:brightness-110"
+            className={`inline-flex text-base md:text-lg font-black ${getBookmakerOddsTextClass(play.bookmaker, "text-[#FFEA00]")} transition hover:brightness-110`}
           >
             ${play.odds.toFixed(2)}
           </BetrAffiliateLink>
@@ -4839,7 +4872,7 @@ function BestBetsPage({
                     </div>
                     <BetrAffiliateLink
                       payload="rightedge_try_scorer"
-                      className="inline-flex text-base md:text-lg font-black text-[#00E676] transition hover:brightness-110"
+                      className={`inline-flex text-base md:text-lg font-black ${getBookmakerOddsTextClass(row.bookmaker, "text-[#00E676]")} transition hover:brightness-110`}
                     >
                       ${row.bestOdds.toFixed(2)}
                     </BetrAffiliateLink>
@@ -5088,7 +5121,7 @@ function TryScorersPage({
                           <td className="py-4 px-3">
                             <BetrAffiliateLink
                               payload="rightedge_try_scorer"
-                              className="inline-flex text-sm font-black text-[#00E676] transition hover:brightness-110"
+                              className={`inline-flex text-sm font-black ${getBookmakerOddsTextClass(row.bookmaker, "text-[#00E676]")} transition hover:brightness-110`}
                             >
                             ${row.bestOdds.toFixed(2)}
                             </BetrAffiliateLink>
@@ -5139,7 +5172,7 @@ function TryScorersPage({
                         <div className="flex flex-col items-end gap-1 shrink-0">
                           <BetrAffiliateLink
                             payload="rightedge_try_scorer"
-                            className="inline-flex text-2xl font-black text-white transition hover:brightness-110"
+                            className={`inline-flex text-2xl font-black ${getBookmakerOddsTextClass(row.bookmaker, "text-white")} transition hover:brightness-110`}
                           >
                             ${row.bestOdds.toFixed(2)}
                           </BetrAffiliateLink>
