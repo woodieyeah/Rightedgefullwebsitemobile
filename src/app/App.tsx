@@ -2706,6 +2706,66 @@ async function fetchLiveOddsCached() {
   return fetchOddsPromise;
 }
 
+type LiveBookmakerOdd = {
+  name: string;
+  odds: number;
+  isBest: boolean;
+  url: string;
+};
+
+function buildLiveH2hOddsForTeam(
+  rawOdds: any[],
+  homeTeam: string,
+  awayTeam: string,
+  selectedTeam: string,
+): LiveBookmakerOdd[] {
+  const homeApiName = mapTeamToOddsApi(homeTeam);
+  const awayApiName = mapTeamToOddsApi(awayTeam);
+  const selectedApiName = mapTeamToOddsApi(selectedTeam);
+
+  const match = rawOdds.find(
+    (item: any) =>
+      (item.home_team === homeApiName && item.away_team === awayApiName) ||
+      (item.home_team === awayApiName && item.away_team === homeApiName),
+  );
+
+  if (!match?.bookmakers?.length) {
+    throw new Error("Match not found or no bookmakers");
+  }
+
+  const formattedOdds = match.bookmakers
+    .filter((bookie: any) => !isExcludedMatchOddsBookmaker(bookie))
+    .map((bookie: any) => {
+      const h2hMarket = bookie.markets?.find((market: any) => market.key === "h2h");
+      if (!h2hMarket) return null;
+
+      const outcome = h2hMarket.outcomes?.find(
+        (item: any) => item.name === selectedApiName,
+      );
+      if (!outcome) return null;
+
+      return {
+        name: bookie.title,
+        url: getBetrAffiliateUrl("rightedge_match_odds"),
+        odds: outcome.price,
+        isBest: false,
+      };
+    })
+    .filter(Boolean) as LiveBookmakerOdd[];
+
+  if (!formattedOdds.length) {
+    throw new Error("No odds found");
+  }
+
+  const sortedOdds = formattedOdds.sort((a, b) => b.odds - a.odds);
+  const bestOdd = Math.max(...sortedOdds.map((bookie) => bookie.odds));
+
+  return sortedOdds.map((bookie) => ({
+    ...bookie,
+    isBest: bookie.odds === bestOdd,
+  }));
+}
+
 function OfficialPlayCard({ row }: { row: PredictionRow }) {
   const selectedOdds =
     row.side === "Home"
@@ -3100,6 +3160,43 @@ function ReadMore({ children }: { children: React.ReactNode }) {
   );
 }
 
+function LiveBestOddsValue({
+  row,
+  selectedTeam,
+  fallbackOdds,
+}: {
+  row: PredictionRow;
+  selectedTeam: string;
+  fallbackOdds: number;
+}) {
+  const [bestOdds, setBestOdds] = useState(fallbackOdds);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    fetchLiveOddsCached()
+      .then((data) => {
+        if (!isMounted) return;
+        const odds = buildLiveH2hOddsForTeam(
+          data,
+          row.homeTeam,
+          row.awayTeam,
+          selectedTeam,
+        );
+        setBestOdds(odds[0]?.odds || fallbackOdds);
+      })
+      .catch(() => {
+        if (isMounted) setBestOdds(fallbackOdds);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [fallbackOdds, row.homeTeam, row.awayTeam, selectedTeam]);
+
+  return <>{bestOdds ? `$${bestOdds.toFixed(2)}` : "—"}</>;
+}
+
 function MatchLiveOddsPanel({
   row,
   selectedTeam,
@@ -3130,53 +3227,13 @@ function MatchLiveOddsPanel({
         const data = await fetchLiveOddsCached();
         if (!isMounted) return;
 
-        const homeApiName = mapTeamToOddsApi(row.homeTeam);
-        const awayApiName = mapTeamToOddsApi(row.awayTeam);
-        const selectedApiName = mapTeamToOddsApi(selectedTeam);
-
-        const match = data.find(
-          (m: any) =>
-            (m.home_team === homeApiName && m.away_team === awayApiName) ||
-            (m.home_team === awayApiName && m.away_team === homeApiName),
-        );
-
-        if (!match?.bookmakers?.length) {
-          throw new Error("Match not found or no bookmakers");
-        }
-
-        const formattedOdds = match.bookmakers
-          .filter((bookie: any) => !isExcludedMatchOddsBookmaker(bookie))
-          .map((bookie: any) => {
-            const h2hMarket = bookie.markets?.find((market: any) => market.key === "h2h");
-            if (!h2hMarket) return null;
-
-            const outcome = h2hMarket.outcomes?.find(
-              (item: any) => item.name === selectedApiName,
-            );
-            if (!outcome) return null;
-
-            return {
-              name: bookie.title,
-              url: getBetrAffiliateUrl("rightedge_match_odds"),
-              odds: outcome.price,
-            };
-          })
-          .filter(Boolean);
-
-        if (formattedOdds.length === 0) {
-          throw new Error("No odds found");
-        }
-
-        const sortedOdds = formattedOdds
-          .sort((a: any, b: any) => b.odds - a.odds)
-        const displayOdds = sortedOdds.slice(0, 3);
-        const bestOdd = Math.max(...sortedOdds.map((bookie: any) => bookie.odds));
-
         setLiveOdds(
-          displayOdds.map((bookie: any) => ({
-            ...bookie,
-            isBest: bookie.odds === bestOdd,
-          })),
+          buildLiveH2hOddsForTeam(
+            data,
+            row.homeTeam,
+            row.awayTeam,
+            selectedTeam,
+          ).slice(0, 3),
         );
       } catch (e) {
         if (!isMounted) return;
@@ -4442,10 +4499,14 @@ function PredictionsPage({
                   </div>
                   <div className="bg-[#111317] border border-white/10 p-3">
                     <div className="text-[10px] uppercase font-black tracking-widest text-white/45 mb-1">
-                      Best Odds
+                      Live Best
                     </div>
                     <div className="text-lg font-black text-[#FFEA00]">
-                      {winnerOdds ? `$${winnerOdds.toFixed(2)}` : "—"}
+                      <LiveBestOddsValue
+                        row={row}
+                        selectedTeam={row.predictedWinner}
+                        fallbackOdds={winnerOdds}
+                      />
                     </div>
                   </div>
                 </div>
