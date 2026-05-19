@@ -253,7 +253,6 @@ function TeamLogo({
 }
 
 const STARTING_BANKROLL = 5000;
-const RISK_ALLOCATION_LABEL = "Quarter Kelly";
 // const MAX_STAKE_CAP_LABEL = '3% bankroll';
 
 type RawRow = Record<string, string>;
@@ -6338,11 +6337,12 @@ function AppDashboard({
               </button>
             </div>
             <div className="flex flex-wrap items-center gap-2 md:gap-4 text-[10px] md:text-sm text-white font-black uppercase tracking-wider mt-2 xl:mt-0">
-              <span className="bg-[#1E232B] px-3 md:px-4 py-1.5 md:py-2 border-2 border-white/10 shadow-[2px_2px_0_0_#111317] md:shadow-[4px_4px_0_0_#111317]">
-                {data?.currentRoundLabel || "Round 1"} live
-              </span>
-              <span className="bg-[#1E232B] px-3 md:px-4 py-1.5 md:py-2 border-2 border-white/10 shadow-[2px_2px_0_0_#111317] md:shadow-[4px_4px_0_0_#111317]">
-                {RISK_ALLOCATION_LABEL}
+              <span className="inline-flex items-center gap-2 bg-[#1E232B] px-3 md:px-4 py-1.5 md:py-2 border-2 border-[#00E676]/45 shadow-[2px_2px_0_0_#111317] md:shadow-[4px_4px_0_0_rgba(0,230,118,0.22)]">
+                <span className="relative flex h-2.5 w-2.5">
+                  <span className="absolute inline-flex h-full w-full animate-ping-pong rounded-full bg-[#00E676] opacity-70" />
+                  <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-[#00E676]" />
+                </span>
+                <span>{data?.currentRoundLabel || "Round 1"} Live</span>
               </span>
             </div>
           </div>
