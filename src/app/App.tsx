@@ -4297,11 +4297,6 @@ function PredictionsPage({
 
   return (
     <div className="flex flex-col gap-6 md:gap-8">
-      <SectionHeader
-        title="Matches"
-        subtitle="Full round model predictions, projected scores and live best odds"
-      />
-
       <ResponsibleGamblingNotice />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6 md:gap-8">
@@ -4822,17 +4817,6 @@ function BestBetsPage({
 
   return (
     <div className="flex flex-col gap-6 md:gap-8">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-xl md:text-3xl font-black text-white uppercase tracking-tight mb-1 md:mb-2">
-            Premium Plays
-          </h2>
-          <div className="text-[10px] md:text-sm font-bold text-[#FFEA00] uppercase tracking-widest">
-            Best model reads and Try Scorer best bets from this round
-          </div>
-        </div>
-      </div>
-
       <div className="flex flex-col gap-4">
         <div>
           <h3 className="text-lg md:text-2xl font-black text-white uppercase tracking-tight">
@@ -5050,16 +5034,7 @@ function TryScorersPage({
 
   return (
     <div className="flex flex-col gap-8">
-      <div className="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-4">
-        <div>
-          <h2 className="text-xl md:text-3xl font-black text-white uppercase tracking-tight mb-1 md:mb-2">
-            Try Scorer Value Plays
-          </h2>
-          <div className="text-[10px] md:text-sm font-bold text-[#FFEA00] uppercase tracking-widest">
-            Included with RightEdge Premium — high-probability and value scorer spots
-          </div>
-        </div>
-
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-end gap-3">
         <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
           <div className="bg-[#1E232B] border-2 border-white/10 px-4 py-3 shadow-[4px_4px_0_0_#0047FF]">
             <div className="text-[9px] font-black text-white/40 uppercase tracking-widest mb-1">
