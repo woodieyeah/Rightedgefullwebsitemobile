@@ -1727,7 +1727,7 @@ function isBetrBookmaker(name?: string) {
 function getAffiliateButtonClass(bookmaker: string | undefined, sizeClasses: string) {
   const colorClasses = isBetrBookmaker(bookmaker)
     ? "border-[#73F4DB] bg-[#113bd8] text-white shadow-[4px_4px_0_0_rgba(115,244,219,0.65)]"
-    : "border-[#FFEA00]/80 bg-transparent text-[#FFEA00] shadow-[3px_3px_0_0_rgba(0,71,255,0.75)]";
+    : "border-[#FFEA00] bg-[#FFEA00] text-black shadow-[4px_4px_0_0_#FF2E63]";
 
   return `inline-flex max-w-full items-center justify-center gap-2 border-2 ${sizeClasses} font-black uppercase tracking-widest ${colorClasses} transition hover:-translate-y-0.5 hover:brightness-110`;
 }
@@ -1757,7 +1757,7 @@ function AffiliateMarketButton({
         {hasBetrBranding ? "Play at Betr" : label}
       </span>
       {typeof odds === "number" && (
-        <span className={hasBetrBranding ? "text-[#73F4DB]" : "text-[#FFEA00]"}>
+        <span className={hasBetrBranding ? "text-[#73F4DB]" : "text-black"}>
           ${odds.toFixed(2)}
         </span>
       )}
