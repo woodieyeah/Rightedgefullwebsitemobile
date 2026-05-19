@@ -4499,7 +4499,7 @@ function PredictionsPage({
                   </div>
                   <div className="bg-[#111317] border border-white/10 p-3">
                     <div className="text-[10px] uppercase font-black tracking-widest text-white/45 mb-1">
-                      Live Best
+                      Best Odds
                     </div>
                     <div className="text-lg font-black text-[#FFEA00]">
                       <LiveBestOddsValue
