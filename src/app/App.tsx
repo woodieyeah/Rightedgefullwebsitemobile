@@ -2959,19 +2959,24 @@ function OfficialPlayCard({ row }: { row: PredictionRow }) {
                 const content = (
                   <>
                     <BookmakerName name={bookie.name} />
-                    <div className="flex items-center gap-2.5">
-                      <span
-                        className={`text-lg font-black ${
-                          isBetr
-                            ? "text-[#73F4DB]"
-                            : bookie.isBest
-                              ? "text-[#00E676]"
-                              : "text-white/70"
-                        }`}
-                      >
-                        ${bookie.odds.toFixed(2)}
+                    <div className="flex flex-col items-end gap-1 text-right">
+                      <div className="flex items-center gap-2.5">
+                        <span
+                          className={`text-lg font-black ${
+                            isBetr
+                              ? "text-[#73F4DB]"
+                              : bookie.isBest
+                                ? "text-[#00E676]"
+                                : "text-white/70"
+                          }`}
+                        >
+                          ${bookie.odds.toFixed(2)}
+                        </span>
+                        <ArrowUpRight className="h-4 w-4 text-white/35 transition group-hover:text-[#FFEA00]" />
+                      </div>
+                      <span className={isBetr ? "text-[9px] font-black uppercase tracking-widest text-[#73F4DB]" : "text-[9px] font-black uppercase tracking-widest text-white/35 group-hover:text-[#FFEA00]"}>
+                        {isBetr ? "Back this market at Betr" : "View NRL markets"}
                       </span>
-                      <ArrowUpRight className="h-4 w-4 text-white/35 transition group-hover:text-[#FFEA00]" />
                     </div>
                   </>
                 );
@@ -3249,17 +3254,22 @@ function MatchLiveOddsPanel({
             const content = (
               <>
                 <BookmakerName name={bookie.name} />
-                <div className="flex items-center gap-2.5">
-                  <span
-                    className={`text-lg font-black ${
-                      isBetr
-                        ? "text-[#73F4DB]"
-                        : bookie.isBest ? "text-[#00E676]" : "text-white/70"
-                    }`}
-                  >
-                    {locked ? <BlurredText>${bookie.odds.toFixed(2)}</BlurredText> : `$${bookie.odds.toFixed(2)}`}
+                <div className="flex flex-col items-end gap-1 text-right">
+                  <div className="flex items-center gap-2.5">
+                    <span
+                      className={`text-lg font-black ${
+                        isBetr
+                          ? "text-[#73F4DB]"
+                          : bookie.isBest ? "text-[#00E676]" : "text-white/70"
+                      }`}
+                    >
+                      {locked ? <BlurredText>${bookie.odds.toFixed(2)}</BlurredText> : `$${bookie.odds.toFixed(2)}`}
+                    </span>
+                    <ArrowUpRight className="h-4 w-4 text-white/35 transition group-hover:text-[#FFEA00]" />
+                  </div>
+                  <span className={isBetr ? "text-[9px] font-black uppercase tracking-widest text-[#73F4DB]" : "text-[9px] font-black uppercase tracking-widest text-white/35 group-hover:text-[#FFEA00]"}>
+                    {isBetr ? "Back this market at Betr" : "View NRL markets"}
                   </span>
-                  <ArrowUpRight className="h-4 w-4 text-white/35 transition group-hover:text-[#FFEA00]" />
                 </div>
               </>
             );
