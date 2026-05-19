@@ -2949,17 +2949,17 @@ function OfficialPlayCard({ row }: { row: PredictionRow }) {
             ) : (
               liveOdds.map((bookie) => {
                 const isBetr = isBetrBookmaker(bookie.name);
-                const className = `flex items-center justify-between p-3 border-2 ${
+                const className = `group flex items-center justify-between min-h-[52px] p-3.5 border-2 ${
                   isBetr
                     ? "border-[#73F4DB] bg-[#113bd8]"
                     : bookie.isBest
                       ? "border-[#00E676] bg-[rgba(0,230,118,0.05)]"
-                      : "border-white/5 bg-[#111317]"
-                } transition hover:brightness-110`;
+                      : "border-white/10 bg-white/[0.03]"
+                } shadow-[3px_3px_0_0_rgba(0,71,255,0.35)] transition hover:-translate-y-0.5 hover:border-[#FFEA00] hover:bg-white/[0.06] hover:brightness-110`;
                 const content = (
                   <>
                     <BookmakerName name={bookie.name} />
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2.5">
                       <span
                         className={`text-lg font-black ${
                           isBetr
@@ -2971,6 +2971,7 @@ function OfficialPlayCard({ row }: { row: PredictionRow }) {
                       >
                         ${bookie.odds.toFixed(2)}
                       </span>
+                      <ArrowUpRight className="h-4 w-4 text-white/35 transition group-hover:text-[#FFEA00]" />
                     </div>
                   </>
                 );
@@ -2981,6 +2982,7 @@ function OfficialPlayCard({ row }: { row: PredictionRow }) {
                     href={bookie.url}
                     target="_blank"
                     rel="sponsored noopener noreferrer"
+                    aria-label={`Open ${bookie.name} market via Betr affiliate link`}
                     className={className}
                   >
                     {content}
@@ -3237,17 +3239,17 @@ function MatchLiveOddsPanel({
         ) : (
           liveOdds.map((bookie) => {
             const isBetr = isBetrBookmaker(bookie.name);
-            const className = `flex items-center justify-between p-3 border-2 ${
+            const className = `group flex items-center justify-between min-h-[46px] p-3 border-2 ${
               isBetr
                 ? "border-[#73F4DB] bg-[#113bd8]"
                 : bookie.isBest
                 ? "border-[#00E676] bg-[rgba(0,230,118,0.05)]"
-                : "border-white/5 bg-[#111317]"
-            } transition hover:brightness-110`;
+                : "border-white/10 bg-white/[0.03]"
+            } shadow-[3px_3px_0_0_rgba(0,71,255,0.35)] transition hover:-translate-y-0.5 hover:border-[#FFEA00] hover:bg-white/[0.06] hover:brightness-110`;
             const content = (
               <>
                 <BookmakerName name={bookie.name} />
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2.5">
                   <span
                     className={`text-lg font-black ${
                       isBetr
@@ -3257,6 +3259,7 @@ function MatchLiveOddsPanel({
                   >
                     {locked ? <BlurredText>${bookie.odds.toFixed(2)}</BlurredText> : `$${bookie.odds.toFixed(2)}`}
                   </span>
+                  <ArrowUpRight className="h-4 w-4 text-white/35 transition group-hover:text-[#FFEA00]" />
                 </div>
               </>
             );
@@ -3267,6 +3270,7 @@ function MatchLiveOddsPanel({
                 href={bookie.url}
                 target="_blank"
                 rel="sponsored noopener noreferrer"
+                aria-label={`Open ${bookie.name} market via Betr affiliate link`}
                 className={className}
               >
                 {content}
