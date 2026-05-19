@@ -1726,32 +1726,41 @@ function isBetrBookmaker(name?: string) {
 
 function getAffiliateButtonClass(bookmaker: string | undefined, sizeClasses: string) {
   const colorClasses = isBetrBookmaker(bookmaker)
-    ? "border-[#73F4DB] bg-[#113bd8] text-[#73F4DB] shadow-[2px_2px_0_0_rgba(115,244,219,0.7)]"
-    : "border-[#FFEA00] bg-[#111418] text-[#FFEA00] shadow-[2px_2px_0_0_#0047FF]";
+    ? "border-[#73F4DB] bg-[#113bd8] text-white shadow-[4px_4px_0_0_rgba(115,244,219,0.65)]"
+    : "border-[#FFEA00] bg-[#FFEA00] text-black shadow-[4px_4px_0_0_#FF2E63]";
 
-  return `inline-flex max-w-full items-center justify-center gap-2 border-2 ${sizeClasses} font-black uppercase tracking-wider ${colorClasses} transition hover:-translate-y-0.5 hover:brightness-110`;
+  return `inline-flex max-w-full items-center justify-center gap-2 border-2 ${sizeClasses} font-black uppercase tracking-widest ${colorClasses} transition hover:-translate-y-0.5 hover:brightness-110`;
 }
 
-function AffiliateOddsButton({
+function AffiliateMarketButton({
   payload,
   bookmaker,
   odds,
-  sizeClasses,
-  logoClassName = "h-5 w-5",
+  label = "View NRL market",
+  className = "",
 }: {
   payload: string;
   bookmaker?: string;
-  odds: number;
-  sizeClasses: string;
-  logoClassName?: string;
+  odds?: number;
+  label?: string;
+  className?: string;
 }) {
+  const hasBetrBranding = isBetrBookmaker(bookmaker);
+
   return (
     <BetrAffiliateLink
       payload={payload}
-      className={getAffiliateButtonClass(bookmaker, sizeClasses)}
+      className={`${getAffiliateButtonClass(bookmaker, "w-full min-h-[44px] px-4 py-3 text-[11px] md:text-xs")} ${className}`}
     >
-      {isBetrBookmaker(bookmaker) && <BetrLogoMark className={logoClassName} />}
-      <span>${odds.toFixed(2)}</span>
+      {hasBetrBranding && <BetrLogoMark className="h-6 w-6" />}
+      <span className="min-w-0 truncate">
+        {hasBetrBranding ? "Play at Betr" : label}
+      </span>
+      {typeof odds === "number" && (
+        <span className={hasBetrBranding ? "text-[#73F4DB]" : "text-black"}>
+          ${odds.toFixed(2)}
+        </span>
+      )}
     </BetrAffiliateLink>
   );
 }
@@ -3517,6 +3526,12 @@ function FeaturedMatchPreview({
               View Predictions
               <ArrowRight className="w-5 h-5 stroke-[3px]" />
             </button>
+            <AffiliateMarketButton
+              payload="rightedge_featured_match"
+              bookmaker="Betr"
+              label="Open Betr market"
+              className="w-full md:w-[286px]"
+            />
           </div>
         </div>
       </HomeCard>
@@ -4652,33 +4667,27 @@ function PremiumMarketPlayCard({ play }: { play: PremiumMarketPlay }) {
           <div className="text-[9px] font-black text-white/45 uppercase tracking-widest mb-1">
             Odds
           </div>
-          <AffiliateOddsButton
-            payload="rightedge_premium_play"
-            bookmaker={play.bookmaker}
-            odds={play.odds}
-            sizeClasses="px-3 py-1.5 text-base md:text-lg"
-            logoClassName="h-5 w-5 md:h-6 md:w-6"
-          />
+          <div className={isBetrBookmaker(play.bookmaker) ? "text-base md:text-lg font-black text-[#73F4DB]" : "text-base md:text-lg font-black text-[#FFEA00]"}>
+            ${play.odds.toFixed(2)}
+          </div>
         </div>
         <div className="bg-[#1E232B] p-2.5 md:p-3">
           <div className="text-[9px] font-black text-white/45 uppercase tracking-widest mb-1">
             Bookie
           </div>
-          <div
-            className="text-[11px] md:text-xs font-black uppercase truncate text-white"
-          >
-            <BetrAffiliateLink
-              payload="rightedge_premium_play"
-              className={getAffiliateButtonClass(play.bookmaker, "px-2.5 py-1.5 text-[10px] md:text-xs")}
-            >
-              <BookmakerName
-                name={getPreviewBookmakerName(play.bookmaker)}
-                className="text-[11px] md:text-xs font-black uppercase"
-              />
-            </BetrAffiliateLink>
-          </div>
+          <BookmakerName
+            name={getPreviewBookmakerName(play.bookmaker)}
+            className="text-[11px] md:text-xs font-black uppercase text-white"
+          />
         </div>
       </div>
+      <AffiliateMarketButton
+        payload="rightedge_premium_play"
+        bookmaker={play.bookmaker}
+        odds={play.odds}
+        label="View NRL market"
+        className="mt-3 md:mt-4"
+      />
       <div className="mt-3 md:mt-4 text-[10px] md:text-xs font-bold text-white/45 uppercase tracking-widest leading-relaxed">
         {detail}
       </div>
@@ -4899,33 +4908,27 @@ function BestBetsPage({
                     <div className="text-[9px] font-black text-white/45 uppercase tracking-widest mb-1">
                       Odds
                     </div>
-                    <AffiliateOddsButton
-                      payload="rightedge_try_scorer"
-                      bookmaker={row.bookmaker}
-                      odds={row.bestOdds}
-                      sizeClasses="px-3 py-1.5 text-base md:text-lg"
-                      logoClassName="h-5 w-5 md:h-6 md:w-6"
-                    />
+                    <div className={isBetrBookmaker(row.bookmaker) ? "text-base md:text-lg font-black text-[#73F4DB]" : "text-base md:text-lg font-black text-[#00E676]"}>
+                      ${row.bestOdds.toFixed(2)}
+                    </div>
                   </div>
                   <div className="bg-[#1E232B] p-2.5 md:p-3">
                     <div className="text-[9px] font-black text-white/45 uppercase tracking-widest mb-1">
                       Bookie
                     </div>
-                    <div
-                      className="text-[11px] md:text-xs font-black uppercase truncate text-[#FFEA00]"
-                    >
-                      <BetrAffiliateLink
-                        payload="rightedge_try_scorer"
-                        className={getAffiliateButtonClass(row.bookmaker, "px-2.5 py-1.5 text-[10px] md:text-xs")}
-                      >
-                        <BookmakerName
-                          name={getPreviewBookmakerName(row.bookmaker)}
-                          className="text-[11px] md:text-xs font-black uppercase"
-                        />
-                      </BetrAffiliateLink>
-                    </div>
+                    <BookmakerName
+                      name={getPreviewBookmakerName(row.bookmaker)}
+                      className="text-[11px] md:text-xs font-black uppercase text-[#FFEA00]"
+                    />
                   </div>
                 </div>
+                <AffiliateMarketButton
+                  payload="rightedge_try_scorer"
+                  bookmaker={row.bookmaker}
+                  odds={row.bestOdds}
+                  label="View NRL market"
+                  className="mt-3 md:mt-4"
+                />
               </GlassCard>
             ))}
           </div>
@@ -5149,24 +5152,18 @@ function TryScorersPage({
                             {formatPercent(row.marketImpliedPct, 1)}
                           </td>
                           <td className="py-4 px-3">
-                            <AffiliateOddsButton
+                            <div className={isBetrBookmaker(row.bookmaker) ? "text-sm font-black text-[#73F4DB]" : "text-sm font-black text-[#00E676]"}>
+                              ${row.bestOdds.toFixed(2)}
+                            </div>
+                          </td>
+                          <td className="py-4 px-3 text-xs font-bold text-[#FFEA00] uppercase tracking-wider">
+                            <AffiliateMarketButton
                               payload="rightedge_try_scorer"
                               bookmaker={row.bookmaker}
                               odds={row.bestOdds}
-                              sizeClasses="px-2.5 py-1 text-xs"
-                              logoClassName="h-4 w-4"
+                              label={getPreviewBookmakerName(row.bookmaker)}
+                              className="!min-h-[34px] !px-2.5 !py-1 !text-[10px]"
                             />
-                          </td>
-                          <td className="py-4 px-3 text-xs font-bold text-[#FFEA00] uppercase tracking-wider">
-                            <BetrAffiliateLink
-                              payload="rightedge_try_scorer"
-                              className={getAffiliateButtonClass(row.bookmaker, "px-2.5 py-1 text-[10px]")}
-                            >
-                              <BookmakerName
-                                name={getPreviewBookmakerName(row.bookmaker)}
-                                className="text-xs font-bold uppercase tracking-wider"
-                              />
-                            </BetrAffiliateLink>
                           </td>
                           <td className="py-4 px-3">
                             <span className={`inline-flex px-2 py-1 text-xs font-black uppercase tracking-widest ${getTryScorerSignalClass(signal?.label)}`}>
@@ -5201,22 +5198,16 @@ function TryScorersPage({
                           </div>
                         </div>
                         <div className="flex flex-col items-end gap-1 shrink-0">
-                          <AffiliateOddsButton
+                          <div className={isBetrBookmaker(row.bookmaker) ? "text-xl font-black text-[#73F4DB]" : "text-xl font-black text-white"}>
+                            ${row.bestOdds.toFixed(2)}
+                          </div>
+                          <AffiliateMarketButton
                             payload="rightedge_try_scorer"
                             bookmaker={row.bookmaker}
                             odds={row.bestOdds}
-                            sizeClasses="px-3 py-1.5 text-lg"
-                            logoClassName="h-5 w-5"
+                            label="View market"
+                            className="!min-h-[34px] !px-2.5 !py-1 !text-[9px]"
                           />
-                          <BetrAffiliateLink
-                            payload="rightedge_try_scorer"
-                            className={getAffiliateButtonClass(row.bookmaker, "px-2 py-1 text-[9px]")}
-                          >
-                            <BookmakerName
-                              name={getPreviewBookmakerName(row.bookmaker)}
-                              className="text-[10px] uppercase tracking-wider"
-                            />
-                          </BetrAffiliateLink>
                           <span className={`px-2 py-1 text-[10px] font-black uppercase tracking-widest ${getTryScorerSignalClass(signal?.label)}`}>
                             {signal?.label || "Watch"}
                           </span>
