@@ -2513,41 +2513,43 @@ function EmailGateModal({
           className="flex flex-col gap-4"
         >
           {step === "email" ? (
-            <div className="relative">
-              <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/30" />
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => {
-                  setEmail(e.target.value);
-                  setErrorMsg("");
-                }}
-                placeholder="your@email.com"
-                autoFocus
-                disabled={submitting}
-                className="w-full bg-[#0B0D10] border-2 border-white/10 text-white font-bold text-base pl-12 pr-4 py-4 placeholder:text-white/20 focus:outline-none focus:border-[#FFEA00] transition-colors disabled:opacity-50"
-              />
-            </div>
-            <div className="relative">
-              <select
-                value={favoriteTeam}
-                onChange={(e) => {
-                  setFavoriteTeam(e.target.value);
-                  setErrorMsg("");
-                }}
-                disabled={submitting}
-                className="w-full appearance-none bg-[#0B0D10] border-2 border-white/10 text-white font-bold text-base px-4 py-4 focus:outline-none focus:border-[#FFEA00] transition-colors disabled:opacity-50"
-              >
-                <option value="" className="text-black">
-                  Select your team
-                </option>
-                {NRL_TEAMS.map((team) => (
-                  <option key={team} value={team} className="text-black">
-                    {team}
+            <>
+              <div className="relative">
+                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/30" />
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    setErrorMsg("");
+                  }}
+                  placeholder="your@email.com"
+                  autoFocus
+                  disabled={submitting}
+                  className="w-full bg-[#0B0D10] border-2 border-white/10 text-white font-bold text-base pl-12 pr-4 py-4 placeholder:text-white/20 focus:outline-none focus:border-[#FFEA00] transition-colors disabled:opacity-50"
+                />
+              </div>
+              <div className="relative">
+                <select
+                  value={favoriteTeam}
+                  onChange={(e) => {
+                    setFavoriteTeam(e.target.value);
+                    setErrorMsg("");
+                  }}
+                  disabled={submitting}
+                  className="w-full appearance-none bg-[#0B0D10] border-2 border-white/10 text-white font-bold text-base px-4 py-4 focus:outline-none focus:border-[#FFEA00] transition-colors disabled:opacity-50"
+                >
+                  <option value="" className="text-black">
+                    Select your team
                   </option>
-                ))}
-              </select>
-            </div>
+                  {NRL_TEAMS.map((team) => (
+                    <option key={team} value={team} className="text-black">
+                      {team}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </>
           ) : (
             <>
               {successMsg && (
