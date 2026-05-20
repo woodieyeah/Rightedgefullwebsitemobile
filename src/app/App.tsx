@@ -1896,6 +1896,26 @@ function setPaidAccess(email: string) {
 // ── Free Featured Match Email Gate ───────────────────────────────────────────
 // No payment required — just collects email and unlocks the featured match.
 const FEATURED_ACCESS_KEY = 'rightedge_featured_access';
+const FAVORITE_TEAM_KEY = 'rightedge_favorite_team';
+const NRL_TEAMS = [
+  'Brisbane Broncos',
+  'Canberra Raiders',
+  'Canterbury Bulldogs',
+  'Cronulla Sharks',
+  'Dolphins',
+  'Gold Coast Titans',
+  'Manly Sea Eagles',
+  'Melbourne Storm',
+  'Newcastle Knights',
+  'North Queensland Cowboys',
+  'Parramatta Eels',
+  'Penrith Panthers',
+  'South Sydney Rabbitohs',
+  'St George Illawarra Dragons',
+  'Sydney Roosters',
+  'Warriors',
+  'Wests Tigers',
+] as const;
 
 function hasFeaturedMatchAccess(): boolean {
   try {
@@ -1917,6 +1937,20 @@ function setFeaturedMatchAccess(email: string) {
   } catch {}
 }
 
+function getStoredFavoriteTeam(): string {
+  try {
+    return localStorage.getItem(FAVORITE_TEAM_KEY) || '';
+  } catch {
+    return '';
+  }
+}
+
+function setStoredFavoriteTeam(team: string) {
+  try {
+    localStorage.setItem(FAVORITE_TEAM_KEY, team);
+  } catch {}
+}
+
 function FeaturedMatchEmailGate({
   open,
   onClose,
@@ -1929,6 +1963,7 @@ function FeaturedMatchEmailGate({
   onPremiumSuccess: () => void;
 }) {
   const [email, setEmail] = useState('');
+  const [favoriteTeam, setFavoriteTeam] = useState(() => getStoredFavoriteTeam());
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [done, setDone] = useState(false);
@@ -1938,8 +1973,13 @@ function FeaturedMatchEmailGate({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const trimmed = email.trim().toLowerCase();
+    const selectedTeam = favoriteTeam.trim();
     if (!trimmed || !trimmed.includes('@') || !trimmed.includes('.')) {
       setErrorMsg('Enter a valid email address.');
+      return;
+    }
+    if (!selectedTeam) {
+      setErrorMsg('Select your team.');
       return;
     }
 
@@ -1967,6 +2007,7 @@ function FeaturedMatchEmailGate({
 
       if (verifyRes.ok && isPremiumSubscriber) {
         const verifiedEmail = (verifyData.email || trimmed).trim().toLowerCase();
+        setStoredFavoriteTeam(selectedTeam);
         setEmailAccess(verifiedEmail);
         setPaidAccess(verifiedEmail);
         setFeaturedMatchAccess(verifiedEmail);
@@ -1984,7 +2025,11 @@ function FeaturedMatchEmailGate({
             'Content-Type': 'application/json',
             Authorization: `Bearer ${publicAnonKey}`,
           },
-          body: JSON.stringify({ email: trimmed, source: 'featured_match_free' }),
+          body: JSON.stringify({
+            email: trimmed,
+            source: 'featured_match_free',
+            favoriteTeam: selectedTeam,
+          }),
         }
       );
 
@@ -1996,8 +2041,12 @@ function FeaturedMatchEmailGate({
       }
 
       // Server confirmed — now unlock locally and track
+      setStoredFavoriteTeam(selectedTeam);
       setFeaturedMatchAccess(trimmed);
-      (window as any).trackAnalyticsEvent?.('featured_match_unlocked', { email: trimmed });
+      (window as any).trackAnalyticsEvent?.('featured_match_unlocked', {
+        email: trimmed,
+        favorite_team: selectedTeam,
+      });
       setDone(true);
 
       // Short pause so user sees success state, then close
@@ -2053,7 +2102,7 @@ function FeaturedMatchEmailGate({
             </div>
 
             <p className="text-sm text-white/70 font-bold leading-relaxed mb-6">
-              Enter your email to unlock the free preview. Premium members go straight to the full round card.
+              Enter your email and choose your team to unlock the free preview. Premium members go straight to the full round card.
             </p>
 
             <form onSubmit={handleSubmit} className="flex flex-col gap-4">
@@ -2068,6 +2117,24 @@ function FeaturedMatchEmailGate({
                   disabled={submitting}
                   className="w-full bg-[#0B0D10] border-2 border-white/10 text-white font-bold text-base pl-12 pr-4 py-4 placeholder:text-white/20 focus:outline-none focus:border-[#0047FF] transition-colors disabled:opacity-50"
                 />
+              </div>
+
+              <div className="relative">
+                <select
+                  value={favoriteTeam}
+                  onChange={(e) => { setFavoriteTeam(e.target.value); setErrorMsg(''); }}
+                  disabled={submitting}
+                  className="w-full appearance-none bg-[#0B0D10] border-2 border-white/10 text-white font-bold text-base px-4 py-4 focus:outline-none focus:border-[#0047FF] transition-colors disabled:opacity-50"
+                >
+                  <option value="" className="text-black">
+                    Select your team
+                  </option>
+                  {NRL_TEAMS.map((team) => (
+                    <option key={team} value={team} className="text-black">
+                      {team}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               {errorMsg && (
@@ -2091,7 +2158,7 @@ function FeaturedMatchEmailGate({
                 )}
               </button>
               <p className="text-[10px] text-white/30 text-center font-mono">
-                We'll keep you updated with NRL picks each round. Unsubscribe anytime.
+                Instant access now. Free forever. Unsubscribe anytime.
               </p>
             </form>
           </>
@@ -2344,6 +2411,7 @@ function EmailGateModal({
 }) {
   const [step, setStep] = useState<"email" | "otp">("email");
   const [email, setEmail] = useState("");
+  const [favoriteTeam, setFavoriteTeam] = useState(() => getStoredFavoriteTeam());
   const [otp, setOtp] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
@@ -2354,14 +2422,20 @@ function EmailGateModal({
   const handleSubmit = async (e: React.FormEvent) => {
   e.preventDefault();
   const trimmed = email.trim().toLowerCase();
+  const selectedTeam = favoriteTeam.trim();
   if (!trimmed || !trimmed.includes("@") || !trimmed.includes(".")) {
     setErrorMsg("Enter a valid email address.");
+    return;
+  }
+  if (!selectedTeam) {
+    setErrorMsg("Select your team.");
     return;
   }
 
   // Admin bypass
   const BYPASS_EMAILS = ["elliott@woodbry.com", "test@rightedge.com.au"];
   if (BYPASS_EMAILS.includes(trimmed)) {
+    setStoredFavoriteTeam(selectedTeam);
     setEmailAccess(trimmed);
     window.dispatchEvent(new Event('adminAuthChanged'));
     onSuccess();
@@ -2371,16 +2445,30 @@ function EmailGateModal({
   setSubmitting(true);
   setErrorMsg("");
   try {
-    await fetch(`/api/register-free-access`, {
+    const saveRes = await fetch(`/api/register-free-access`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${publicAnonKey}`,
       },
-      body: JSON.stringify({ email: trimmed, source: "mailing_list" }),
+      body: JSON.stringify({
+        email: trimmed,
+        source: "mailing_list",
+        favoriteTeam: selectedTeam,
+      }),
     });
+    if (!saveRes.ok) {
+      const errData = await saveRes.json().catch(() => ({}));
+      setErrorMsg((errData as any).error || "Failed to save your details. Please try again.");
+      setSubmitting(false);
+      return;
+    }
+    setStoredFavoriteTeam(selectedTeam);
     setEmailAccess(trimmed);
-    (window as any).trackAnalyticsEvent?.("mailing_list_signup", { email: trimmed });
+    (window as any).trackAnalyticsEvent?.("mailing_list_signup", {
+      email: trimmed,
+      favorite_team: selectedTeam,
+    });
     onSuccess();
   } catch (err) {
     setErrorMsg("Network error. Please try again.");
@@ -2439,6 +2527,26 @@ function EmailGateModal({
                 disabled={submitting}
                 className="w-full bg-[#0B0D10] border-2 border-white/10 text-white font-bold text-base pl-12 pr-4 py-4 placeholder:text-white/20 focus:outline-none focus:border-[#FFEA00] transition-colors disabled:opacity-50"
               />
+            </div>
+            <div className="relative">
+              <select
+                value={favoriteTeam}
+                onChange={(e) => {
+                  setFavoriteTeam(e.target.value);
+                  setErrorMsg("");
+                }}
+                disabled={submitting}
+                className="w-full appearance-none bg-[#0B0D10] border-2 border-white/10 text-white font-bold text-base px-4 py-4 focus:outline-none focus:border-[#FFEA00] transition-colors disabled:opacity-50"
+              >
+                <option value="" className="text-black">
+                  Select your team
+                </option>
+                {NRL_TEAMS.map((team) => (
+                  <option key={team} value={team} className="text-black">
+                    {team}
+                  </option>
+                ))}
+              </select>
             </div>
           ) : (
             <>

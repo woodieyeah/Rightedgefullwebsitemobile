@@ -133,6 +133,26 @@ const RESEND_SEGMENT_NAMES = {
   premium: "Premium",
 } as const;
 
+const NRL_TEAMS = new Set([
+  "Brisbane Broncos",
+  "Canberra Raiders",
+  "Canterbury Bulldogs",
+  "Cronulla Sharks",
+  "Dolphins",
+  "Gold Coast Titans",
+  "Manly Sea Eagles",
+  "Melbourne Storm",
+  "Newcastle Knights",
+  "North Queensland Cowboys",
+  "Parramatta Eels",
+  "Penrith Panthers",
+  "South Sydney Rabbitohs",
+  "St George Illawarra Dragons",
+  "Sydney Roosters",
+  "Warriors",
+  "Wests Tigers",
+]);
+
 const resendSegmentCache = new Map<string, string>();
 
 async function getOrCreateResendSegmentId(name: string) {
@@ -1042,22 +1062,42 @@ app.post("/register-free-access", async (c) => {
     const body = await c.req.json();
     const email = (body.email || '').trim().toLowerCase();
     const source = body.source || 'featured_match_free';
+    const favoriteTeam = String(body.favoriteTeam || '').trim();
 
     if (!email || !email.includes('@')) {
       return c.json({ error: 'Invalid email' }, 400);
+    }
+    if (!favoriteTeam || !NRL_TEAMS.has(favoriteTeam)) {
+      return c.json({ error: 'Select a valid NRL team' }, 400);
     }
 
     const key = `free_access:${email}`;
     const existing = await kv.get(key);
     const isNewFreeRegistration = !existing;
+    const now = new Date().toISOString();
 
-    if (!existing) {
-      await kv.set(key, JSON.stringify({
-        email,
-        source,
-        registeredAt: new Date().toISOString(),
-      }));
-      console.log(`[register-free-access] New free registration: ${email} via ${source}`);
+    let existingRecord: Record<string, unknown> = {};
+    if (existing) {
+      try {
+        existingRecord = JSON.parse(existing);
+      } catch {
+        existingRecord = {};
+      }
+    }
+
+    await kv.set(key, JSON.stringify({
+      ...existingRecord,
+      email,
+      source,
+      favoriteTeam,
+      registeredAt: existingRecord.registeredAt || now,
+      updatedAt: now,
+    }));
+
+    if (isNewFreeRegistration) {
+      console.log(`[register-free-access] New free registration: ${email} via ${source} (${favoriteTeam})`);
+    } else {
+      console.log(`[register-free-access] Updated free registration: ${email} via ${source} (${favoriteTeam})`);
     }
 
     await syncResendLifecycle(email, "free");
