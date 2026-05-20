@@ -461,7 +461,7 @@ export function AdminDashboard({ data, onNavigateAdStudio }: { data?: any, onNav
                                 <tr>
                                   <td style="padding:30px 24px 28px 24px;background-color:#0a0d14;border-left:4px solid #00f0a8">
                                     <div style="padding:8px 10px;display:inline-block;background-color:#00f0a8;color:#05070b;font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:1.2;font-weight:900;letter-spacing:1px;text-transform:uppercase">
-                                      <p style="margin:0;padding:0">Supporter Match Read</p>
+                                      <p style="margin:0;padding:0">Supporter Play</p>
                                     </div>
                                     <div style="margin-top:18px;font-family:Arial Black,Arial,Helvetica,sans-serif;font-size:38px;line-height:0.98;color:#ffffff;font-weight:900;letter-spacing:-1px">
                                       <p style="margin:0;padding:0">
