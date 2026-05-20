@@ -2,6 +2,26 @@ import React, { useState, useEffect } from 'react';
 import { projectId, publicAnonKey } from '../../../utils/supabase/info';
 import { Mail, Users, Send, AlertTriangle, CheckCircle, RefreshCw, Eye, Lock, LogIn, Activity, TrendingUp, BarChart3, Clock, Globe, Unlock, CreditCard } from 'lucide-react';
 
+const NRL_TEAMS = [
+  'Brisbane Broncos',
+  'Canberra Raiders',
+  'Canterbury Bulldogs',
+  'Cronulla Sharks',
+  'Dolphins',
+  'Gold Coast Titans',
+  'Manly Sea Eagles',
+  'Melbourne Storm',
+  'Newcastle Knights',
+  'North Queensland Cowboys',
+  'Parramatta Eels',
+  'Penrith Panthers',
+  'South Sydney Rabbitohs',
+  'St George Illawarra Dragons',
+  'Sydney Roosters',
+  'Warriors',
+  'Wests Tigers',
+];
+
 export function AdminDashboard({ data, onNavigateAdStudio }: { data?: any, onNavigateAdStudio?: () => void }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [email, setEmail] = useState('');
@@ -22,6 +42,8 @@ export function AdminDashboard({ data, onNavigateAdStudio }: { data?: any, onNav
   const [kvNamespaceScan, setKvNamespaceScan] = useState<any>(null);
   const [freeLeads, setFreeLeads] = useState<any[]>([]);
   const [checkoutLeads, setCheckoutLeads] = useState<any[]>([]);
+  const [broadcastAudience, setBroadcastAudience] = useState<'premium' | 'free' | 'all'>('premium');
+  const [broadcastTeam, setBroadcastTeam] = useState('');
 
   useEffect(() => {
     // Check if previously logged in
@@ -487,10 +509,54 @@ export function AdminDashboard({ data, onNavigateAdStudio }: { data?: any, onNav
     return acc;
   }, {});
 
+  const getBroadcastRecipientCount = () => {
+    const teamMatches = (rowTeam: string) =>
+      !broadcastTeam || String(rowTeam || '').toLowerCase() === broadcastTeam.toLowerCase();
+
+    const freeMap = new Map<string, any>(
+      freeLeads
+        .map((lead: any) => [String(lead.email || '').toLowerCase(), lead] as const)
+        .filter(([email]) => Boolean(email))
+    );
+
+    const subscriberMap = new Map<string, any>(
+      subscribers
+        .map((sub: any) => [String(sub.email || '').toLowerCase(), sub] as const)
+        .filter(([email]) => Boolean(email))
+    );
+
+    if (broadcastAudience === 'free') {
+      return [...freeMap.values()].filter((lead: any) => teamMatches(lead.favoriteTeam || '')).length;
+    }
+
+    if (broadcastAudience === 'premium') {
+      return [...subscriberMap.values()].filter((sub: any) => teamMatches(sub.favoriteTeam || '')).length;
+    }
+
+    const merged = new Map<string, any>();
+    [...freeMap.values(), ...subscriberMap.values()].forEach((row: any) => {
+      const email = String(row.email || '').toLowerCase();
+      if (!email) return;
+      if (!merged.has(email) || String(merged.get(email)?.favoriteTeam || '') === '') {
+        merged.set(email, row);
+      }
+    });
+
+    return [...merged.values()].filter((row: any) => teamMatches(row.favoriteTeam || '')).length;
+  };
+  const broadcastRecipientCount = getBroadcastRecipientCount();
+
   const handleSendEmail = async () => {
     if (!subject || !body) return;
     
-    if (!confirm(testMode ? "Send test email?" : `DANGER! Send live email to ${subscribers.length} subscribers?`)) {
+    const audienceLabel = broadcastAudience === 'premium'
+      ? 'premium subscribers'
+      : broadcastAudience === 'free'
+      ? 'free leads'
+      : 'all matching contacts';
+    const teamLabel = broadcastTeam ? ` for ${broadcastTeam}` : '';
+
+    if (!confirm(testMode ? "Send test email?" : `DANGER! Send live email to ${broadcastRecipientCount} ${audienceLabel}${teamLabel}?`)) {
       return;
     }
 
@@ -506,7 +572,9 @@ export function AdminDashboard({ data, onNavigateAdStudio }: { data?: any, onNav
         body: JSON.stringify({
           subject,
           htmlContent: body,
-          testMode
+          testMode,
+          audience: broadcastAudience,
+          team: broadcastTeam,
         })
       });
       const data = await res.json();
@@ -722,6 +790,7 @@ export function AdminDashboard({ data, onNavigateAdStudio }: { data?: any, onNav
                         ? new Date(lead.registeredAt).toLocaleString('en-AU', { dateStyle: 'short', timeStyle: 'short' })
                         : '—'}
                       {lead.source ? ` · ${lead.source}` : ''}
+                      {lead.favoriteTeam ? ` · ${lead.favoriteTeam}` : ''}
                     </div>
                   </div>
                 ))
@@ -1145,6 +1214,42 @@ export function AdminDashboard({ data, onNavigateAdStudio }: { data?: any, onNav
                 />
               </div>
 
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs uppercase tracking-widest text-white/50 mb-2">Audience</label>
+                  <select
+                    value={broadcastAudience}
+                    onChange={(e) => setBroadcastAudience(e.target.value as 'premium' | 'free' | 'all')}
+                    className="w-full bg-black/40 border border-white/10 p-3 text-white font-mono focus:border-[#00E676] focus:outline-none transition-colors"
+                  >
+                    <option value="premium">Premium Subscribers</option>
+                    <option value="free">Free Leads</option>
+                    <option value="all">Everyone With Team</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs uppercase tracking-widest text-white/50 mb-2">Team Filter</label>
+                  <select
+                    value={broadcastTeam}
+                    onChange={(e) => setBroadcastTeam(e.target.value)}
+                    className="w-full bg-black/40 border border-white/10 p-3 text-white font-mono focus:border-[#00E676] focus:outline-none transition-colors"
+                  >
+                    <option value="">All teams</option>
+                    {NRL_TEAMS.map((team) => (
+                      <option key={team} value={team} className="text-black">{team}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="bg-black/20 border border-white/5 px-4 py-3 flex items-center justify-between gap-3">
+                <div className="text-xs uppercase tracking-widest text-white/40">Estimated recipients</div>
+                <div className="text-sm font-black text-white">
+                  {testMode ? 'Test only' : broadcastRecipientCount.toLocaleString()}
+                </div>
+              </div>
+
               <div className="flex items-center gap-4 bg-black/20 p-4 border border-white/5">
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
@@ -1169,9 +1274,9 @@ export function AdminDashboard({ data, onNavigateAdStudio }: { data?: any, onNav
               <div className="flex gap-4 pt-4">
                 <button
                   onClick={handleSendEmail}
-                  disabled={sending || !subject || !body || (!testMode && subscribers.length === 0)}
+                  disabled={sending || !subject || !body || (!testMode && broadcastRecipientCount === 0)}
                   className={`flex-1 py-4 flex items-center justify-center gap-2 font-black uppercase tracking-widest transition-all ${
-                    sending || (!testMode && subscribers.length === 0)
+                    sending || (!testMode && broadcastRecipientCount === 0)
                       ? 'bg-white/10 text-white/30 cursor-not-allowed'
                       : testMode
                       ? 'bg-white text-black hover:bg-white/90'

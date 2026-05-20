@@ -2149,6 +2149,17 @@ async function saveVerifiedSubscriber(email: string, source = 'stripe_verified',
   const key = `subscriber:${normalizedEmail}`;
   const existingSubscriber = await kv.get(key);
   const isNewSubscriber = !existingSubscriber;
+  let favoriteTeam = "";
+
+  try {
+    const freeAccess = await kv.get(`free_access:${normalizedEmail}`);
+    if (freeAccess) {
+      const parsedFreeAccess = typeof freeAccess === "string" ? JSON.parse(freeAccess) : freeAccess;
+      favoriteTeam = String(parsedFreeAccess?.favoriteTeam || "").trim();
+    }
+  } catch (teamErr) {
+    console.error("[saveVerifiedSubscriber] Failed to load free_access team:", teamErr);
+  }
 
   const payload = {
     email: normalizedEmail,
@@ -2156,6 +2167,7 @@ async function saveVerifiedSubscriber(email: string, source = 'stripe_verified',
       ? (() => { try { return JSON.parse(String(existingSubscriber)).subscribedAt; } catch { return new Date().toISOString(); } })()
       : new Date().toISOString(),
     source,
+    favoriteTeam,
     stripeCustomerId: stripeData.customerId || '',
     stripeSubscriptionId: stripeData.subscriptionId || '',
     stripeCheckoutSessionId: stripeData.checkoutSessionId || '',
@@ -2181,6 +2193,94 @@ async function saveVerifiedSubscriber(email: string, source = 'stripe_verified',
   }
 
   return { payload, isNewSubscriber };
+}
+
+type BroadcastAudience = "premium" | "free" | "all";
+
+function normalizeBroadcastAudience(value: unknown): BroadcastAudience {
+  const audience = String(value || "").trim().toLowerCase();
+  if (audience === "free" || audience === "all") return audience;
+  return "premium";
+}
+
+function normalizeTeamFilter(team: unknown) {
+  return String(team || "").trim();
+}
+
+async function loadFreeAccessLookup() {
+  const entries = await kv.getByPrefix("free_access:") || [];
+  const lookup = new Map<string, any>();
+
+  for (const entry of entries) {
+    try {
+      const parsed = typeof entry === "string" ? JSON.parse(entry) : entry;
+      const email = String(parsed?.email || "").trim().toLowerCase();
+      if (!email) continue;
+      lookup.set(email, parsed);
+    } catch {
+      continue;
+    }
+  }
+
+  return lookup;
+}
+
+async function loadBroadcastRecipients(opts: { audience?: BroadcastAudience; team?: string }) {
+  const audience = normalizeBroadcastAudience(opts.audience);
+  const teamFilter = normalizeTeamFilter(opts.team);
+  const freeAccessLookup = await loadFreeAccessLookup();
+
+  const recipientMap = new Map<string, { email: string; favoriteTeam?: string; source: string; segment: "premium" | "free" }>();
+  const matchesTeam = (favoriteTeam: string) => {
+    if (!teamFilter) return true;
+    return String(favoriteTeam || "").trim().toLowerCase() === teamFilter.toLowerCase();
+  };
+
+  if (audience === "free" || audience === "all") {
+    for (const record of freeAccessLookup.values()) {
+      try {
+        const email = String(record?.email || "").trim().toLowerCase();
+        if (!email) continue;
+        const favoriteTeam = String(record?.favoriteTeam || "").trim();
+        if (!matchesTeam(favoriteTeam)) continue;
+
+        recipientMap.set(email, {
+          email,
+          favoriteTeam,
+          source: String(record?.source || "free_access"),
+          segment: "free",
+        });
+      } catch {
+        continue;
+      }
+    }
+  }
+
+  if (audience === "premium" || audience === "all") {
+    const subscribers = await kv.getByPrefix("subscriber:") || [];
+    for (const entry of subscribers) {
+      try {
+        const record = typeof entry === "string" ? JSON.parse(entry) : entry;
+        const email = String(record?.email || "").trim().toLowerCase();
+        if (!email) continue;
+
+        const linkedFreeAccess = freeAccessLookup.get(email);
+        const favoriteTeam = String(record?.favoriteTeam || linkedFreeAccess?.favoriteTeam || "").trim();
+        if (!matchesTeam(favoriteTeam)) continue;
+
+        recipientMap.set(email, {
+          email,
+          favoriteTeam,
+          source: String(record?.source || "subscriber"),
+          segment: "premium",
+        });
+      } catch {
+        continue;
+      }
+    }
+  }
+
+  return { audience, teamFilter, recipients: [...recipientMap.values()] };
 }
 
 app.post("/confirm-checkout-session", async (c) => {
@@ -2389,6 +2489,8 @@ app.post("/admin/broadcast", async (c) => {
 
     const body = await c.req.json();
     const { subject, htmlContent, testMode = true } = body;
+    const audience = normalizeBroadcastAudience(body?.audience);
+    const team = normalizeTeamFilter(body?.team);
 
     if (!subject || !htmlContent) {
       return c.json({ error: "Missing subject or htmlContent" }, 400);
@@ -2403,10 +2505,9 @@ app.post("/admin/broadcast", async (c) => {
       return c.json({ error: "RESEND_API_KEY not configured" }, 500);
     }
 
-    // Get all subscribers
-    const subscribers = await kv.getByPrefix('subscriber:') || [];
-    if (!testMode && (!subscribers || subscribers.length === 0)) {
-       return c.json({ error: "No subscribers found" }, 400);
+    const { recipients } = await loadBroadcastRecipients({ audience, team });
+    if (!testMode && (!recipients || recipients.length === 0)) {
+       return c.json({ error: "No matching recipients found" }, 400);
     }
 
     const resend = new Resend(resendApiKey);
@@ -2414,11 +2515,7 @@ app.post("/admin/broadcast", async (c) => {
     // In test mode, only send to a dummy address or first subscriber
     const emailsToSend = testMode 
       ? ['elliott@woodbry.com'] // Replace with your actual email to test
-      : subscribers.map(s => {
-          try { 
-            return typeof s === 'string' ? JSON.parse(s).email : s.email; 
-          } catch(e) { return null; }
-        }).filter(Boolean);
+      : recipients.map((recipient) => recipient.email).filter(Boolean);
 
     console.log(`[AdminEmail] Sending to ${emailsToSend.length} recipients...`);
 
@@ -2453,11 +2550,13 @@ app.post("/admin/broadcast", async (c) => {
         htmlContent,
         sentAt: new Date().toISOString(),
         recipients: emailsToSend.length,
-        source: 'manual'
+        source: 'manual',
+        audience,
+        team: team || "",
       }));
     }
 
-    return c.json({ success: true, sentCount: emailsToSend.length, results, testMode });
+    return c.json({ success: true, sentCount: emailsToSend.length, results, testMode, audience, team });
 
   } catch (err: any) {
     console.error("[AdminEmail] Server error:", err);
@@ -2483,13 +2582,17 @@ app.get("/admin/subscribers", async (c) => {
 // Admin endpoint to list free-access registrations (entered email on featured match gate)
 app.get("/admin/free-access", async (c) => {
   try {
+    const team = normalizeTeamFilter(c.req.query("team"));
     const entries = await kv.getByPrefix('free_access:');
     const parsed = entries.map(e => {
       try { return typeof e === 'string' ? JSON.parse(e) : e; } catch { return null; }
     }).filter(Boolean).sort((a: any, b: any) =>
       new Date(b.registeredAt).getTime() - new Date(a.registeredAt).getTime()
     );
-    return c.json(parsed);
+    const filtered = team
+      ? parsed.filter((entry: any) => String(entry?.favoriteTeam || "").trim().toLowerCase() === team.toLowerCase())
+      : parsed;
+    return c.json(filtered);
   } catch (err: any) {
     console.error('[admin/free-access] error:', err);
     return c.json({ error: 'Internal server error' }, 500);
