@@ -41,6 +41,12 @@ function slugifyPayload(value: unknown) {
     .replace(/^_+|_+$/g, '');
 }
 
+function normalizeRoundLabel(value: unknown) {
+  const label = String(value || 'Live').trim();
+  if (!label || label.toLowerCase() === 'live') return 'Live';
+  return /^round\b/i.test(label) ? label : `Round ${label}`;
+}
+
 function teamAliases(team: string) {
   const teamName = String(team || '');
   const aliases: Record<string, string[]> = {
@@ -507,6 +513,7 @@ export function AdminDashboard({ data, onNavigateAdStudio }: { data?: any, onNav
     const teamOverlay = isHomeTeam ? teamPrediction.homeOverlay : teamPrediction.awayOverlay;
     const modelProbability = teamModelOdds > 1 ? (1 / teamModelOdds) * 100 : 0;
     const round = teamPrediction.fixture?.round || data.currentRoundLabel || "Live";
+    const roundLabel = normalizeRoundLabel(round);
     const venue = teamPrediction.fixture?.stadium || "NRL";
     const kickoff = [
       teamPrediction.fixture?.day,
@@ -540,13 +547,13 @@ export function AdminDashboard({ data, onNavigateAdStudio }: { data?: any, onNav
 
     const payload = [
       "rightedge_teamemail",
-      `round${slugifyPayload(round)}`,
+      slugifyPayload(roundLabel),
       slugifyPayload(selectedTeam),
       slugifyPayload(opponent),
     ].filter(Boolean).join("_");
     const betrUrl = `${BETR_AFFILIATE_URL}?payload=${payload}`;
 
-    const safeRound = escapeHtml(`Round ${round}`);
+    const safeRound = escapeHtml(roundLabel);
     const safeTeam = escapeHtml(selectedTeam);
     const safeOpponent = escapeHtml(opponent);
     const safeVenue = escapeHtml(venue);
@@ -592,7 +599,7 @@ export function AdminDashboard({ data, onNavigateAdStudio }: { data?: any, onNav
                                     </div>`
       : "";
 
-    setSubject(`RightEdge: ${selectedTeam} premium play for Round ${round}`);
+    setSubject(`RightEdge: ${selectedTeam} premium play for ${roundLabel}`);
     setBody(`<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
 <html dir="ltr" lang="en">
   <head>
@@ -1039,7 +1046,7 @@ export function AdminDashboard({ data, onNavigateAdStudio }: { data?: any, onNav
     return acc;
   }, {});
 
-  const getBroadcastRecipientCount = () => {
+  const getBroadcastRecipients = () => {
     const teamMatches = (rowTeam: string) =>
       !broadcastTeam || String(rowTeam || '').toLowerCase() === broadcastTeam.toLowerCase();
 
@@ -1056,11 +1063,11 @@ export function AdminDashboard({ data, onNavigateAdStudio }: { data?: any, onNav
     );
 
     if (broadcastAudience === 'free') {
-      return [...freeMap.values()].filter((lead: any) => teamMatches(lead.favoriteTeam || '')).length;
+      return [...freeMap.values()].filter((lead: any) => teamMatches(lead.favoriteTeam || ''));
     }
 
     if (broadcastAudience === 'premium') {
-      return [...subscriberMap.values()].filter((sub: any) => teamMatches(sub.favoriteTeam || '')).length;
+      return [...subscriberMap.values()].filter((sub: any) => teamMatches(sub.favoriteTeam || ''));
     }
 
     const merged = new Map<string, any>();
@@ -1072,9 +1079,10 @@ export function AdminDashboard({ data, onNavigateAdStudio }: { data?: any, onNav
       }
     });
 
-    return [...merged.values()].filter((row: any) => teamMatches(row.favoriteTeam || '')).length;
+    return [...merged.values()].filter((row: any) => teamMatches(row.favoriteTeam || ''));
   };
-  const broadcastRecipientCount = getBroadcastRecipientCount();
+  const broadcastRecipients = getBroadcastRecipients();
+  const broadcastRecipientCount = broadcastRecipients.length;
 
   const handleSendEmail = async () => {
     if (!subject || !body) return;
@@ -1093,6 +1101,35 @@ export function AdminDashboard({ data, onNavigateAdStudio }: { data?: any, onNav
     try {
       setSending(true);
       setResult(null);
+      const recipientEmails = broadcastRecipients
+        .map((recipient: any) => String(recipient?.email || '').trim().toLowerCase())
+        .filter(Boolean);
+      const guardedPayload = {
+        audience: broadcastAudience,
+        team: broadcastTeam,
+        expectedRecipientCount: broadcastRecipientCount,
+        recipientEmails: testMode ? [] : recipientEmails,
+      };
+
+      if (!testMode) {
+        const validationRes = await fetch(`/api/admin/broadcast/validate-recipients`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${publicAnonKey}`
+          },
+          body: JSON.stringify(guardedPayload)
+        });
+        const validationData = await validationRes.json().catch(() => ({}));
+
+        if (!validationRes.ok || validationData?.guardVersion !== 1) {
+          setResult({
+            error: validationData?.error || 'Recipient safety guard is not deployed yet. Nothing was sent.'
+          });
+          return;
+        }
+      }
+
       const res = await fetch(`/api/admin/broadcast`, {
         method: 'POST',
         headers: {
@@ -1103,8 +1140,7 @@ export function AdminDashboard({ data, onNavigateAdStudio }: { data?: any, onNav
           subject,
           htmlContent: body,
           testMode,
-          audience: broadcastAudience,
-          team: broadcastTeam,
+          ...guardedPayload,
         })
       });
       const data = await res.json();

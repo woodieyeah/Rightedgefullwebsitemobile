@@ -2207,6 +2207,19 @@ function normalizeTeamFilter(team: unknown) {
   return String(team || "").trim();
 }
 
+function normalizeRecipientEmails(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value
+    .map((email) => String(email || "").trim().toLowerCase())
+    .filter((email) => email.includes("@"))
+  )];
+}
+
+function normalizeExpectedRecipientCount(value: unknown) {
+  const count = Number(value);
+  return Number.isInteger(count) && count >= 0 ? count : null;
+}
+
 async function loadFreeAccessLookup() {
   const entries = await kv.getByPrefix("free_access:") || [];
   const lookup = new Map<string, any>();
@@ -2281,6 +2294,58 @@ async function loadBroadcastRecipients(opts: { audience?: BroadcastAudience; tea
   }
 
   return { audience, teamFilter, recipients: [...recipientMap.values()] };
+}
+
+async function resolveGuardedBroadcastRecipients(body: any) {
+  const audience = normalizeBroadcastAudience(body?.audience);
+  const team = normalizeTeamFilter(body?.team);
+  const expectedRecipientCount = normalizeExpectedRecipientCount(body?.expectedRecipientCount);
+  const requestedRecipientEmails = normalizeRecipientEmails(body?.recipientEmails);
+  const { recipients } = await loadBroadcastRecipients({ audience, team });
+  let liveRecipients = recipients || [];
+
+  if (requestedRecipientEmails.length > 0) {
+    const eligibleByEmail = new Map(liveRecipients.map((recipient) => [recipient.email, recipient]));
+    const ineligibleEmails = requestedRecipientEmails.filter((email) => !eligibleByEmail.has(email));
+
+    if (ineligibleEmails.length > 0) {
+      return {
+        ok: false,
+        status: 400,
+        error: "Recipient list contains emails outside the selected audience/team filter",
+        details: { ineligibleCount: ineligibleEmails.length, audience, team },
+        audience,
+        team,
+        recipients: [],
+      };
+    }
+
+    liveRecipients = requestedRecipientEmails
+      .map((email) => eligibleByEmail.get(email))
+      .filter(Boolean) as typeof recipients;
+  }
+
+  if (expectedRecipientCount !== null && liveRecipients.length !== expectedRecipientCount) {
+    return {
+      ok: false,
+      status: 409,
+      error: `Recipient count mismatch: admin expected ${expectedRecipientCount}, server matched ${liveRecipients.length}. Nothing was sent.`,
+      details: { expectedRecipientCount, matchedRecipientCount: liveRecipients.length, audience, team },
+      audience,
+      team,
+      recipients: [],
+    };
+  }
+
+  return {
+    ok: true,
+    status: 200,
+    audience,
+    team,
+    expectedRecipientCount,
+    matchedRecipientCount: liveRecipients.length,
+    recipients: liveRecipients,
+  };
 }
 
 app.post("/confirm-checkout-session", async (c) => {
@@ -2478,6 +2543,38 @@ app.post("/subscribe", async (c) => {
 });
 
 
+app.post("/admin/broadcast/validate-recipients", async (c) => {
+  try {
+    const authHeader = c.req.header('Authorization');
+    if (!authHeader) {
+       return c.json({ error: "Unauthorized" }, 401);
+    }
+
+    const body = await c.req.json();
+    const resolved = await resolveGuardedBroadcastRecipients(body);
+
+    if (!resolved.ok) {
+      return c.json({
+        error: resolved.error,
+        guardVersion: 1,
+        ...(resolved.details || {}),
+      }, resolved.status);
+    }
+
+    return c.json({
+      success: true,
+      guardVersion: 1,
+      audience: resolved.audience,
+      team: resolved.team,
+      matchedRecipientCount: resolved.matchedRecipientCount,
+      expectedRecipientCount: resolved.expectedRecipientCount,
+    });
+  } catch (err: any) {
+    console.error("[AdminEmail] Recipient validation error:", err);
+    return c.json({ error: "Internal server error", message: err.message }, 500);
+  }
+});
+
 // Admin endpoint to send mass emails
 app.post("/admin/broadcast", async (c) => {
   try {
@@ -2489,8 +2586,6 @@ app.post("/admin/broadcast", async (c) => {
 
     const body = await c.req.json();
     const { subject, htmlContent, testMode = true } = body;
-    const audience = normalizeBroadcastAudience(body?.audience);
-    const team = normalizeTeamFilter(body?.team);
 
     if (!subject || !htmlContent) {
       return c.json({ error: "Missing subject or htmlContent" }, 400);
@@ -2505,8 +2600,19 @@ app.post("/admin/broadcast", async (c) => {
       return c.json({ error: "RESEND_API_KEY not configured" }, 500);
     }
 
-    const { recipients } = await loadBroadcastRecipients({ audience, team });
-    if (!testMode && (!recipients || recipients.length === 0)) {
+    const resolved = await resolveGuardedBroadcastRecipients(body);
+    if (!testMode && !resolved.ok) {
+      return c.json({
+        error: resolved.error,
+        guardVersion: 1,
+        ...(resolved.details || {}),
+      }, resolved.status);
+    }
+    const audience = resolved.audience;
+    const team = resolved.team;
+    const liveRecipients = resolved.ok ? resolved.recipients : [];
+
+    if (!testMode && (!liveRecipients || liveRecipients.length === 0)) {
        return c.json({ error: "No matching recipients found" }, 400);
     }
 
@@ -2515,7 +2621,7 @@ app.post("/admin/broadcast", async (c) => {
     // In test mode, only send to a dummy address or first subscriber
     const emailsToSend = testMode 
       ? ['elliott@woodbry.com'] // Replace with your actual email to test
-      : recipients.map((recipient) => recipient.email).filter(Boolean);
+      : liveRecipients.map((recipient) => recipient.email).filter(Boolean);
 
     console.log(`[AdminEmail] Sending to ${emailsToSend.length} recipients...`);
 
@@ -2556,7 +2662,7 @@ app.post("/admin/broadcast", async (c) => {
       }));
     }
 
-    return c.json({ success: true, sentCount: emailsToSend.length, results, testMode, audience, team });
+    return c.json({ success: true, sentCount: emailsToSend.length, results, testMode, audience, team, matchedRecipientCount: liveRecipients.length });
 
   } catch (err: any) {
     console.error("[AdminEmail] Server error:", err);
