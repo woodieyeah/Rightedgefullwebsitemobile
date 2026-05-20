@@ -22,6 +22,58 @@ const NRL_TEAMS = [
   'Wests Tigers',
 ];
 
+const BETR_AFFILIATE_URL = 'https://record.betraffiliates.com.au/_Bk4P0TFHeOiYNevImT-MDGNd7ZgqdRLk/1/';
+
+function escapeHtml(value: unknown) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function slugifyPayload(value: unknown) {
+  return String(value ?? '')
+    .toLowerCase()
+    .replace(/&/g, 'and')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
+function teamAliases(team: string) {
+  const aliases: Record<string, string[]> = {
+    'Brisbane Broncos': ['brisbane', 'broncos'],
+    'Canberra Raiders': ['canberra', 'raiders'],
+    'Canterbury Bulldogs': ['canterbury', 'bulldogs'],
+    'Cronulla Sharks': ['cronulla', 'sharks'],
+    'Dolphins': ['dolphins'],
+    'Gold Coast Titans': ['gold coast', 'titans'],
+    'Manly Sea Eagles': ['manly', 'sea eagles'],
+    'Melbourne Storm': ['melbourne', 'storm'],
+    'Newcastle Knights': ['newcastle', 'knights'],
+    'North Queensland Cowboys': ['north qld', 'north queensland', 'cowboys'],
+    'Parramatta Eels': ['parramatta', 'eels'],
+    'Penrith Panthers': ['penrith', 'panthers'],
+    'South Sydney Rabbitohs': ['souths', 'south sydney', 'rabbitohs'],
+    'St George Illawarra Dragons': ['st geo illa', 'st george', 'dragons'],
+    'Sydney Roosters': ['sydney', 'roosters'],
+    'Warriors': ['warriors', 'new zealand'],
+    'Wests Tigers': ['wests tigers', 'tigers'],
+  };
+  return aliases[team] || [team.toLowerCase()];
+}
+
+function teamMatchesName(selectedTeam: string, candidate: string) {
+  const normalizedCandidate = String(candidate || '').toLowerCase();
+  return teamAliases(selectedTeam).some((alias) => normalizedCandidate.includes(alias));
+}
+
+function formatMoneyOdds(value: unknown) {
+  const odds = Number(value);
+  return Number.isFinite(odds) && odds > 0 ? `$${odds.toFixed(2)}` : '';
+}
+
 export function AdminDashboard({ data, onNavigateAdStudio }: { data?: any, onNavigateAdStudio?: () => void }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [email, setEmail] = useState('');
@@ -262,6 +314,285 @@ export function AdminDashboard({ data, onNavigateAdStudio }: { data?: any, onNav
 
   </div>
 </div>`);
+  };
+
+  const generateTeamPlayEmail = () => {
+    if (!broadcastTeam) {
+      alert("Choose a team first.");
+      return;
+    }
+    if (!data?.predictions || data.predictions.length === 0) {
+      alert("No predictions data available");
+      return;
+    }
+
+    const selectedTeam = broadcastTeam;
+    const teamPrediction = data.predictions.find((row: any) =>
+      teamMatchesName(selectedTeam, row.homeTeam) || teamMatchesName(selectedTeam, row.awayTeam)
+    );
+
+    if (!teamPrediction) {
+      alert(`No current match found for ${selectedTeam}.`);
+      return;
+    }
+
+    const isHomeTeam = teamMatchesName(selectedTeam, teamPrediction.homeTeam);
+    const opponent = isHomeTeam ? teamPrediction.awayTeam : teamPrediction.homeTeam;
+    const teamScore = isHomeTeam ? teamPrediction.predictedHomeScore : teamPrediction.predictedAwayScore;
+    const opponentScore = isHomeTeam ? teamPrediction.predictedAwayScore : teamPrediction.predictedHomeScore;
+    const teamModelOdds = isHomeTeam ? teamPrediction.modelHomeOdds : teamPrediction.modelAwayOdds;
+    const teamMarketOdds = isHomeTeam ? teamPrediction.marketHomeOdds : teamPrediction.marketAwayOdds;
+    const teamOverlay = isHomeTeam ? teamPrediction.homeOverlay : teamPrediction.awayOverlay;
+    const modelProbability = teamModelOdds > 1 ? (1 / teamModelOdds) * 100 : 0;
+    const round = teamPrediction.fixture?.round || data.currentRoundLabel || "Live";
+    const venue = teamPrediction.fixture?.stadium || "NRL";
+    const kickoff = [
+      teamPrediction.fixture?.day,
+      teamPrediction.fixture?.dateLabel,
+      teamPrediction.fixture?.aedt ? `@ ${teamPrediction.fixture.aedt} ${teamPrediction.fixture?.tz || "AEST"}` : "",
+    ].filter(Boolean).join(" ");
+
+    const teamTryScorers = (data.tryScorers || [])
+      .filter((row: any) =>
+        teamMatchesName(selectedTeam, row.team) &&
+        String(row.match || "").toLowerCase().includes(String(opponent || "").split(" ")[0]?.toLowerCase() || "")
+      )
+      .sort((a: any, b: any) =>
+        (Number(b.statsInsiderPct) || 0) - (Number(a.statsInsiderPct) || 0) ||
+        (Number(b.edgePct) || 0) - (Number(a.edgePct) || 0)
+      );
+    const topScorer = teamTryScorers[0];
+
+    const payload = [
+      "rightedge_teamemail",
+      `round${slugifyPayload(round)}`,
+      slugifyPayload(selectedTeam),
+      slugifyPayload(opponent),
+    ].filter(Boolean).join("_");
+    const betrUrl = `${BETR_AFFILIATE_URL}?payload=${payload}`;
+
+    const safeRound = escapeHtml(`Round ${round}`);
+    const safeTeam = escapeHtml(selectedTeam);
+    const safeOpponent = escapeHtml(opponent);
+    const safeVenue = escapeHtml(venue);
+    const safeKickoff = escapeHtml(kickoff || "This round");
+    const safeScore = escapeHtml(`${teamScore}-${opponentScore}`);
+    const marketOddsText = formatMoneyOdds(teamMarketOdds);
+    const overlayText = Number.isFinite(teamOverlay) ? `${teamOverlay > 0 ? "+" : ""}${Number(teamOverlay).toFixed(2)}%` : "Live market check";
+    const scorerBlock = topScorer
+      ? `
+                                    <div
+                                      style="margin-top:14px;font-family:Arial,Helvetica,sans-serif;font-size:17px;line-height:1.7;color:#c3c9d6"
+                                    >
+                                      <p style="margin:0;padding:0">
+                                        Try scorer note: <strong style="color:#ffffff">${escapeHtml(topScorer.player)}</strong>
+                                        is showing at <strong style="color:#ffffff">${Number(topScorer.statsInsiderPct || 0).toFixed(1)}%</strong>
+                                        model probability with best available odds of
+                                        <strong style="color:#ffffff">${formatMoneyOdds(topScorer.bestOdds) || "live market price"}</strong>.
+                                      </p>
+                                    </div>`
+      : "";
+
+    setSubject(`RightEdge: ${selectedTeam} model read for Round ${round}`);
+    setBody(`<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html dir="ltr" lang="en">
+  <head>
+    <meta content="width=device-width" name="viewport" />
+    <meta content="text/html; charset=UTF-8" http-equiv="Content-Type" />
+    <meta name="x-apple-disable-message-reformatting" />
+    <meta content="IE=edge" http-equiv="X-UA-Compatible" />
+    <meta content="telephone=no,address=no,email=no,date=no,url=no" name="format-detection" />
+  </head>
+  <body style="background-color:#ffffff;margin:0;padding:0">
+    <div style="display:none;overflow:hidden;line-height:1px;opacity:0;max-height:0;max-width:0" data-skip-in-text="true">
+      One ${safeTeam} model read from this round's card.
+    </div>
+
+    <table border="0" width="100%" cellpadding="0" cellspacing="0" role="presentation" align="center">
+      <tbody>
+        <tr>
+          <td style="background-color:#ffffff">
+            <table align="left" width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="max-width:600px;width:100%;color:#000000;background-color:#ffffff;padding:0;border-radius:0;border-color:#000000">
+              <tbody>
+                <tr style="width:100%">
+                  <td>
+                    <table width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="margin:0;padding:0;background-color:#05070b">
+                      <tbody>
+                        <tr>
+                          <td align="center" style="padding:24px 12px">
+                            <table width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="max-width:640px;background-color:#05070b">
+                              <tbody>
+                                <tr>
+                                  <td style="padding:24px 20px;border:2px solid #f5f7fb;border-bottom:4px solid #0a4dff;background-color:#0a0d14">
+                                    <table width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation">
+                                      <tbody>
+                                        <tr>
+                                          <td align="left">
+                                            <div style="font-family:Arial Black,Arial,Helvetica,sans-serif;font-size:34px;line-height:1;color:#ffffff;font-weight:900;text-transform:uppercase;letter-spacing:-1px">
+                                              <p style="margin:0;padding:0">RIGHTEDGE</p>
+                                            </div>
+                                            <div style="margin-top:8px;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.3;color:#00f0a8;font-weight:700;letter-spacing:1.8px;text-transform:uppercase">
+                                              <p style="margin:0;padding:0">NRL Analytics and Value Insights</p>
+                                            </div>
+                                          </td>
+                                          <td align="right">
+                                            <div style="padding:10px 12px;display:inline-block;background-color:#ffe600;color:#05070b;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.2;font-weight:900;letter-spacing:1px;text-transform:uppercase">
+                                              <p style="margin:0;padding:0">${safeRound} Live</p>
+                                            </div>
+                                          </td>
+                                        </tr>
+                                      </tbody>
+                                    </table>
+                                  </td>
+                                </tr>
+                              </tbody>
+                            </table>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+
+                    <table width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="margin:0;padding:0;background-color:#05070b">
+                      <tbody>
+                        <tr>
+                          <td align="center" style="padding:0 12px">
+                            <table width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="max-width:640px">
+                              <tbody>
+                                <tr>
+                                  <td style="padding:30px 24px 28px 24px;background-color:#0a0d14;border-left:4px solid #00f0a8">
+                                    <div style="padding:8px 10px;display:inline-block;background-color:#00f0a8;color:#05070b;font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:1.2;font-weight:900;letter-spacing:1px;text-transform:uppercase">
+                                      <p style="margin:0;padding:0">Supporter Match Read</p>
+                                    </div>
+                                    <div style="margin-top:18px;font-family:Arial Black,Arial,Helvetica,sans-serif;font-size:38px;line-height:0.98;color:#ffffff;font-weight:900;letter-spacing:-1px">
+                                      <p style="margin:0;padding:0">
+                                        ${safeTeam} v ${safeOpponent}.<br /><span style="color:#00f0a8">Model projects ${safeScore}.</span>
+                                      </p>
+                                    </div>
+                                    <div style="margin-top:20px;font-family:Arial,Helvetica,sans-serif;font-size:17px;line-height:1.7;color:#c3c9d6">
+                                      <p style="margin:0;padding:0">
+                                        The RightEdge model has ${safeTeam} at <strong style="color:#ffffff">${modelProbability.toFixed(1)}%</strong>
+                                        with model odds of <strong style="color:#ffffff">${formatMoneyOdds(teamModelOdds) || "live"}</strong>.
+                                        Current market price is <strong style="color:#ffffff">${marketOddsText || "moving live"}</strong>,
+                                        showing a model edge of <strong style="color:#ffffff">${escapeHtml(overlayText)}</strong>.
+                                      </p>
+                                    </div>
+                                    <div style="margin-top:14px;font-family:Arial,Helvetica,sans-serif;font-size:17px;line-height:1.7;color:#c3c9d6">
+                                      <p style="margin:0;padding:0">
+                                        ${safeKickoff} at ${safeVenue}. If you are looking at ${safeTeam} markets this round,
+                                        start with the model price first, then compare the live market.
+                                      </p>
+                                    </div>
+                                    ${scorerBlock}
+                                    <table border="0" cellpadding="0" cellspacing="0" role="presentation" style="margin-top:24px">
+                                      <tbody>
+                                        <tr>
+                                          <td style="background-color:#0a4dff">
+                                            <a href="${betrUrl}" rel="noopener noreferrer sponsored" style="color:#ffffff;text-decoration:none;display:inline-block;padding:18px 28px;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.2;font-weight:900;text-transform:uppercase;letter-spacing:0.5px" target="_blank">
+                                              View ${safeTeam} markets at Betr &rarr;
+                                            </a>
+                                          </td>
+                                        </tr>
+                                      </tbody>
+                                    </table>
+                                    <div style="margin-top:10px;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.5;color:#5a6478">
+                                      <p style="margin:0;padding:0">Payload: ${escapeHtml(payload)}</p>
+                                    </div>
+                                  </td>
+                                </tr>
+                              </tbody>
+                            </table>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+
+                    <table width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="margin:0;padding:0;background-color:#05070b">
+                      <tbody>
+                        <tr>
+                          <td align="center" style="padding:0 12px">
+                            <table width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="max-width:640px">
+                              <tbody>
+                                <tr>
+                                  <td style="padding:24px 24px 8px 24px;background-color:#0a0d14">
+                                    <div style="font-family:Arial,Helvetica,sans-serif;font-size:17px;line-height:1.75;color:#c3c9d6">
+                                      <p style="margin:0;padding:0">Free shows you the model read. Premium shows you where to act.</p>
+                                    </div>
+                                    <div style="margin-top:14px;font-family:Arial,Helvetica,sans-serif;font-size:17px;line-height:1.75;color:#ffffff">
+                                      <p style="margin:0;padding:0">The full ${safeRound} card is live now.</p>
+                                    </div>
+                                  </td>
+                                </tr>
+                              </tbody>
+                            </table>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+
+                    <table width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="margin:0;padding:0;background-color:#05070b">
+                      <tbody>
+                        <tr>
+                          <td align="center" style="padding:0 12px">
+                            <table width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="max-width:640px">
+                              <tbody>
+                                <tr>
+                                  <td style="padding:18px 24px 10px 24px;background-color:#0a0d14">
+                                    <table border="0" cellpadding="0" cellspacing="0" role="presentation">
+                                      <tbody>
+                                        <tr>
+                                          <td style="background-color:#ffe600">
+                                            <a href="https://www.rightedge.com.au/#best-bets" rel="noopener noreferrer nofollow" style="color:#05070b;text-decoration:none;display:inline-block;padding:18px 24px;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.2;font-weight:900;text-transform:uppercase;letter-spacing:0.3px" target="_blank">
+                                              Unlock Premium - $9/week &rarr;
+                                            </a>
+                                          </td>
+                                        </tr>
+                                      </tbody>
+                                    </table>
+                                    <div style="margin-top:12px;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.7;color:#97a1b3">
+                                      <p style="margin:0;padding:0">No lock-in. Cancel anytime. Instant access to the full round card.</p>
+                                    </div>
+                                  </td>
+                                </tr>
+                              </tbody>
+                            </table>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+
+                    <table width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="margin:0;padding:0;background-color:#05070b">
+                      <tbody>
+                        <tr>
+                          <td align="center" style="padding:0 12px">
+                            <table width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="max-width:640px">
+                              <tbody>
+                                <tr>
+                                  <td style="padding:20px 24px 24px 24px;background-color:#0a0d14;border-top:1px solid #1b2230">
+                                    <div style="font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.7;color:#5a6478">
+                                      <p style="margin:0;padding:0">
+                                        RightEdge is an independent analytics platform. Model probabilities do not guarantee outcomes.
+                                        Gamble responsibly - if gambling is affecting you or someone you know, call <strong>1800 858 858</strong>
+                                        or visit <a href="https://www.gamblinghelponline.org.au" style="color:#5a6478">gamblinghelponline.org.au</a>. 18+ only.
+                                      </p>
+                                    </div>
+                                  </td>
+                                </tr>
+                              </tbody>
+                            </table>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </body>
+</html>`);
   };
 
   const fetchData = async () => {
@@ -1188,6 +1519,12 @@ export function AdminDashboard({ data, onNavigateAdStudio }: { data?: any, onNav
                   className="bg-[#00E676]/10 text-[#00E676] border border-[#00E676]/30 px-3 py-1 text-xs font-bold uppercase tracking-widest hover:bg-[#00E676]/20 transition-colors"
                 >
                   Generate Lookahead
+                </button>
+                <button
+                  onClick={generateTeamPlayEmail}
+                  className="bg-[#0A4DFF]/20 text-white border border-[#0A4DFF]/50 px-3 py-1 text-xs font-bold uppercase tracking-widest hover:bg-[#0A4DFF]/35 transition-colors"
+                >
+                  Generate Team Play
                 </button>
               </div>
             </div>
