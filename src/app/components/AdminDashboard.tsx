@@ -42,6 +42,7 @@ function slugifyPayload(value: unknown) {
 }
 
 function teamAliases(team: string) {
+  const teamName = String(team || '');
   const aliases: Record<string, string[]> = {
     'Brisbane Broncos': ['brisbane', 'broncos'],
     'Canberra Raiders': ['canberra', 'raiders'],
@@ -61,7 +62,7 @@ function teamAliases(team: string) {
     'Warriors': ['warriors', 'new zealand'],
     'Wests Tigers': ['wests tigers', 'tigers'],
   };
-  return aliases[team] || [team.toLowerCase()];
+  return aliases[teamName] || [teamName.toLowerCase()];
 }
 
 function teamMatchesName(selectedTeam: string, candidate: string) {
@@ -72,6 +73,160 @@ function teamMatchesName(selectedTeam: string, candidate: string) {
 function formatMoneyOdds(value: unknown) {
   const odds = Number(value);
   return Number.isFinite(odds) && odds > 0 ? `$${odds.toFixed(2)}` : '';
+}
+
+function getImpliedPctFromOdds(odds: unknown) {
+  const numericOdds = Number(odds);
+  return Number.isFinite(numericOdds) && numericOdds > 1 ? (1 / numericOdds) * 100 : 0;
+}
+
+function probabilityFromEdge(edge: number, scale = 7.5) {
+  return Math.max(1, Math.min(99, (1 / (1 + Math.exp(-(edge / scale)))) * 100));
+}
+
+function formatLinePoint(point: number) {
+  return point > 0 ? `+${point}` : String(point);
+}
+
+function normalizeBookmakerName(name: string) {
+  const key = String(name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (!key || key.includes('multiple')) return '';
+  if (key.includes('pointsbet')) return 'pointsbet';
+  if (key.includes('betright')) return 'betright';
+  if (key === 'betr' || key.startsWith('betr') || key.includes('betrapp')) return 'betr';
+  if (key.includes('betfair')) return 'betfair';
+  if (key.includes('ladbrokes')) return 'ladbrokes';
+  if (key.includes('sportsbet')) return 'sportsbet';
+  if (key.includes('bet365')) return 'bet365';
+  if (key.includes('dabble')) return 'dabble';
+  if (key.includes('neds')) return 'neds';
+  if (key.includes('tabtouch')) return 'tab';
+  if (key.includes('tab')) return 'tab';
+  return key;
+}
+
+function isBetrBookmaker(bookmaker: any) {
+  return normalizeBookmakerName(bookmaker?.title || bookmaker?.key || bookmaker || '') === 'betr';
+}
+
+async function fetchAdminLiveOdds() {
+  const cacheKey = 'rightedge_odds_cache_v5_no_betfair';
+  const cacheDuration = 30 * 60 * 1000;
+
+  try {
+    const cachedStr = localStorage.getItem(cacheKey);
+    if (cachedStr) {
+      const cached = JSON.parse(cachedStr);
+      if (Date.now() - cached.timestamp < cacheDuration) return cached.data;
+    }
+  } catch {
+    // Keep the email generator usable even if the cache is malformed.
+  }
+
+  const res = await fetch('/api/live-odds', {
+    headers: { Authorization: `Bearer ${publicAnonKey}` },
+  });
+  if (!res.ok) throw new Error('Could not load live odds');
+  const rawOdds = await res.json();
+  if (!Array.isArray(rawOdds)) throw new Error('Invalid live odds payload');
+
+  localStorage.setItem(cacheKey, JSON.stringify({ timestamp: Date.now(), data: rawOdds }));
+  return rawOdds;
+}
+
+function findLiveOddsEvent(rawOdds: any[], row: any) {
+  return (rawOdds || []).find((event: any) => {
+    const home = event.home_team || '';
+    const away = event.away_team || '';
+    return (
+      (teamMatchesName(row.homeTeam, home) && teamMatchesName(row.awayTeam, away)) ||
+      (teamMatchesName(row.homeTeam, away) && teamMatchesName(row.awayTeam, home))
+    );
+  });
+}
+
+function getBestBetrPlayForTeam(row: any, selectedTeam: string, rawOdds: any[]) {
+  const event = findLiveOddsEvent(rawOdds, row);
+  const betrBookmaker = (event?.bookmakers || []).find((bookmaker: any) => isBetrBookmaker(bookmaker));
+  if (!betrBookmaker) return null;
+
+  const candidates: any[] = [];
+  const projectedTotal = Number(row.predictedHomeScore || 0) + Number(row.predictedAwayScore || 0);
+  const projectedHomeMargin = Number(row.predictedHomeScore || 0) - Number(row.predictedAwayScore || 0);
+  const selectedIsHome = teamMatchesName(selectedTeam, row.homeTeam);
+  const selectedProjectedMargin = selectedIsHome ? projectedHomeMargin : -projectedHomeMargin;
+  const selectedModelPct = selectedIsHome ? getImpliedPctFromOdds(row.modelHomeOdds) : getImpliedPctFromOdds(row.modelAwayOdds);
+  const bookmakerName = 'Betr';
+  const h2hMarket = (betrBookmaker.markets || []).find((market: any) => market.key === 'h2h');
+  const spreadMarket = (betrBookmaker.markets || []).find((market: any) => market.key === 'spreads');
+  const totalsMarket = (betrBookmaker.markets || []).find((market: any) => market.key === 'totals');
+
+  for (const outcome of spreadMarket?.outcomes || []) {
+    const odds = Number(outcome.price) || 0;
+    const point = Number(outcome.point);
+    if (!teamMatchesName(selectedTeam, outcome.name || '') || odds < 1.55 || !Number.isFinite(point)) continue;
+
+    const coverEdge = selectedProjectedMargin + point;
+    const modelPct = probabilityFromEdge(coverEdge, 7.5);
+    if (modelPct < 53) continue;
+
+    candidates.push({
+      type: 'Line',
+      label: `${selectedTeam} ${formatLinePoint(point)}`,
+      bookmaker: bookmakerName,
+      odds,
+      modelPct,
+      modelEdge: coverEdge,
+      detail: `Model margin ${selectedProjectedMargin > 0 ? '+' : ''}${Math.round(selectedProjectedMargin)} vs Betr line ${formatLinePoint(point)}`,
+      typeRank: 3,
+    });
+  }
+
+  for (const outcome of totalsMarket?.outcomes || []) {
+    const odds = Number(outcome.price) || 0;
+    const point = Number(outcome.point);
+    const side = String(outcome.name || '');
+    if (!['Over', 'Under'].includes(side) || odds < 1.55 || !Number.isFinite(point) || !projectedTotal) continue;
+
+    const edge = side === 'Over' ? projectedTotal - point : point - projectedTotal;
+    const modelPct = probabilityFromEdge(edge, 8);
+    if (modelPct < 53) continue;
+
+    candidates.push({
+      type: 'Total',
+      label: `${side} ${point}`,
+      bookmaker: bookmakerName,
+      odds,
+      modelPct,
+      modelEdge: edge,
+      detail: `Model total ${Math.round(projectedTotal)} vs Betr total ${point}`,
+      typeRank: 2,
+    });
+  }
+
+  for (const outcome of h2hMarket?.outcomes || []) {
+    const odds = Number(outcome.price) || 0;
+    if (!teamMatchesName(selectedTeam, outcome.name || '') || odds < 1.25) continue;
+
+    candidates.push({
+      type: 'Head 2 Head',
+      label: `${selectedTeam} head-to-head`,
+      bookmaker: bookmakerName,
+      odds,
+      modelPct: selectedModelPct,
+      modelEdge: selectedModelPct - getImpliedPctFromOdds(odds),
+      detail: `Model win probability ${selectedModelPct.toFixed(1)}% vs Betr market ${getImpliedPctFromOdds(odds).toFixed(1)}%`,
+      typeRank: teamMatchesName(selectedTeam, row.predictedWinner || '') ? 1 : 0,
+    });
+  }
+
+  if (!candidates.length) return null;
+
+  return candidates.sort((a, b) => {
+    const aScore = a.modelPct + Math.min(8, Math.max(0, (a.odds - 1.8) * 6)) + a.typeRank;
+    const bScore = b.modelPct + Math.min(8, Math.max(0, (b.odds - 1.8) * 6)) + b.typeRank;
+    return bScore - aScore;
+  })[0];
 }
 
 export function AdminDashboard({ data, onNavigateAdStudio }: { data?: any, onNavigateAdStudio?: () => void }) {
@@ -316,7 +471,7 @@ export function AdminDashboard({ data, onNavigateAdStudio }: { data?: any, onNav
 </div>`);
   };
 
-  const generateTeamPlayEmail = () => {
+  const generateTeamPlayEmail = async () => {
     if (!broadcastTeam) {
       alert("Choose a team first.");
       return;
@@ -336,12 +491,19 @@ export function AdminDashboard({ data, onNavigateAdStudio }: { data?: any, onNav
       return;
     }
 
+    let premiumPlay: any = null;
+    try {
+      const rawOdds = await fetchAdminLiveOdds();
+      premiumPlay = getBestBetrPlayForTeam(teamPrediction, selectedTeam, rawOdds);
+    } catch (err) {
+      console.warn('[AdminDashboard] Could not load premium play odds for team email:', err);
+    }
+
     const isHomeTeam = teamMatchesName(selectedTeam, teamPrediction.homeTeam);
     const opponent = isHomeTeam ? teamPrediction.awayTeam : teamPrediction.homeTeam;
     const teamScore = isHomeTeam ? teamPrediction.predictedHomeScore : teamPrediction.predictedAwayScore;
     const opponentScore = isHomeTeam ? teamPrediction.predictedAwayScore : teamPrediction.predictedHomeScore;
     const teamModelOdds = isHomeTeam ? teamPrediction.modelHomeOdds : teamPrediction.modelAwayOdds;
-    const teamMarketOdds = isHomeTeam ? teamPrediction.marketHomeOdds : teamPrediction.marketAwayOdds;
     const teamOverlay = isHomeTeam ? teamPrediction.homeOverlay : teamPrediction.awayOverlay;
     const modelProbability = teamModelOdds > 1 ? (1 / teamModelOdds) * 100 : 0;
     const round = teamPrediction.fixture?.round || data.currentRoundLabel || "Live";
@@ -362,6 +524,19 @@ export function AdminDashboard({ data, onNavigateAdStudio }: { data?: any, onNav
         (Number(b.edgePct) || 0) - (Number(a.edgePct) || 0)
       );
     const topScorer = teamTryScorers[0];
+    const topScorerHasBetrOdds = topScorer && isBetrBookmaker(topScorer.bookmaker);
+    const tryScorerPlay = topScorer
+      ? {
+          type: "Try Scorer",
+          label: `${topScorer.player} anytime try scorer`,
+          bookmaker: "Betr",
+          odds: topScorerHasBetrOdds ? topScorer.bestOdds : null,
+          modelPct: Number(topScorer.statsInsiderPct) || 0,
+          detail: topScorerHasBetrOdds
+            ? `Model try probability ${Number(topScorer.statsInsiderPct || 0).toFixed(1)}% vs Betr market ${Number(topScorer.marketImpliedPct || 0).toFixed(1)}%`
+            : `Model try probability ${Number(topScorer.statsInsiderPct || 0).toFixed(1)}%. Check the live anytime try scorer price at Betr before placing.`,
+        }
+      : null;
 
     const payload = [
       "rightedge_teamemail",
@@ -377,23 +552,47 @@ export function AdminDashboard({ data, onNavigateAdStudio }: { data?: any, onNav
     const safeVenue = escapeHtml(venue);
     const safeKickoff = escapeHtml(kickoff || "This round");
     const safeScore = escapeHtml(`${teamScore}-${opponentScore}`);
-    const marketOddsText = formatMoneyOdds(teamMarketOdds);
-    const overlayText = Number.isFinite(teamOverlay) ? `${teamOverlay > 0 ? "+" : ""}${Number(teamOverlay).toFixed(2)}%` : "Live market check";
-    const scorerBlock = topScorer
+    const selectedPlay = premiumPlay || tryScorerPlay;
+    if (!selectedPlay) {
+      alert(`No current match or try scorer angle is available for ${selectedTeam}. Try again after the next odds sync.`);
+      return;
+    }
+    const isTryScorerFallback = selectedPlay === tryScorerPlay && !premiumPlay;
+    const primaryPlayLabel = selectedPlay.label || `${selectedTeam} head-to-head`;
+    const primaryPlayType = selectedPlay.type || "Model Read";
+    const primaryPlayOdds = Number(selectedPlay.odds) > 1 ? Number(selectedPlay.odds) : null;
+    const primaryPlayBookmaker = selectedPlay.bookmaker || "Betr";
+    const primaryModelPct = selectedPlay.modelPct || modelProbability;
+    const primaryPriceLine = primaryPlayOdds
+      ? `${formatMoneyOdds(primaryPlayOdds)} at ${primaryPlayBookmaker}`
+      : "Check the live price at Betr";
+    const primaryLivePriceCopy = primaryPlayOdds
+      ? `with the live price showing as <strong style="color:#ffffff">${formatMoneyOdds(primaryPlayOdds)}</strong>.`
+      : `with the live Betr price to be checked when they click through.`;
+    const primarySourceCopy = isTryScorerFallback
+      ? `No clean Betr match-market play is currently showing for ${safeTeam}, so this uses the strongest team-specific try scorer angle from the premium model.`
+      : `This is pulled from the RightEdge Premium Plays card for ${safeTeam} v ${safeOpponent}.`;
+    const primaryDetail = selectedPlay.detail || (
+      Number.isFinite(teamOverlay)
+        ? `Model edge ${teamOverlay > 0 ? "+" : ""}${Number(teamOverlay).toFixed(2)}% against the current head-to-head price`
+        : "Live market check against the current head-to-head price"
+    );
+    const scorerBlock = topScorer && selectedPlay !== tryScorerPlay
       ? `
                                     <div
                                       style="margin-top:14px;font-family:Arial,Helvetica,sans-serif;font-size:17px;line-height:1.7;color:#c3c9d6"
                                     >
                                       <p style="margin:0;padding:0">
                                         Try scorer note: <strong style="color:#ffffff">${escapeHtml(topScorer.player)}</strong>
-                                        is showing at <strong style="color:#ffffff">${Number(topScorer.statsInsiderPct || 0).toFixed(1)}%</strong>
-                                        model probability with best available odds of
-                                        <strong style="color:#ffffff">${formatMoneyOdds(topScorer.bestOdds) || "live market price"}</strong>.
+                                        is showing at <strong style="color:#ffffff">${Number(topScorer.statsInsiderPct || 0).toFixed(1)}%</strong> model probability.
+                                        ${topScorerHasBetrOdds
+                                          ? `Betr is currently showing <strong style="color:#ffffff">${formatMoneyOdds(topScorer.bestOdds) || "a live market price"}</strong>.`
+                                          : `The anytime scorer market can be checked at Betr when they click through.`}
                                       </p>
                                     </div>`
       : "";
 
-    setSubject(`RightEdge: ${selectedTeam} match play for ${round}`);
+    setSubject(`RightEdge: ${selectedTeam} premium play for Round ${round}`);
     setBody(`<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
 <html dir="ltr" lang="en">
   <head>
@@ -405,7 +604,7 @@ export function AdminDashboard({ data, onNavigateAdStudio }: { data?: any, onNav
   </head>
   <body style="background-color:#ffffff;margin:0;padding:0">
     <div style="display:none;overflow:hidden;line-height:1px;opacity:0;max-height:0;max-width:0" data-skip-in-text="true">
-      One ${safeTeam} model read from this round's card.
+      One ${safeTeam} premium play from this round's card.
     </div>
 
     <table border="0" width="100%" cellpadding="0" cellspacing="0" role="presentation" align="center">
@@ -461,25 +660,25 @@ export function AdminDashboard({ data, onNavigateAdStudio }: { data?: any, onNav
                                 <tr>
                                   <td style="padding:30px 24px 28px 24px;background-color:#0a0d14;border-left:4px solid #00f0a8">
                                     <div style="padding:8px 10px;display:inline-block;background-color:#00f0a8;color:#05070b;font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:1.2;font-weight:900;letter-spacing:1px;text-transform:uppercase">
-                                      <p style="margin:0;padding:0">Supporter Play</p>
+                                      <p style="margin:0;padding:0">Supporter Premium Play</p>
                                     </div>
                                     <div style="margin-top:18px;font-family:Arial Black,Arial,Helvetica,sans-serif;font-size:38px;line-height:0.98;color:#ffffff;font-weight:900;letter-spacing:-1px">
                                       <p style="margin:0;padding:0">
-                                        ${safeTeam} v ${safeOpponent}.<br /><span style="color:#00f0a8">Model projects ${safeScore}.</span>
+                                        ${escapeHtml(primaryPlayLabel)}.<br /><span style="color:#00f0a8">${escapeHtml(primaryPriceLine)}.</span>
                                       </p>
                                     </div>
                                     <div style="margin-top:20px;font-family:Arial,Helvetica,sans-serif;font-size:17px;line-height:1.7;color:#c3c9d6">
                                       <p style="margin:0;padding:0">
-                                        The RightEdge model has ${safeTeam} at <strong style="color:#ffffff">${modelProbability.toFixed(1)}%</strong>
-                                        with model odds of <strong style="color:#ffffff">${formatMoneyOdds(teamModelOdds) || "live"}</strong>.
-                                        Current market price is <strong style="color:#ffffff">${marketOddsText || "moving live"}</strong>,
-                                        showing a model edge of <strong style="color:#ffffff">${escapeHtml(overlayText)}</strong>.
+                                        ${primarySourceCopy}
+                                        The model has this <strong style="color:#ffffff">${escapeHtml(primaryPlayType)}</strong>
+                                        at <strong style="color:#ffffff">${Number(primaryModelPct || 0).toFixed(1)}%</strong>,
+                                        ${primaryLivePriceCopy}
                                       </p>
                                     </div>
                                     <div style="margin-top:14px;font-family:Arial,Helvetica,sans-serif;font-size:17px;line-height:1.7;color:#c3c9d6">
                                       <p style="margin:0;padding:0">
-                                        ${safeKickoff} at ${safeVenue}. If you are looking at ${safeTeam} markets this round,
-                                        start with the model price first, then compare the live market.
+                                        ${safeKickoff} at ${safeVenue}. Projected score is ${safeScore}.
+                                        <strong style="color:#ffffff">${escapeHtml(primaryDetail)}</strong>.
                                       </p>
                                     </div>
                                     ${scorerBlock}
