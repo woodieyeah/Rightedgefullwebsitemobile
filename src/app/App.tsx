@@ -3408,12 +3408,14 @@ function getFreeBetrLineOutcomes(row: PredictionRow, markets?: SgmMarketBookmake
       const spread = getFreeBetrPrimarySpread(markets, team);
 
       if (!spread || spread.odds <= 1) return null;
-      const modelPct = getTeamModelPct(row, team);
+      const projectedMargin = getSelectedTeamProjectedMargin(row, team);
+      const coverEdge = projectedMargin + spread.point;
+      const modelPct = probabilityFromEdge(coverEdge, 7.5);
 
       return {
         id: `line-${team}`,
         label: `${team} ${formatSgmLine(spread.point)}`,
-        subLabel: `Line · Model win ${formatPercent(modelPct, 0)}`,
+        subLabel: `Line · Model cover ${formatPercent(modelPct, 0)}`,
         odds: spread.odds,
         payload: buildFreeBetrPayload(row, "line", `${team}_${spread.point}`),
         logoTeam: team,
@@ -3447,7 +3449,7 @@ function getFreeBetrTotalOutcomes(row: PredictionRow, markets?: SgmMarketBookmak
       return {
         id: `total-${side}`,
         label: `${side} ${total.point}`,
-        subLabel: `Total points · Model ${Math.round(projectedTotal)} pts · Model ${formatPercent(modelPct, 0)}`,
+        subLabel: `Total points · Model ${Math.round(projectedTotal)} pts · ${side} ${formatPercent(modelPct, 0)}`,
         odds: total.odds,
         payload: buildFreeBetrPayload(row, "total", `${side}_${total.point}`),
         tag: side,
@@ -4718,6 +4720,8 @@ function PredictionsPage({
           const hasPredictedWinner = homeIsPredictedWinner || awayIsPredictedWinner;
           const homeModelPct = getTeamModelPct(row, row.homeTeam);
           const awayModelPct = getTeamModelPct(row, row.awayTeam);
+          const homeColors = getTeamColors(row.homeTeam);
+          const awayColors = getTeamColors(row.awayTeam);
 
           return (
             <GlassCard
@@ -4725,33 +4729,47 @@ function PredictionsPage({
               className="p-0 relative overflow-hidden transition-transform duration-300 hover:-translate-y-1"
             >
               <div className="p-5 md:p-6">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <div className="text-[10px] uppercase font-black text-white/50 tracking-widest mb-3">
-                      {row.fixture
-                        ? `${row.fixture.day} ${row.fixture.dateLabel} @ ${row.fixture.aedt} AEST`
-                        : "TBC"}
-                    </div>
-                    <div className="flex flex-col gap-3 mb-3">
-                      <div className="grid grid-cols-[minmax(0,1fr)_minmax(74px,auto)_minmax(48px,auto)] items-center gap-3">
-                        <div />
-                        <div className="text-right text-[9px] md:text-[10px] font-black uppercase tracking-widest text-white/45 whitespace-nowrap">
-                          Proj score
-                        </div>
-                        <div className="text-right text-[9px] md:text-[10px] font-black uppercase tracking-widest text-white/45 whitespace-nowrap">
-                          Win %
-                        </div>
+                <div className="overflow-hidden border-2 border-white/10 bg-[#0A0C10] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+                  <div className="border-b border-white/10 bg-white/[0.03] px-3 py-2 text-[10px] uppercase font-black text-white/55 tracking-widest">
+                    {row.fixture
+                      ? `${row.fixture.day} ${row.fixture.dateLabel} @ ${row.fixture.aedt} AEST`
+                      : "TBC"}
+                  </div>
+                  <div className="p-3 md:p-4">
+                    <div className="mb-2 grid grid-cols-[minmax(0,1fr)_minmax(74px,auto)_minmax(52px,auto)] items-center gap-2 border-b border-white/10 pb-2">
+                      <div className="text-[9px] md:text-[10px] font-black uppercase tracking-widest text-white/35">
+                        Teams
                       </div>
-                      <div className="grid grid-cols-[minmax(0,1fr)_minmax(74px,auto)_minmax(48px,auto)] items-center gap-3">
-                        <div className="flex min-w-0 items-center gap-3">
+                      <div className="text-right text-[9px] md:text-[10px] font-black uppercase tracking-widest text-white/45 whitespace-nowrap">
+                        Proj score
+                      </div>
+                      <div className="text-right text-[9px] md:text-[10px] font-black uppercase tracking-widest text-white/45 whitespace-nowrap">
+                        Win %
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <div
+                        className="relative grid grid-cols-[minmax(0,1fr)_minmax(74px,auto)_minmax(52px,auto)] items-center gap-2 overflow-hidden border bg-[#111317] p-2.5"
+                        style={{
+                          borderColor: hexToRgba(homeColors.primary, homeIsPredictedWinner ? 0.85 : 0.42),
+                          boxShadow: homeIsPredictedWinner
+                            ? `3px 3px 0 0 ${hexToRgba(homeColors.secondary, 0.3)}`
+                            : undefined,
+                        }}
+                      >
+                        <span
+                          className="absolute left-0 top-0 h-full w-1"
+                          style={{ backgroundColor: homeColors.secondary }}
+                        />
+                        <div className="flex min-w-0 items-center gap-2.5 pl-1">
                           <TeamLogo
                             teamName={row.homeTeam}
-                            className="w-10 h-10 rounded-sm shadow-[2px_2px_0_0_rgba(255,255,255,0.1)]"
+                            className="w-9 h-9 rounded-sm shadow-[2px_2px_0_0_rgba(255,255,255,0.1)]"
                           />
                           <span
-                            className={`min-w-0 text-xl md:text-2xl font-black uppercase tracking-tight truncate ${
+                            className={`min-w-0 text-lg md:text-2xl font-black uppercase tracking-tight truncate ${
                               hasPredictedWinner && !homeIsPredictedWinner
-                                ? "text-white/55"
+                                ? "text-white/50"
                                 : "text-white"
                             }`}
                           >
@@ -4759,38 +4777,50 @@ function PredictionsPage({
                           </span>
                         </div>
                         <div
-                          className={`min-w-[44px] text-right text-2xl md:text-3xl font-black tabular-nums ${
+                          className={`border border-white/10 bg-white/[0.04] px-2 py-1.5 text-center text-2xl md:text-3xl font-black tabular-nums ${
                             homeIsPredictedWinner
                               ? "text-[#00E676]"
                               : hasPredictedWinner
-                                ? "text-white/55"
+                                ? "text-white/50"
                                 : "text-white"
                           }`}
                         >
                           {projectedHomeScore ?? "—"}
                         </div>
                         <div
-                          className={`min-w-[48px] text-right text-sm md:text-base font-black tabular-nums ${
+                          className={`border border-white/10 bg-white/[0.03] px-2 py-1.5 text-center text-sm md:text-base font-black tabular-nums ${
                             homeIsPredictedWinner
                               ? "text-[#00E676]"
                               : hasPredictedWinner
-                                ? "text-white/55"
+                                ? "text-white/50"
                                 : "text-white/70"
                           }`}
                         >
                           {formatPercent(homeModelPct, 0)}
                         </div>
                       </div>
-                      <div className="grid grid-cols-[minmax(0,1fr)_minmax(74px,auto)_minmax(48px,auto)] items-center gap-3">
-                        <div className="flex min-w-0 items-center gap-3">
+                      <div
+                        className="relative grid grid-cols-[minmax(0,1fr)_minmax(74px,auto)_minmax(52px,auto)] items-center gap-2 overflow-hidden border bg-[#111317] p-2.5"
+                        style={{
+                          borderColor: hexToRgba(awayColors.primary, awayIsPredictedWinner ? 0.85 : 0.42),
+                          boxShadow: awayIsPredictedWinner
+                            ? `3px 3px 0 0 ${hexToRgba(awayColors.secondary, 0.3)}`
+                            : undefined,
+                        }}
+                      >
+                        <span
+                          className="absolute left-0 top-0 h-full w-1"
+                          style={{ backgroundColor: awayColors.secondary }}
+                        />
+                        <div className="flex min-w-0 items-center gap-2.5 pl-1">
                           <TeamLogo
                             teamName={row.awayTeam}
-                            className="w-10 h-10 rounded-sm shadow-[2px_2px_0_0_rgba(255,255,255,0.1)]"
+                            className="w-9 h-9 rounded-sm shadow-[2px_2px_0_0_rgba(255,255,255,0.1)]"
                           />
                           <span
-                            className={`min-w-0 text-xl md:text-2xl font-black uppercase tracking-tight truncate ${
+                            className={`min-w-0 text-lg md:text-2xl font-black uppercase tracking-tight truncate ${
                               hasPredictedWinner && !awayIsPredictedWinner
-                                ? "text-white/55"
+                                ? "text-white/50"
                                 : "text-white"
                             }`}
                           >
@@ -4798,22 +4828,22 @@ function PredictionsPage({
                           </span>
                         </div>
                         <div
-                          className={`min-w-[44px] text-right text-2xl md:text-3xl font-black tabular-nums ${
+                          className={`border border-white/10 bg-white/[0.04] px-2 py-1.5 text-center text-2xl md:text-3xl font-black tabular-nums ${
                             awayIsPredictedWinner
                               ? "text-[#00E676]"
                               : hasPredictedWinner
-                                ? "text-white/55"
+                                ? "text-white/50"
                                 : "text-white"
                           }`}
                         >
                           {projectedAwayScore ?? "—"}
                         </div>
                         <div
-                          className={`min-w-[48px] text-right text-sm md:text-base font-black tabular-nums ${
+                          className={`border border-white/10 bg-white/[0.03] px-2 py-1.5 text-center text-sm md:text-base font-black tabular-nums ${
                             awayIsPredictedWinner
                               ? "text-[#00E676]"
                               : hasPredictedWinner
-                                ? "text-white/55"
+                                ? "text-white/50"
                                 : "text-white/70"
                           }`}
                         >
@@ -4821,7 +4851,7 @@ function PredictionsPage({
                         </div>
                       </div>
                     </div>
-                    <div className="text-[10px] font-bold text-white/50 mt-4 uppercase tracking-widest">
+                    <div className="mt-3 border-t border-white/10 pt-3 text-[10px] font-bold text-white/45 uppercase tracking-widest">
                       {row.fixture?.stadium || "TBC"}
                     </div>
                   </div>
