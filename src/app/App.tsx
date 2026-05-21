@@ -3384,10 +3384,11 @@ function getFreeBetrH2hOutcomes(row: PredictionRow, markets?: SgmMarketBookmaker
     .map((team) => {
       const odds = markets.h2h[normalizeTeamName(team)] || 0;
       if (odds <= 1) return null;
+      const modelPct = getTeamModelPct(row, team);
       return {
         id: `h2h-${team}`,
         label: team,
-        subLabel: "Head to head",
+        subLabel: `Head to head · Model ${formatPercent(modelPct, 0)}`,
         odds,
         payload: buildFreeBetrPayload(row, "h2h", team),
         logoTeam: team,
@@ -3407,11 +3408,12 @@ function getFreeBetrLineOutcomes(row: PredictionRow, markets?: SgmMarketBookmake
       const spread = getFreeBetrPrimarySpread(markets, team);
 
       if (!spread || spread.odds <= 1) return null;
+      const modelPct = getTeamModelPct(row, team);
 
       return {
         id: `line-${team}`,
         label: `${team} ${formatSgmLine(spread.point)}`,
-        subLabel: "Line",
+        subLabel: `Line · Model win ${formatPercent(modelPct, 0)}`,
         odds: spread.odds,
         payload: buildFreeBetrPayload(row, "line", `${team}_${spread.point}`),
         logoTeam: team,
@@ -3437,11 +3439,15 @@ function getFreeBetrTotalOutcomes(row: PredictionRow, markets?: SgmMarketBookmak
     .map((side) => {
       const total = markets.totals.find((item) => item.side === side && item.point === closestPoint);
       if (!total || total.odds <= 1) return null;
+      const edge = side === "Over"
+        ? projectedTotal - total.point
+        : total.point - projectedTotal;
+      const modelPct = probabilityFromEdge(edge, 8);
 
       return {
         id: `total-${side}`,
         label: `${side} ${total.point}`,
-        subLabel: "Total points",
+        subLabel: `Total points · Model ${Math.round(projectedTotal)} pts · Model ${formatPercent(modelPct, 0)}`,
         odds: total.odds,
         payload: buildFreeBetrPayload(row, "total", `${side}_${total.point}`),
         tag: side,
@@ -4727,7 +4733,16 @@ function PredictionsPage({
                         : "TBC"}
                     </div>
                     <div className="flex flex-col gap-3 mb-3">
-                      <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3">
+                      <div className="grid grid-cols-[minmax(0,1fr)_minmax(74px,auto)_minmax(48px,auto)] items-center gap-3">
+                        <div />
+                        <div className="text-right text-[9px] md:text-[10px] font-black uppercase tracking-widest text-white/45 whitespace-nowrap">
+                          Proj score
+                        </div>
+                        <div className="text-right text-[9px] md:text-[10px] font-black uppercase tracking-widest text-white/45 whitespace-nowrap">
+                          Win %
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-[minmax(0,1fr)_minmax(74px,auto)_minmax(48px,auto)] items-center gap-3">
                         <div className="flex min-w-0 items-center gap-3">
                           <TeamLogo
                             teamName={row.homeTeam}
@@ -4766,7 +4781,7 @@ function PredictionsPage({
                           {formatPercent(homeModelPct, 0)}
                         </div>
                       </div>
-                      <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3">
+                      <div className="grid grid-cols-[minmax(0,1fr)_minmax(74px,auto)_minmax(48px,auto)] items-center gap-3">
                         <div className="flex min-w-0 items-center gap-3">
                           <TeamLogo
                             teamName={row.awayTeam}
