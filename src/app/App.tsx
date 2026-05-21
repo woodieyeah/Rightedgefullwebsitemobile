@@ -4733,13 +4733,13 @@ function PredictionsPage({
 
       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6 md:gap-8">
         {rows.map((row, i) => {
-          const predictedScore =
-            row.predictedHomeScore || row.predictedAwayScore
-              ? `${Math.round(row.predictedHomeScore)} - ${Math.round(row.predictedAwayScore)}`
-              : "—";
-
-          const winnerModelOdds = getPredictedWinnerModelOdds(row);
-          const winnerWinPct = getPredictedWinnerWinPct(row);
+          const projectedHomeScore = row.predictedHomeScore
+            ? Math.round(row.predictedHomeScore)
+            : null;
+          const projectedAwayScore = row.predictedAwayScore
+            ? Math.round(row.predictedAwayScore)
+            : null;
+          const predictedWinnerKey = normalizeTeamName(row.predictedWinner);
 
           return (
             <GlassCard
@@ -4755,23 +4755,45 @@ function PredictionsPage({
                         : "TBC"}
                     </div>
                     <div className="flex flex-col gap-3 mb-3">
-                      <div className="flex items-center gap-3">
-                        <TeamLogo
-                          teamName={row.homeTeam}
-                          className="w-10 h-10 rounded-sm shadow-[2px_2px_0_0_rgba(255,255,255,0.1)]"
-                        />
-                        <span className="text-xl md:text-2xl font-black text-white uppercase tracking-tight">
-                          {row.homeTeam}
-                        </span>
+                      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
+                        <div className="flex min-w-0 items-center gap-3">
+                          <TeamLogo
+                            teamName={row.homeTeam}
+                            className="w-10 h-10 rounded-sm shadow-[2px_2px_0_0_rgba(255,255,255,0.1)]"
+                          />
+                          <span className="min-w-0 text-xl md:text-2xl font-black text-white uppercase tracking-tight truncate">
+                            {row.homeTeam}
+                          </span>
+                        </div>
+                        <div
+                          className={`min-w-[44px] text-right text-2xl md:text-3xl font-black tabular-nums ${
+                            predictedWinnerKey === normalizeTeamName(row.homeTeam)
+                              ? "text-[#00E676]"
+                              : "text-white"
+                          }`}
+                        >
+                          {projectedHomeScore ?? "—"}
+                        </div>
                       </div>
-                      <div className="flex items-center gap-3">
-                        <TeamLogo
-                          teamName={row.awayTeam}
-                          className="w-10 h-10 rounded-sm shadow-[2px_2px_0_0_rgba(255,255,255,0.1)]"
-                        />
-                        <span className="text-xl md:text-2xl font-black text-white uppercase tracking-tight">
-                          {row.awayTeam}
-                        </span>
+                      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
+                        <div className="flex min-w-0 items-center gap-3">
+                          <TeamLogo
+                            teamName={row.awayTeam}
+                            className="w-10 h-10 rounded-sm shadow-[2px_2px_0_0_rgba(255,255,255,0.1)]"
+                          />
+                          <span className="min-w-0 text-xl md:text-2xl font-black text-white uppercase tracking-tight truncate">
+                            {row.awayTeam}
+                          </span>
+                        </div>
+                        <div
+                          className={`min-w-[44px] text-right text-2xl md:text-3xl font-black tabular-nums ${
+                            predictedWinnerKey === normalizeTeamName(row.awayTeam)
+                              ? "text-[#00E676]"
+                              : "text-white"
+                          }`}
+                        >
+                          {projectedAwayScore ?? "—"}
+                        </div>
                       </div>
                     </div>
                     <div className="text-[10px] font-bold text-white/50 mt-4 uppercase tracking-widest">
@@ -4782,38 +4804,7 @@ function PredictionsPage({
               </div>
 
               <div className="relative px-5 md:px-6 pb-5 md:pb-6">
-                <div className="grid grid-cols-2 gap-4 pb-5 border-b-2 border-white/10 mb-5">
-                  <div className="bg-[#1E232B] p-3 border-l-4 border-l-[#FFEA00]">
-                    <div className="text-[10px] uppercase font-black tracking-widest text-[#FFEA00] mb-1">
-                      Proj Score
-                    </div>
-                    <div className="text-xl md:text-2xl font-black text-white">
-                      {predictedScore}
-                    </div>
-                  </div>
-                  <div className="bg-[#1E232B] p-3 border-l-4 border-l-[#00E676]">
-                    <div className="text-[10px] uppercase font-black tracking-widest text-[#00E676] mb-1">
-                      Proj Winner
-                    </div>
-                    {row.predictedWinner ? (
-                      <div className="flex items-center gap-2 mt-1">
-                        <TeamLogo
-                          teamName={row.predictedWinner}
-                          className="w-6 h-6 text-[10px]"
-                        />
-                        <span className="text-sm md:text-base font-black text-white truncate">
-                          {row.predictedWinner}
-                        </span>
-                      </div>
-                    ) : (
-                      <span className="text-white/35 font-black text-lg">
-                        —
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-[auto_1fr_1fr] gap-2 items-center text-xs">
+                <div className="grid grid-cols-[52px_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] gap-2 items-center border-t-2 border-white/10 pt-5 text-xs">
                   <div className="font-black text-white/50 uppercase tracking-widest text-[10px] pr-2">
                     Win %
                   </div>
@@ -4822,6 +4813,9 @@ function PredictionsPage({
                   </div>
                   <div className="font-black text-[#FFEA00] uppercase tracking-widest text-[10px] text-center">
                     Model Odds
+                  </div>
+                  <div className="font-black text-[#093AD3] uppercase tracking-widest text-[10px] text-center">
+                    Market
                   </div>
 
                   <div className="font-black text-white/70 uppercase text-[11px] tracking-wider">
@@ -4838,6 +4832,12 @@ function PredictionsPage({
                   <div className="bg-[#1E232B] py-2.5 text-center font-black text-white border-b-2 border-[#FFEA00]/30">
                     {row.modelHomeOdds ? row.modelHomeOdds.toFixed(2) : "—"}
                   </div>
+                  <div className="bg-[#1E232B] py-2.5 text-center font-black text-[#093AD3] border-b-2 border-[#093AD3]/45">
+                    <LiveBetrPriceValue
+                      row={row}
+                      selectedTeam={row.homeTeam}
+                    />
+                  </div>
 
                   <div className="font-black text-white/70 uppercase text-[11px] tracking-wider">
                     Away
@@ -4853,35 +4853,11 @@ function PredictionsPage({
                   <div className="bg-[#1E232B] py-2.5 text-center font-black text-white border-b-2 border-[#FFEA00]/30">
                     {row.modelAwayOdds ? row.modelAwayOdds.toFixed(2) : "—"}
                   </div>
-                </div>
-
-                <div className="mt-5 grid grid-cols-3 gap-3">
-                  <div className="bg-[#111317] border border-white/10 p-3">
-                    <div className="text-[10px] uppercase font-black tracking-widest text-white/45 mb-1">
-                      Model Winner %
-                    </div>
-                    <div className="text-lg font-black text-[#00E676]">
-                      {formatPercent(winnerWinPct, 1)}
-                    </div>
-                  </div>
-                  <div className="bg-[#111317] border border-white/10 p-3">
-                    <div className="text-[10px] uppercase font-black tracking-widest text-white/45 mb-1">
-                      Model Odds
-                    </div>
-                    <div className="text-lg font-black text-white">
-                      {winnerModelOdds ? winnerModelOdds.toFixed(2) : "—"}
-                    </div>
-                  </div>
-                  <div className="bg-[#111317] border border-white/10 p-3">
-                    <div className="text-[10px] uppercase font-black tracking-widest text-white/45 mb-1">
-                      Market Odds
-                    </div>
-                    <div className="text-lg font-black text-[#093AD3]">
-                      <LiveBetrPriceValue
-                        row={row}
-                        selectedTeam={row.predictedWinner}
-                      />
-                    </div>
+                  <div className="bg-[#1E232B] py-2.5 text-center font-black text-[#093AD3] border-b-2 border-[#093AD3]/45">
+                    <LiveBetrPriceValue
+                      row={row}
+                      selectedTeam={row.awayTeam}
+                    />
                   </div>
                 </div>
 
