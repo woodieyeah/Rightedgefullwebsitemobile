@@ -1767,6 +1767,14 @@ function AffiliateMarketButton({
 const BETR_AFFILIATE_BASE_URL =
   "https://record.betraffiliates.com.au/_Bk4P0TFHeOiYNevImT-MDGNd7ZgqdRLk/1/";
 
+function slugifyPayloadPart(value: unknown) {
+  return String(value ?? "")
+    .toLowerCase()
+    .replace(/&/g, "and")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
 function getBetrAffiliateUrl(payload: string) {
   const url = new URL(BETR_AFFILIATE_BASE_URL);
   url.searchParams.set("payload", payload);
@@ -2505,7 +2513,7 @@ function EmailGateModal({
         </div>
 
         <p className="text-sm text-white/70 font-bold leading-relaxed mb-6">
-          Enter your email to access full model predictions, projected scores and live odds instantly. Free, no credit card needed.
+          Enter your email to access model predictions, projected scores and Betr market links instantly. Free, no credit card needed.
         </p>
 
         <form
@@ -2756,14 +2764,15 @@ function mapTeamToOddsApi(team: string): string {
 }
 
 // Module level cache to prevent concurrent fetch requests from multiple cards
-let fetchOddsPromise: Promise<any> | null = null;
+const fetchOddsPromises = new Map<string, Promise<any>>();
 const ODDS_CACHE_KEY = "rightedge_odds_cache_v5_no_betfair";
 const ODDS_CACHE_DURATION = 30 * 60 * 1000; // Protect the 500/month free Odds API quota
 
-async function fetchLiveOddsCached() {
+async function fetchLiveOddsCached(bookmaker?: "betr") {
+  const cacheKey = bookmaker ? `${ODDS_CACHE_KEY}_${bookmaker}` : ODDS_CACHE_KEY;
   // 1. Check local storage cache
   try {
-    const cachedStr = localStorage.getItem(ODDS_CACHE_KEY);
+    const cachedStr = localStorage.getItem(cacheKey);
     if (cachedStr) {
       const cached = JSON.parse(cachedStr);
       if (Date.now() - cached.timestamp < ODDS_CACHE_DURATION) {
@@ -2775,13 +2784,14 @@ async function fetchLiveOddsCached() {
   }
 
   // 2. Prevent concurrent fetches during same mount
-  if (fetchOddsPromise) {
-    return fetchOddsPromise;
+  if (fetchOddsPromises.has(cacheKey)) {
+    return fetchOddsPromises.get(cacheKey)!;
   }
 
   // 3. Fetch fresh data
-  fetchOddsPromise = fetch(
-    `/api/live-odds`,
+  const query = bookmaker ? `?bookmaker=${encodeURIComponent(bookmaker)}` : "";
+  const fetchOddsPromise = fetch(
+    `/api/live-odds${query}`,
     {
       headers: {
         Authorization: `Bearer ${publicAnonKey}`,
@@ -2798,21 +2808,22 @@ async function fetchLiveOddsCached() {
 
       // Update local storage cache
       localStorage.setItem(
-        ODDS_CACHE_KEY,
+        cacheKey,
         JSON.stringify({
           timestamp: Date.now(),
           data: data,
         }),
       );
 
-      fetchOddsPromise = null;
+      fetchOddsPromises.delete(cacheKey);
       return data;
     })
     .catch((err) => {
-      fetchOddsPromise = null;
+      fetchOddsPromises.delete(cacheKey);
       throw err;
     });
 
+  fetchOddsPromises.set(cacheKey, fetchOddsPromise);
   return fetchOddsPromise;
 }
 
@@ -2821,6 +2832,15 @@ type LiveBookmakerOdd = {
   odds: number;
   isBest: boolean;
   url: string;
+};
+
+type FreeBetrMarketOutcome = {
+  id: string;
+  label: string;
+  subLabel: string;
+  odds: number;
+  modelPct?: number;
+  payload: string;
 };
 
 function buildLiveH2hOddsForTeam(
@@ -3270,62 +3290,136 @@ function ReadMore({ children }: { children: React.ReactNode }) {
   );
 }
 
-function LiveBestOddsValue({
+function getBetrMatchMarketsFromRaw(rawOdds: any[], row: PredictionRow) {
+  return getSgmMatchMarkets(buildSgmMarketMap(rawOdds), row).betr || null;
+}
+
+function buildFreeBetrPayload(row: PredictionRow, market: string, selection: string) {
+  return [
+    "rightedge_free",
+    slugifyPayloadPart(row.match),
+    slugifyPayloadPart(market),
+    slugifyPayloadPart(selection),
+  ].filter(Boolean).join("_");
+}
+
+function getTeamModelPct(row: PredictionRow, team: string) {
+  return normalizeTeamName(team) === normalizeTeamName(row.homeTeam)
+    ? getImpliedWinPctFromOdds(row.modelHomeOdds)
+    : getImpliedWinPctFromOdds(row.modelAwayOdds);
+}
+
+function getFreeBetrH2hOutcomes(row: PredictionRow, markets?: SgmMarketBookmakerData | null): FreeBetrMarketOutcome[] {
+  if (!markets) return [];
+
+  return [row.homeTeam, row.awayTeam]
+    .map((team) => {
+      const odds = markets.h2h[normalizeTeamName(team)] || 0;
+      if (odds <= 1) return null;
+      return {
+        id: `h2h-${team}`,
+        label: team,
+        subLabel: "Head to head",
+        odds,
+        modelPct: getTeamModelPct(row, team),
+        payload: buildFreeBetrPayload(row, "h2h", team),
+      };
+    })
+    .filter(Boolean) as FreeBetrMarketOutcome[];
+}
+
+function getFreeBetrLineOutcomes(row: PredictionRow, markets?: SgmMarketBookmakerData | null): FreeBetrMarketOutcome[] {
+  if (!markets) return [];
+
+  return [row.homeTeam, row.awayTeam]
+    .map((team) => {
+      const projectedMargin = getSelectedTeamProjectedMargin(row, team);
+      const spread = [...markets.spreads]
+        .filter((item) => normalizeTeamName(item.team) === normalizeTeamName(team))
+        .sort((a, b) => Math.abs(projectedMargin + a.point) - Math.abs(projectedMargin + b.point))[0];
+
+      if (!spread || spread.odds <= 1) return null;
+
+      return {
+        id: `line-${team}`,
+        label: `${team} ${formatSgmLine(spread.point)}`,
+        subLabel: "Line",
+        odds: spread.odds,
+        modelPct: probabilityFromEdge(projectedMargin + spread.point, 7.5),
+        payload: buildFreeBetrPayload(row, "line", `${team}_${spread.point}`),
+      };
+    })
+    .filter(Boolean) as FreeBetrMarketOutcome[];
+}
+
+function getFreeBetrTotalOutcomes(row: PredictionRow, markets?: SgmMarketBookmakerData | null): FreeBetrMarketOutcome[] {
+  if (!markets) return [];
+
+  const projectedTotal = row.predictedHomeScore + row.predictedAwayScore;
+  if (!projectedTotal) return [];
+
+  const closestPoint = [...new Set(markets.totals.map((item) => item.point))]
+    .sort((a, b) => Math.abs(projectedTotal - a) - Math.abs(projectedTotal - b))[0];
+  if (!Number.isFinite(closestPoint)) return [];
+
+  return (["Over", "Under"] as const)
+    .map((side) => {
+      const total = markets.totals.find((item) => item.side === side && item.point === closestPoint);
+      if (!total || total.odds <= 1) return null;
+
+      const edge = side === "Over"
+        ? projectedTotal - total.point
+        : total.point - projectedTotal;
+
+      return {
+        id: `total-${side}`,
+        label: `${side} ${total.point}`,
+        subLabel: "Total points",
+        odds: total.odds,
+        modelPct: probabilityFromEdge(edge, 8),
+        payload: buildFreeBetrPayload(row, "total", `${side}_${total.point}`),
+      };
+    })
+    .filter(Boolean) as FreeBetrMarketOutcome[];
+}
+
+function LiveBetrPriceValue({
   row,
   selectedTeam,
-  fallbackOdds,
 }: {
   row: PredictionRow;
   selectedTeam: string;
-  fallbackOdds: number;
 }) {
-  const [bestOdds, setBestOdds] = useState(fallbackOdds);
+  const [betrOdds, setBetrOdds] = useState(0);
 
   useEffect(() => {
     let isMounted = true;
 
-    fetchLiveOddsCached()
+    fetchLiveOddsCached("betr")
       .then((data) => {
         if (!isMounted) return;
-        const odds = buildLiveH2hOddsForTeam(
-          data,
-          row.homeTeam,
-          row.awayTeam,
-          selectedTeam,
-        );
-        setBestOdds(odds[0]?.odds || fallbackOdds);
+        const markets = getBetrMatchMarketsFromRaw(data, row);
+        setBetrOdds(markets?.h2h[normalizeTeamName(selectedTeam)] || 0);
       })
       .catch(() => {
-        if (isMounted) setBestOdds(fallbackOdds);
+        if (isMounted) setBetrOdds(0);
       });
 
     return () => {
       isMounted = false;
     };
-  }, [fallbackOdds, row.homeTeam, row.awayTeam, selectedTeam]);
+  }, [row.match, selectedTeam]);
 
-  return <>{bestOdds ? `$${bestOdds.toFixed(2)}` : "—"}</>;
+  return <>{betrOdds ? `$${betrOdds.toFixed(2)}` : "View"}</>;
 }
 
-function MatchLiveOddsPanel({
+function FreeBetrMarketsPanel({
   row,
-  selectedTeam,
-  fallbackOdds,
-  locked = false,
 }: {
   row: PredictionRow;
-  selectedTeam: string;
-  fallbackOdds: number;
-  locked?: boolean;
 }) {
-  const [liveOdds, setLiveOdds] = useState<
-    {
-      name: string;
-      odds: number;
-      isBest: boolean;
-      url: string;
-    }[]
-  >([]);
+  const [activeMarket, setActiveMarket] = useState<"h2h" | "line" | "total">("h2h");
+  const [betrMarkets, setBetrMarkets] = useState<SgmMarketBookmakerData | null>(null);
   const [isLoadingOdds, setIsLoadingOdds] = useState(true);
 
   useEffect(() => {
@@ -3334,51 +3428,12 @@ function MatchLiveOddsPanel({
 
     const fetchRealOdds = async () => {
       try {
-        const data = await fetchLiveOddsCached();
+        const data = await fetchLiveOddsCached("betr");
         if (!isMounted) return;
-
-        setLiveOdds(
-          buildLiveH2hOddsForTeam(
-            data,
-            row.homeTeam,
-            row.awayTeam,
-            selectedTeam,
-          ).slice(0, 3),
-        );
+        setBetrMarkets(getBetrMatchMarketsFromRaw(data, row));
       } catch (e) {
         if (!isMounted) return;
-        const base = fallbackOdds || 1.9;
-        const bookies = [
-          {
-            name: "Sportsbet",
-            url: getBetrAffiliateUrl("rightedge_match_odds"),
-            odds: base,
-          },
-          {
-            name: "TAB",
-            url: getBetrAffiliateUrl("rightedge_match_odds"),
-            odds: base - 0.05,
-          },
-          {
-            name: "Neds",
-            url: getBetrAffiliateUrl("rightedge_match_odds"),
-            odds: base + 0.05,
-          },
-        ];
-        const randomized = bookies
-          .map((bookie) => ({
-            ...bookie,
-            odds: Number((bookie.odds + (Math.random() * 0.06 - 0.03)).toFixed(2)),
-          }))
-          .sort((a, b) => b.odds - a.odds);
-        const bestOdd = Math.max(...randomized.map((bookie) => bookie.odds));
-
-        setLiveOdds(
-          randomized.map((bookie) => ({
-            ...bookie,
-            isBest: bookie.odds === bestOdd,
-          })),
-        );
+        setBetrMarkets(null);
       } finally {
         if (isMounted) setIsLoadingOdds(false);
       }
@@ -3389,70 +3444,107 @@ function MatchLiveOddsPanel({
     return () => {
       isMounted = false;
     };
-  }, [fallbackOdds, row.homeTeam, row.awayTeam, selectedTeam]);
+  }, [row.match]);
+
+  const outcomes =
+    activeMarket === "h2h"
+      ? getFreeBetrH2hOutcomes(row, betrMarkets)
+      : activeMarket === "line"
+        ? getFreeBetrLineOutcomes(row, betrMarkets)
+        : getFreeBetrTotalOutcomes(row, betrMarkets);
 
   return (
     <div className="mt-5 border-t-2 border-white/10 pt-5">
       <div className="text-[10px] font-black text-white/45 mb-3 uppercase tracking-widest flex items-center justify-between">
-        <span>Live Bookmaker Prices</span>
+        <span>Betr markets</span>
         <span className="flex h-2 w-2 relative">
           <span className="animate-ping-pong absolute inline-flex h-full w-full rounded-full bg-[#00E676] opacity-75" />
           <span className="relative inline-flex rounded-full h-2 w-2 bg-[#00E676]" />
         </span>
       </div>
-      <div className="flex flex-col gap-2 min-h-[136px]">
+      <div className="grid grid-cols-3 gap-2 mb-3">
+        {([
+          ["h2h", "H2H"],
+          ["line", "Line"],
+          ["total", "Total"],
+        ] as const).map(([market, label]) => (
+          <button
+            key={market}
+            type="button"
+            onClick={() => setActiveMarket(market)}
+            className={`min-h-[38px] border-2 px-2 text-[10px] font-black uppercase tracking-widest transition ${
+              activeMarket === market
+                ? "border-[#73F4DB] bg-[#113bd8] text-white"
+                : "border-white/10 bg-[#111317] text-white/45 hover:border-[#73F4DB] hover:text-white"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      <div className="min-h-[132px]">
         {isLoadingOdds ? (
           <div className="flex flex-col gap-2 opacity-50">
             <div className="h-10 bg-white/5 animate-pulse border-2 border-white/5" />
             <div className="h-10 bg-white/5 animate-pulse border-2 border-white/5" />
-            <div className="h-10 bg-white/5 animate-pulse border-2 border-white/5" />
+          </div>
+        ) : outcomes.length > 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {outcomes.map((outcome) => (
+              <BetrAffiliateLink
+                key={outcome.id}
+                payload={outcome.payload}
+                className="group min-h-[60px] border-2 border-[#73F4DB] bg-[#113bd8] p-3 shadow-[3px_3px_0_0_rgba(115,244,219,0.48)] transition hover:-translate-y-0.5 hover:brightness-110"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <BetrLogoMark className="h-6 w-6" />
+                      <span className="text-[9px] font-black uppercase tracking-widest text-[#73F4DB]">
+                        Betr
+                      </span>
+                    </div>
+                    <div className="text-sm font-black text-white uppercase leading-tight truncate">
+                      {outcome.label}
+                    </div>
+                    <div className="mt-0.5 text-[9px] font-black uppercase tracking-widest text-white/45">
+                      {outcome.subLabel}
+                      {outcome.modelPct ? ` · Model ${formatPercent(outcome.modelPct, 0)}` : ""}
+                    </div>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <div className="text-xl font-black text-[#73F4DB] leading-none">
+                      ${outcome.odds.toFixed(2)}
+                    </div>
+                    <div className="mt-1 inline-flex items-center gap-1 text-[8px] font-black uppercase tracking-widest text-white/60 group-hover:text-white">
+                      Open <ArrowUpRight className="h-3 w-3" />
+                    </div>
+                  </div>
+                </div>
+              </BetrAffiliateLink>
+            ))}
           </div>
         ) : (
-          liveOdds.map((bookie) => {
-            const isBetr = isBetrBookmaker(bookie.name);
-            const className = `group flex items-center justify-between min-h-[46px] p-3 border-2 ${
-              isBetr
-                ? "border-[#73F4DB] bg-[#113bd8]"
-                : bookie.isBest
-                ? "border-[#00E676] bg-[rgba(0,230,118,0.05)]"
-                : "border-white/10 bg-white/[0.03]"
-            } shadow-[3px_3px_0_0_rgba(0,71,255,0.35)] transition hover:-translate-y-0.5 hover:border-[#FFEA00] hover:bg-white/[0.06] hover:brightness-110`;
-            const content = (
-              <>
-                <BookmakerName name={bookie.name} />
-                <div className="flex flex-col items-end gap-1 text-right">
-                  <div className="flex items-center gap-2.5">
-                    <span
-                      className={`text-lg font-black ${
-                        isBetr
-                          ? "text-[#73F4DB]"
-                          : bookie.isBest ? "text-[#00E676]" : "text-white/70"
-                      }`}
-                    >
-                      {locked ? <BlurredText>${bookie.odds.toFixed(2)}</BlurredText> : `$${bookie.odds.toFixed(2)}`}
-                    </span>
-                    <ArrowUpRight className="h-4 w-4 text-white/35 transition group-hover:text-[#FFEA00]" />
-                  </div>
-                  <span className={isBetr ? "text-[9px] font-black uppercase tracking-widest text-[#73F4DB]" : "text-[9px] font-black uppercase tracking-widest text-white/35 group-hover:text-[#FFEA00]"}>
-                    {isBetr ? "Back this market at Betr" : "View NRL markets"}
-                  </span>
-                </div>
-              </>
-            );
-
-            return (
-              <a
-                key={bookie.name}
-                href={bookie.url}
-                target="_blank"
-                rel="sponsored noopener noreferrer"
-                aria-label={`Open ${bookie.name} market via Betr affiliate link`}
-                className={className}
-              >
-                {content}
-              </a>
-            );
-          })
+          <BetrAffiliateLink
+            payload={buildFreeBetrPayload(row, activeMarket, "markets")}
+            className="flex min-h-[92px] items-center justify-between gap-3 border-2 border-[#73F4DB] bg-[#113bd8] p-4 shadow-[3px_3px_0_0_rgba(115,244,219,0.48)] transition hover:-translate-y-0.5 hover:brightness-110"
+          >
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <BetrLogoMark className="h-7 w-7" />
+                <span className="text-[10px] font-black uppercase tracking-widest text-[#73F4DB]">
+                  Betr
+                </span>
+              </div>
+              <div className="text-sm font-black text-white uppercase">
+                View live markets
+              </div>
+              <div className="mt-1 text-[9px] font-black uppercase tracking-widest text-white/45">
+                Price unavailable in feed
+              </div>
+            </div>
+            <ArrowUpRight className="h-5 w-5 shrink-0 text-white/70" />
+          </BetrAffiliateLink>
         )}
       </div>
     </div>
@@ -4472,7 +4564,6 @@ function PredictionsPage({
               ? `${Math.round(row.predictedHomeScore)} - ${Math.round(row.predictedAwayScore)}`
               : "—";
 
-          const winnerOdds = getPredictedWinnerMarketOdds(row);
           const winnerModelOdds = getPredictedWinnerModelOdds(row);
           const winnerWinPct = getPredictedWinnerWinPct(row);
 
@@ -4609,23 +4700,19 @@ function PredictionsPage({
                   </div>
                   <div className="bg-[#111317] border border-white/10 p-3">
                     <div className="text-[10px] uppercase font-black tracking-widest text-white/45 mb-1">
-                      Best Odds
+                      Betr Price
                     </div>
-                    <div className="text-lg font-black text-[#FFEA00]">
-                      <LiveBestOddsValue
+                    <div className="text-lg font-black text-[#73F4DB]">
+                      <LiveBetrPriceValue
                         row={row}
                         selectedTeam={row.predictedWinner}
-                        fallbackOdds={winnerOdds}
                       />
                     </div>
                   </div>
                 </div>
 
-                <MatchLiveOddsPanel
+                <FreeBetrMarketsPanel
                   row={row}
-                  selectedTeam={row.predictedWinner}
-                  fallbackOdds={winnerOdds}
-                  locked={false}
                 />
               </div>
             </GlassCard>
@@ -7199,6 +7286,7 @@ export default function App() {
         // Clear live odds cache to force a fresh fetch
         try {
           localStorage.removeItem(ODDS_CACHE_KEY);
+          localStorage.removeItem(`${ODDS_CACHE_KEY}_betr`);
         } catch (e) {}
       } else {
         setLoading(true);

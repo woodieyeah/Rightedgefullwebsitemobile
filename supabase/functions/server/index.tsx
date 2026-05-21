@@ -1522,6 +1522,30 @@ function removeExcludedMatchOddsBookmakers(rawOdds: any) {
   }));
 }
 
+function normalizeBookmakerFilter(value: unknown) {
+  return String(value || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function filterMatchOddsBookmakers(rawOdds: any, bookmakerFilter: string) {
+  const normalizedFilter = normalizeBookmakerFilter(bookmakerFilter);
+  if (!normalizedFilter || !Array.isArray(rawOdds)) return rawOdds;
+
+  return rawOdds.map((event: any) => ({
+    ...event,
+    bookmakers: (event.bookmakers || []).filter((bookmaker: any) => {
+      const key = normalizeBookmakerFilter(bookmaker?.key || "");
+      const title = normalizeBookmakerFilter(bookmaker?.title || "");
+      if (normalizedFilter === "betr") {
+        return (
+          (key.startsWith("betr") && !key.startsWith("betright")) ||
+          (title.startsWith("betr") && !title.startsWith("betright"))
+        );
+      }
+      return key.includes(normalizedFilter) || title.includes(normalizedFilter);
+    }),
+  }));
+}
+
 async function fetchLiveOddsRaw(force = false) {
   const apiKey = Deno.env.get("ODDS_API_KEY");
   if (!apiKey) {
@@ -1859,8 +1883,9 @@ function allowOddsForceRefresh(c: any) {
 app.get("/live-odds", async (c) => {
   try {
     const force = allowOddsForceRefresh(c);
+    const bookmaker = c.req.query("bookmaker") || "";
     const data = await fetchLiveOddsRaw(force);
-    return c.json(data);
+    return c.json(filterMatchOddsBookmakers(data, bookmaker));
   } catch (err: any) {
     console.error("Server error fetching live odds:", err);
     return c.json({ error: "Internal server error", message: err.message }, 500);
