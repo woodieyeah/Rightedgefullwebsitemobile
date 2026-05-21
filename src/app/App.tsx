@@ -2770,17 +2770,21 @@ const ODDS_CACHE_DURATION = 30 * 60 * 1000; // Protect the 500/month free Odds A
 
 async function fetchLiveOddsCached(bookmaker?: "betr") {
   const cacheKey = bookmaker ? `${ODDS_CACHE_KEY}_${bookmaker}` : ODDS_CACHE_KEY;
+  const usePersistentCache = bookmaker !== "betr";
+
   // 1. Check local storage cache
-  try {
-    const cachedStr = localStorage.getItem(cacheKey);
-    if (cachedStr) {
-      const cached = JSON.parse(cachedStr);
-      if (Date.now() - cached.timestamp < ODDS_CACHE_DURATION) {
-        return cached.data;
+  if (usePersistentCache) {
+    try {
+      const cachedStr = localStorage.getItem(cacheKey);
+      if (cachedStr) {
+        const cached = JSON.parse(cachedStr);
+        if (Date.now() - cached.timestamp < ODDS_CACHE_DURATION) {
+          return cached.data;
+        }
       }
+    } catch (e) {
+      // Ignore parse errors, proceed to fetch
     }
-  } catch (e) {
-    // Ignore parse errors, proceed to fetch
   }
 
   // 2. Prevent concurrent fetches during same mount
@@ -2789,7 +2793,9 @@ async function fetchLiveOddsCached(bookmaker?: "betr") {
   }
 
   // 3. Fetch fresh data
-  const query = bookmaker ? `?bookmaker=${encodeURIComponent(bookmaker)}` : "";
+  const query = bookmaker
+    ? `?bookmaker=${encodeURIComponent(bookmaker)}&_=${Date.now()}`
+    : "";
   const fetchOddsPromise = fetch(
     `/api/live-odds${query}`,
     {
@@ -2806,14 +2812,15 @@ async function fetchLiveOddsCached(bookmaker?: "betr") {
         throw new Error("Invalid Data");
       }
 
-      // Update local storage cache
-      localStorage.setItem(
-        cacheKey,
-        JSON.stringify({
-          timestamp: Date.now(),
-          data: data,
-        }),
-      );
+      if (usePersistentCache) {
+        localStorage.setItem(
+          cacheKey,
+          JSON.stringify({
+            timestamp: Date.now(),
+            data: data,
+          }),
+        );
+      }
 
       fetchOddsPromises.delete(cacheKey);
       return data;
@@ -2841,6 +2848,9 @@ type FreeBetrMarketOutcome = {
   odds: number;
   modelPct?: number;
   payload: string;
+  logoTeam?: string;
+  tag: string;
+  tone: "home" | "away" | "over" | "under";
 };
 
 function buildLiveH2hOddsForTeam(
@@ -3323,6 +3333,9 @@ function getFreeBetrH2hOutcomes(row: PredictionRow, markets?: SgmMarketBookmaker
         odds,
         modelPct: getTeamModelPct(row, team),
         payload: buildFreeBetrPayload(row, "h2h", team),
+        logoTeam: team,
+        tag: normalizeTeamName(team) === normalizeTeamName(row.homeTeam) ? "Home" : "Away",
+        tone: normalizeTeamName(team) === normalizeTeamName(row.homeTeam) ? "home" : "away",
       };
     })
     .filter(Boolean) as FreeBetrMarketOutcome[];
@@ -3347,6 +3360,9 @@ function getFreeBetrLineOutcomes(row: PredictionRow, markets?: SgmMarketBookmake
         odds: spread.odds,
         modelPct: probabilityFromEdge(projectedMargin + spread.point, 7.5),
         payload: buildFreeBetrPayload(row, "line", `${team}_${spread.point}`),
+        logoTeam: team,
+        tag: normalizeTeamName(team) === normalizeTeamName(row.homeTeam) ? "Home line" : "Away line",
+        tone: normalizeTeamName(team) === normalizeTeamName(row.homeTeam) ? "home" : "away",
       };
     })
     .filter(Boolean) as FreeBetrMarketOutcome[];
@@ -3378,6 +3394,8 @@ function getFreeBetrTotalOutcomes(row: PredictionRow, markets?: SgmMarketBookmak
         odds: total.odds,
         modelPct: probabilityFromEdge(edge, 8),
         payload: buildFreeBetrPayload(row, "total", `${side}_${total.point}`),
+        tag: side,
+        tone: side === "Over" ? "over" : "under",
       };
     })
     .filter(Boolean) as FreeBetrMarketOutcome[];
@@ -3411,6 +3429,43 @@ function LiveBetrPriceValue({
   }, [row.match, selectedTeam]);
 
   return <>{betrOdds ? `$${betrOdds.toFixed(2)}` : "View"}</>;
+}
+
+function getFreeBetrOutcomeToneClasses(tone: FreeBetrMarketOutcome["tone"]) {
+  if (tone === "away") {
+    return {
+      border: "border-[#FFEA00]",
+      shadow: "shadow-[3px_3px_0_0_rgba(255,234,0,0.32)]",
+      tag: "bg-[#FFEA00] text-[#05070b]",
+      price: "text-[#FFEA00]",
+      accent: "bg-[#FFEA00]",
+    };
+  }
+  if (tone === "over") {
+    return {
+      border: "border-[#00E676]",
+      shadow: "shadow-[3px_3px_0_0_rgba(0,230,118,0.30)]",
+      tag: "bg-[#00E676] text-[#05070b]",
+      price: "text-[#00E676]",
+      accent: "bg-[#00E676]",
+    };
+  }
+  if (tone === "under") {
+    return {
+      border: "border-[#FF4D6D]",
+      shadow: "shadow-[3px_3px_0_0_rgba(255,77,109,0.28)]",
+      tag: "bg-[#FF4D6D] text-white",
+      price: "text-[#FF4D6D]",
+      accent: "bg-[#FF4D6D]",
+    };
+  }
+  return {
+    border: "border-[#73F4DB]",
+    shadow: "shadow-[3px_3px_0_0_rgba(115,244,219,0.36)]",
+    tag: "bg-[#73F4DB] text-[#05070b]",
+    price: "text-[#73F4DB]",
+    accent: "bg-[#73F4DB]",
+  };
 }
 
 function FreeBetrMarketsPanel({
@@ -3462,7 +3517,7 @@ function FreeBetrMarketsPanel({
           <span className="relative inline-flex rounded-full h-2 w-2 bg-[#00E676]" />
         </span>
       </div>
-      <div className="grid grid-cols-3 gap-2 mb-3">
+      <div className="grid grid-cols-3 gap-1 mb-3 border border-white/10 bg-[#0A0C10] p-1">
         {([
           ["h2h", "H2H"],
           ["line", "Line"],
@@ -3472,10 +3527,10 @@ function FreeBetrMarketsPanel({
             key={market}
             type="button"
             onClick={() => setActiveMarket(market)}
-            className={`min-h-[38px] border-2 px-2 text-[10px] font-black uppercase tracking-widest transition ${
+            className={`min-h-[36px] px-2 text-[10px] font-black uppercase tracking-widest transition ${
               activeMarket === market
-                ? "border-[#73F4DB] bg-[#113bd8] text-white"
-                : "border-white/10 bg-[#111317] text-white/45 hover:border-[#73F4DB] hover:text-white"
+                ? "bg-[#73F4DB] text-[#05070b]"
+                : "bg-transparent text-white/45 hover:bg-white/5 hover:text-white"
             }`}
           >
             {label}
@@ -3490,39 +3545,53 @@ function FreeBetrMarketsPanel({
           </div>
         ) : outcomes.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {outcomes.map((outcome) => (
-              <BetrAffiliateLink
-                key={outcome.id}
-                payload={outcome.payload}
-                className="group min-h-[60px] border-2 border-[#73F4DB] bg-[#113bd8] p-3 shadow-[3px_3px_0_0_rgba(115,244,219,0.48)] transition hover:-translate-y-0.5 hover:brightness-110"
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <BetrLogoMark className="h-6 w-6" />
-                      <span className="text-[9px] font-black uppercase tracking-widest text-[#73F4DB]">
-                        Betr
-                      </span>
+            {outcomes.map((outcome) => {
+              const toneClasses = getFreeBetrOutcomeToneClasses(outcome.tone);
+
+              return (
+                <BetrAffiliateLink
+                  key={outcome.id}
+                  payload={outcome.payload}
+                  className={`group relative min-h-[84px] overflow-hidden border-2 ${toneClasses.border} ${toneClasses.shadow} bg-[#111317] p-3 transition hover:-translate-y-0.5 hover:bg-[#171B22]`}
+                >
+                  <span className={`absolute left-0 top-0 h-full w-1 ${toneClasses.accent}`} />
+                  <div className="flex items-start justify-between gap-3 pl-2">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 mb-2">
+                        {outcome.logoTeam ? (
+                          <TeamLogo teamName={outcome.logoTeam} className="h-7 w-7 text-[9px]" />
+                        ) : (
+                          <BetrLogoMark className="h-7 w-7" />
+                        )}
+                        <div className="min-w-0">
+                          <span className={`inline-flex px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest ${toneClasses.tag}`}>
+                            {outcome.tag}
+                          </span>
+                          <div className="mt-1 text-[9px] font-black uppercase tracking-widest text-white/45">
+                            Betr
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-base font-black text-white uppercase leading-tight">
+                        {outcome.label}
+                      </div>
+                      <div className="mt-1 text-[9px] font-black uppercase tracking-widest text-white/50">
+                        {outcome.subLabel}
+                        {outcome.modelPct ? ` · Model ${formatPercent(outcome.modelPct, 0)}` : ""}
+                      </div>
                     </div>
-                    <div className="text-sm font-black text-white uppercase leading-tight truncate">
-                      {outcome.label}
-                    </div>
-                    <div className="mt-0.5 text-[9px] font-black uppercase tracking-widest text-white/45">
-                      {outcome.subLabel}
-                      {outcome.modelPct ? ` · Model ${formatPercent(outcome.modelPct, 0)}` : ""}
+                    <div className="shrink-0 text-right">
+                      <div className={`text-2xl font-black ${toneClasses.price} leading-none`}>
+                        ${outcome.odds.toFixed(2)}
+                      </div>
+                      <div className="mt-2 inline-flex items-center gap-1 text-[8px] font-black uppercase tracking-widest text-white/60 group-hover:text-white">
+                        Open <ArrowUpRight className="h-3 w-3" />
+                      </div>
                     </div>
                   </div>
-                  <div className="shrink-0 text-right">
-                    <div className="text-xl font-black text-[#73F4DB] leading-none">
-                      ${outcome.odds.toFixed(2)}
-                    </div>
-                    <div className="mt-1 inline-flex items-center gap-1 text-[8px] font-black uppercase tracking-widest text-white/60 group-hover:text-white">
-                      Open <ArrowUpRight className="h-3 w-3" />
-                    </div>
-                  </div>
-                </div>
-              </BetrAffiliateLink>
-            ))}
+                </BetrAffiliateLink>
+              );
+            })}
           </div>
         ) : (
           <BetrAffiliateLink
@@ -7287,6 +7356,8 @@ export default function App() {
         try {
           localStorage.removeItem(ODDS_CACHE_KEY);
           localStorage.removeItem(`${ODDS_CACHE_KEY}_betr`);
+          fetchOddsPromises.delete(ODDS_CACHE_KEY);
+          fetchOddsPromises.delete(`${ODDS_CACHE_KEY}_betr`);
         } catch (e) {}
       } else {
         setLoading(true);

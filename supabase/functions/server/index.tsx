@@ -8,6 +8,9 @@ import * as kv from "./kv_store.tsx";
 const app = new Hono().basePath('/make-server-3b84b96c');
 const MATCH_ODDS_CACHE_MS = 30 * 60 * 1000;
 const PREMATCH_ODDS_LOCK_PREFIX = "prematch_odds_lock";
+const BLUEBET_API_BASE_URL = "https://affiliate-api.bluebet.com.au";
+const BLUEBET_AFFILIATE_USER_AGENT =
+  Deno.env.get("BLUEBET_AFFILIATE_USER_AGENT") || "rightedge.com.au";
 
 // Enable logger
 app.use('*', logger(console.log));
@@ -1546,6 +1549,184 @@ function filterMatchOddsBookmakers(rawOdds: any, bookmakerFilter: string) {
   }));
 }
 
+function asBlueBetArray(value: any) {
+  if (Array.isArray(value)) return value;
+  if (!value) return [];
+  return [value];
+}
+
+async function fetchBlueBetJson(path: string) {
+  const response = await fetch(`${BLUEBET_API_BASE_URL}${path}`, {
+    headers: {
+      Accept: "application/json",
+      "User-Agent": BLUEBET_AFFILIATE_USER_AGENT,
+    },
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`BlueBet affiliate API failed ${response.status}: ${text}`);
+  }
+
+  return response.json();
+}
+
+function parseBlueBetTeams(matchName: string) {
+  const [home, away] = String(matchName || "").split(/\s+v\s+/i);
+  return {
+    homeTeam: normalizeNrlTeamName(home),
+    awayTeam: normalizeNrlTeamName(away),
+  };
+}
+
+function parseBlueBetDate(value: any) {
+  const raw = String(value || "");
+  const dotNetDate = raw.match(/\/Date\((\d+)/);
+  if (dotNetDate) return new Date(Number(dotNetDate[1])).toISOString();
+
+  const parsed = Date.parse(raw);
+  return Number.isFinite(parsed) ? new Date(parsed).toISOString() : "";
+}
+
+function parseBlueBetTotalOutcome(name: string) {
+  const match = String(name || "").trim().match(/^(Over|Under)\s+(-?\d+(?:\.\d+)?)/i);
+  if (!match) return null;
+
+  return {
+    side: match[1][0].toUpperCase() + match[1].slice(1).toLowerCase(),
+    point: Number(match[2]),
+  };
+}
+
+function normalizeBlueBetOutcomeTeam(name: string, homeTeam: string, awayTeam: string) {
+  const team = normalizeNrlTeamName(name);
+  if (team === homeTeam) return homeTeam;
+  if (team === awayTeam) return awayTeam;
+  return "";
+}
+
+function buildBlueBetEventOdds(payload: any) {
+  const masterEvent = payload?.MasterEvent || {};
+  const masterEventName = masterEvent.MasterEventName || "";
+  const { homeTeam, awayTeam } = parseBlueBetTeams(masterEventName);
+  if (!homeTeam || !awayTeam || homeTeam === awayTeam) return null;
+
+  const h2hOutcomes: any[] = [];
+  const spreadOutcomes: any[] = [];
+  const totalOutcomes: any[] = [];
+  const seen = new Set<string>();
+
+  for (const event of asBlueBetArray(payload?.Events)) {
+    const eventName = String(event?.EventName || "");
+    const isTotalsEvent = eventName.toLowerCase().includes("total points over/under");
+
+    for (const outcome of asBlueBetArray(event?.Outcomes)) {
+      const price = Number(outcome?.Price);
+      if (!Number.isFinite(price) || price <= 1) continue;
+
+      const outcomeName = String(outcome?.OutcomeName || "");
+      const betDetailTypeCode = String(outcome?.BetDetailTypeCode || "").toUpperCase();
+      const marketTypeCode = String(outcome?.MarketTypeCode || "").toUpperCase();
+
+      if (isTotalsEvent) {
+        const total = parseBlueBetTotalOutcome(outcomeName);
+        if (!total || !Number.isFinite(total.point)) continue;
+
+        const key = `totals:${total.side}:${total.point}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        totalOutcomes.push({
+          name: total.side,
+          price,
+          point: total.point,
+        });
+        continue;
+      }
+
+      const team = normalizeBlueBetOutcomeTeam(outcomeName, homeTeam, awayTeam);
+      if (!team) continue;
+
+      if (betDetailTypeCode === "WIN" && marketTypeCode === "WIN") {
+        const key = `h2h:${team}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        h2hOutcomes.push({
+          name: team,
+          price,
+        });
+        continue;
+      }
+
+      if (betDetailTypeCode === "HC") {
+        const point = Number(outcome?.Points);
+        if (!Number.isFinite(point)) continue;
+
+        const key = `spreads:${team}:${point}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        spreadOutcomes.push({
+          name: team,
+          price,
+          point,
+        });
+      }
+    }
+  }
+
+  const markets = [
+    h2hOutcomes.length ? { key: "h2h", outcomes: h2hOutcomes } : null,
+    spreadOutcomes.length ? { key: "spreads", outcomes: spreadOutcomes } : null,
+    totalOutcomes.length ? { key: "totals", outcomes: totalOutcomes } : null,
+  ].filter(Boolean);
+
+  return {
+    id: String(masterEvent.MasterEventId || masterEventName),
+    sport_key: "rugbyleague_nrl",
+    sport_title: "NRL",
+    commence_time: parseBlueBetDate(
+      masterEvent.MinAdvertisedStartTime || masterEvent.MaxAdvertisedStartTime,
+    ),
+    home_team: homeTeam,
+    away_team: awayTeam,
+    bookmakers: markets.length
+      ? [
+          {
+            key: "betr",
+            title: "Betr",
+            last_update: new Date().toISOString(),
+            markets,
+          },
+        ]
+      : [],
+    source: "bluebet_affiliate_api",
+  };
+}
+
+async function fetchBlueBetNrlOddsRaw() {
+  const hierarchy = await fetchBlueBetJson(
+    "/MasterCategory?EventTypeId=102&WithLevelledMarkets=true&Format=json",
+  );
+  const nrlMasterCategory = asBlueBetArray(hierarchy?.MasterCategories).find((category: any) =>
+    String(category?.MasterCategory || category?.MasterCategoryName || "").toLowerCase() === "nrl"
+  );
+  const nrlMatchesCategory = asBlueBetArray(nrlMasterCategory?.Categories).find((category: any) =>
+    String(category?.CategoryName || "").toLowerCase() === "nrl matches"
+  );
+  const masterEvents = asBlueBetArray(nrlMatchesCategory?.MasterEvents).filter((event: any) =>
+    String(event?.MasterEventName || "").match(/\s+v\s+/i)
+  );
+
+  const eventPayloads = await Promise.all(
+    masterEvents.map((event: any) =>
+      fetchBlueBetJson(`/MasterEvent?MasterEventId=${encodeURIComponent(event.MasterEventId)}&format=json`),
+    ),
+  );
+
+  return eventPayloads
+    .map(buildBlueBetEventOdds)
+    .filter((event: any) => event && event.bookmakers?.length);
+}
+
 async function fetchLiveOddsRaw(force = false) {
   const apiKey = Deno.env.get("ODDS_API_KEY");
   if (!apiKey) {
@@ -1884,6 +2065,10 @@ app.get("/live-odds", async (c) => {
   try {
     const force = allowOddsForceRefresh(c);
     const bookmaker = c.req.query("bookmaker") || "";
+    if (normalizeBookmakerFilter(bookmaker) === "betr") {
+      return c.json(await fetchBlueBetNrlOddsRaw());
+    }
+
     const data = await fetchLiveOddsRaw(force);
     return c.json(filterMatchOddsBookmakers(data, bookmaker));
   } catch (err: any) {
