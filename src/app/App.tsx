@@ -3689,7 +3689,7 @@ function FreeBetrMarketsPanel({
                         </div>
                         <div className="mt-1 flex shrink-0 flex-col items-end border border-white/10 bg-white/[0.04] px-2 py-1 text-right shadow-[2px_2px_0_0_rgba(255,255,255,0.05)]">
                           <span className="text-[7px] font-black uppercase tracking-widest text-white/40">
-                            {outcome.modelBadgeLabel || "Model"}
+                            Model
                           </span>
                           <span className="text-base font-black leading-none text-[#00E676] tabular-nums">
                             {Number.isFinite(outcome.modelPct) ? formatPercent(outcome.modelPct || 0, 0) : "—"}
