@@ -3345,6 +3345,39 @@ function getTeamModelPct(row: PredictionRow, team: string) {
     : getImpliedWinPctFromOdds(row.modelAwayOdds);
 }
 
+function getFreeBetrPrimarySpread(
+  markets: SgmMarketBookmakerData,
+  team: string,
+) {
+  const teamKey = normalizeTeamName(team);
+  const teamSpreads = markets.spreads.filter((item) =>
+    normalizeTeamName(item.team) === teamKey && item.odds > 1 && Number.isFinite(item.point)
+  );
+  if (teamSpreads.length <= 1) return teamSpreads[0] || null;
+
+  return [...teamSpreads].sort((a, b) => {
+    const pairedA = markets.spreads.some((item) =>
+      normalizeTeamName(item.team) !== teamKey &&
+      Math.abs(item.point + a.point) < 0.001 &&
+      item.odds > 1
+    );
+    const pairedB = markets.spreads.some((item) =>
+      normalizeTeamName(item.team) !== teamKey &&
+      Math.abs(item.point + b.point) < 0.001 &&
+      item.odds > 1
+    );
+    if (pairedA !== pairedB) return pairedA ? -1 : 1;
+
+    const priceDistanceA = Math.abs(a.odds - 1.9);
+    const priceDistanceB = Math.abs(b.odds - 1.9);
+    if (Math.abs(priceDistanceA - priceDistanceB) > 0.001) {
+      return priceDistanceA - priceDistanceB;
+    }
+
+    return Math.abs(a.point) - Math.abs(b.point);
+  })[0] || null;
+}
+
 function getFreeBetrH2hOutcomes(row: PredictionRow, markets?: SgmMarketBookmakerData | null): FreeBetrMarketOutcome[] {
   if (!markets) return [];
 
@@ -3374,9 +3407,7 @@ function getFreeBetrLineOutcomes(row: PredictionRow, markets?: SgmMarketBookmake
   return [row.homeTeam, row.awayTeam]
     .map((team) => {
       const projectedMargin = getSelectedTeamProjectedMargin(row, team);
-      const spread = [...markets.spreads]
-        .filter((item) => normalizeTeamName(item.team) === normalizeTeamName(team))
-        .sort((a, b) => Math.abs(projectedMargin + a.point) - Math.abs(projectedMargin + b.point))[0];
+      const spread = getFreeBetrPrimarySpread(markets, team);
 
       if (!spread || spread.odds <= 1) return null;
 
@@ -4843,7 +4874,7 @@ function PredictionsPage({
                   </div>
                   <div className="bg-[#111317] border border-white/10 p-3">
                     <div className="text-[10px] uppercase font-black tracking-widest text-white/45 mb-1">
-                      Betr Price
+                      Market Odds
                     </div>
                     <div className="text-lg font-black text-[#73F4DB]">
                       <LiveBetrPriceValue

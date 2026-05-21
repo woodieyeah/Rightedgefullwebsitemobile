@@ -1657,7 +1657,7 @@ function buildBlueBetEventOdds(payload: any) {
         continue;
       }
 
-      if (betDetailTypeCode === "HC") {
+      if (betDetailTypeCode === "HC" && marketTypeCode === "HCWEST") {
         const point = Number(outcome?.Points);
         if (!Number.isFinite(point)) continue;
 
