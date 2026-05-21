@@ -2851,6 +2851,8 @@ type FreeBetrMarketOutcome = {
   label: string;
   subLabel: string;
   odds: number;
+  modelPct?: number;
+  modelBadgeLabel?: string;
   payload: string;
   logoTeam?: string;
   teamColors?: { primary: string; secondary: string };
@@ -3388,8 +3390,10 @@ function getFreeBetrH2hOutcomes(row: PredictionRow, markets?: SgmMarketBookmaker
       return {
         id: `h2h-${team}`,
         label: team,
-        subLabel: `Head to head · Model ${formatPercent(modelPct, 0)}`,
+        subLabel: "Head to head",
         odds,
+        modelPct,
+        modelBadgeLabel: "Win",
         payload: buildFreeBetrPayload(row, "h2h", team),
         logoTeam: team,
         teamColors: getTeamColors(team),
@@ -3415,8 +3419,10 @@ function getFreeBetrLineOutcomes(row: PredictionRow, markets?: SgmMarketBookmake
       return {
         id: `line-${team}`,
         label: `${team} ${formatSgmLine(spread.point)}`,
-        subLabel: `Line · Model cover ${formatPercent(modelPct, 0)}`,
+        subLabel: "Line",
         odds: spread.odds,
+        modelPct,
+        modelBadgeLabel: "Cover",
         payload: buildFreeBetrPayload(row, "line", `${team}_${spread.point}`),
         logoTeam: team,
         teamColors: getTeamColors(team),
@@ -3449,8 +3455,10 @@ function getFreeBetrTotalOutcomes(row: PredictionRow, markets?: SgmMarketBookmak
       return {
         id: `total-${side}`,
         label: `${side} ${total.point}`,
-        subLabel: `Total points · Model ${Math.round(projectedTotal)} pts · ${side} ${formatPercent(modelPct, 0)}`,
+        subLabel: `Total points · Model ${Math.round(projectedTotal)} pts`,
         odds: total.odds,
+        modelPct,
+        modelBadgeLabel: side,
         payload: buildFreeBetrPayload(row, "total", `${side}_${total.point}`),
         tag: side,
         tone: side === "Over" ? "over" : "under",
@@ -3573,7 +3581,7 @@ function FreeBetrMarketsPanel({
         : getFreeBetrTotalOutcomes(row, betrMarkets);
 
   return (
-    <div className="mt-5 border-t-2 border-white/10 pt-5">
+    <div className="mt-3">
       <div className="text-[10px] font-black text-white/45 mb-3 uppercase tracking-widest flex items-center justify-between">
         <span>Betr markets</span>
         <span className="flex h-2 w-2 relative">
@@ -3652,7 +3660,14 @@ function FreeBetrMarketsPanel({
                             {outcome.subLabel}
                           </div>
                         </div>
-                        <ArrowUpRight className="mt-1 h-5 w-5 shrink-0 text-white/35 transition group-hover:text-white" />
+                        <div className="mt-1 flex shrink-0 flex-col items-end border border-white/10 bg-white/[0.04] px-2 py-1 text-right shadow-[2px_2px_0_0_rgba(255,255,255,0.05)]">
+                          <span className="text-[7px] font-black uppercase tracking-widest text-white/40">
+                            {outcome.modelBadgeLabel || "Model"}
+                          </span>
+                          <span className="text-base font-black leading-none text-[#00E676] tabular-nums">
+                            {Number.isFinite(outcome.modelPct) ? formatPercent(outcome.modelPct || 0, 0) : "—"}
+                          </span>
+                        </div>
                       </div>
                     </div>
                     <div className="mx-3 mb-3 flex items-center justify-between gap-3 bg-[#093AD3] px-3 py-2 text-white shadow-[3px_3px_0_0_rgba(9,58,211,0.45)] transition group-hover:brightness-110">
@@ -4730,10 +4745,15 @@ function PredictionsPage({
             >
               <div className="p-5 md:p-6">
                 <div className="overflow-hidden border-2 border-white/10 bg-[#0A0C10] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
-                  <div className="border-b border-white/10 bg-white/[0.03] px-3 py-2 text-[10px] uppercase font-black text-white/55 tracking-widest">
-                    {row.fixture
-                      ? `${row.fixture.day} ${row.fixture.dateLabel} @ ${row.fixture.aedt} AEST`
-                      : "TBC"}
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 bg-white/[0.03] px-3 py-2 text-[10px] uppercase font-black text-white/55 tracking-widest">
+                    <span>
+                      {row.fixture
+                        ? `${row.fixture.day} ${row.fixture.dateLabel} @ ${row.fixture.aedt} AEST`
+                        : "TBC"}
+                    </span>
+                    <span className="text-white/40">
+                      {row.fixture?.stadium || "Venue TBC"}
+                    </span>
                   </div>
                   <div className="p-3 md:p-4">
                     <div className="mb-2 grid grid-cols-[minmax(0,1fr)_minmax(74px,auto)_minmax(52px,auto)] items-center gap-2 border-b border-white/10 pb-2">
@@ -4851,17 +4871,11 @@ function PredictionsPage({
                         </div>
                       </div>
                     </div>
-                    <div className="mt-3 border-t border-white/10 pt-3 text-[10px] font-bold text-white/45 uppercase tracking-widest">
-                      {row.fixture?.stadium || "TBC"}
-                    </div>
+                    <FreeBetrMarketsPanel
+                      row={row}
+                    />
                   </div>
                 </div>
-              </div>
-
-              <div className="relative px-5 md:px-6 pb-5 md:pb-6">
-                <FreeBetrMarketsPanel
-                  row={row}
-                />
               </div>
             </GlassCard>
           );
