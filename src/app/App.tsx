@@ -1716,7 +1716,7 @@ function BetrLogoMark({ className = "h-7 w-7" }: { className?: string }) {
     <img
       src="/betr-square.png"
       alt="Betr"
-      className={`${className} rounded-lg border border-[#73F4DB] bg-[#113bd8] object-contain shrink-0`}
+      className={`${className} rounded-lg border border-[#093AD3] bg-[#093AD3] object-contain shrink-0`}
     />
   );
 }
@@ -1727,7 +1727,7 @@ function isBetrBookmaker(name?: string) {
 
 function getAffiliateButtonClass(bookmaker: string | undefined, sizeClasses: string) {
   const colorClasses = isBetrBookmaker(bookmaker)
-    ? "border-[#73F4DB] bg-[#113bd8] text-white shadow-[4px_4px_0_0_rgba(115,244,219,0.65)]"
+    ? "border-[#093AD3] bg-[#093AD3] text-white shadow-[4px_4px_0_0_rgba(9,58,211,0.65)]"
     : "border-[#FFEA00] bg-[#FFEA00] text-black shadow-[4px_4px_0_0_#FF2E63]";
 
   return `inline-flex max-w-full items-center justify-center gap-2 border-2 ${sizeClasses} font-black uppercase tracking-widest ${colorClasses} transition hover:-translate-y-0.5 hover:brightness-110`;
@@ -1758,7 +1758,7 @@ function AffiliateMarketButton({
         {hasBetrBranding ? "Play at Betr" : label}
       </span>
       {typeof odds === "number" && (
-        <span className={hasBetrBranding ? "text-[#73F4DB]" : "text-black"}>
+        <span className={hasBetrBranding ? "text-white" : "text-black"}>
           ${odds.toFixed(2)}
         </span>
       )}
@@ -3156,7 +3156,7 @@ function OfficialPlayCard({ row }: { row: PredictionRow }) {
                 const isBetr = isBetrBookmaker(bookie.name);
                 const className = `group flex items-center justify-between min-h-[52px] p-3.5 border-2 ${
                   isBetr
-                    ? "border-[#73F4DB] bg-[#113bd8]"
+                    ? "border-[#093AD3] bg-[#093AD3]"
                     : bookie.isBest
                       ? "border-[#00E676] bg-[rgba(0,230,118,0.05)]"
                       : "border-white/10 bg-white/[0.03]"
@@ -3169,7 +3169,7 @@ function OfficialPlayCard({ row }: { row: PredictionRow }) {
                         <span
                           className={`text-lg font-black ${
                             isBetr
-                              ? "text-[#73F4DB]"
+                              ? "text-white"
                               : bookie.isBest
                                 ? "text-[#00E676]"
                                 : "text-white/70"
@@ -3179,7 +3179,7 @@ function OfficialPlayCard({ row }: { row: PredictionRow }) {
                         </span>
                         <ArrowUpRight className="h-4 w-4 text-white/35 transition group-hover:text-[#FFEA00]" />
                       </div>
-                      <span className={isBetr ? "text-[9px] font-black uppercase tracking-widest text-[#73F4DB]" : "text-[9px] font-black uppercase tracking-widest text-white/35 group-hover:text-[#FFEA00]"}>
+                      <span className={isBetr ? "text-[9px] font-black uppercase tracking-widest text-white/80" : "text-[9px] font-black uppercase tracking-widest text-white/35 group-hover:text-[#FFEA00]"}>
                         {isBetr ? "Back this market at Betr" : "View NRL markets"}
                       </span>
                     </div>
@@ -3492,7 +3492,7 @@ function LiveBetrPriceValue({
 
 function hexToRgba(hex: string, alpha: number) {
   const clean = String(hex || "").replace("#", "");
-  if (!/^[0-9a-f]{6}$/i.test(clean)) return `rgba(115,244,219,${alpha})`;
+  if (!/^[0-9a-f]{6}$/i.test(clean)) return `rgba(9,58,211,${alpha})`;
   const value = Number.parseInt(clean, 16);
   const r = (value >> 16) & 255;
   const g = (value >> 8) & 255;
@@ -3554,12 +3554,12 @@ function getFreeBetrOutcomeStyle(outcome: FreeBetrMarketOutcome) {
   }
   return {
     cardStyle: {
-      borderColor: "#73F4DB",
-      boxShadow: "3px 3px 0 0 rgba(115,244,219,0.36)",
+      borderColor: "#093AD3",
+      boxShadow: "3px 3px 0 0 rgba(9,58,211,0.36)",
     },
-    accentStyle: { backgroundColor: "#73F4DB" },
-    tagStyle: { backgroundColor: "#73F4DB", color: "#05070b" },
-    priceStyle: { color: "#73F4DB" },
+    accentStyle: { backgroundColor: "#093AD3" },
+    tagStyle: { backgroundColor: "#093AD3", color: "#ffffff" },
+    priceStyle: { color: "#093AD3" },
   };
 }
 
@@ -3624,7 +3624,7 @@ function FreeBetrMarketsPanel({
             onClick={() => setActiveMarket(market)}
             className={`min-h-[36px] px-2 text-[10px] font-black uppercase tracking-widest transition ${
               activeMarket === market
-                ? "bg-[#73F4DB] text-[#05070b]"
+                ? "bg-[#093AD3] text-white"
                 : "bg-transparent text-white/45 hover:bg-white/5 hover:text-white"
             }`}
           >
@@ -3701,12 +3701,12 @@ function FreeBetrMarketsPanel({
         ) : (
           <BetrAffiliateLink
             payload={buildFreeBetrPayload(row, activeMarket, "markets")}
-            className="flex min-h-[92px] items-center justify-between gap-3 border-2 border-[#73F4DB] bg-[#113bd8] p-4 shadow-[3px_3px_0_0_rgba(115,244,219,0.48)] transition hover:-translate-y-0.5 hover:brightness-110"
+            className="flex min-h-[92px] items-center justify-between gap-3 border-2 border-[#093AD3] bg-[#093AD3] p-4 shadow-[3px_3px_0_0_rgba(9,58,211,0.48)] transition hover:-translate-y-0.5 hover:brightness-110"
           >
             <div className="min-w-0">
               <div className="flex items-center gap-2 mb-1">
                 <BetrLogoMark className="h-7 w-7" />
-                <span className="text-[10px] font-black uppercase tracking-widest text-[#73F4DB]">
+                <span className="text-[10px] font-black uppercase tracking-widest text-white">
                   Betr
                 </span>
               </div>
@@ -4876,7 +4876,7 @@ function PredictionsPage({
                     <div className="text-[10px] uppercase font-black tracking-widest text-white/45 mb-1">
                       Market Odds
                     </div>
-                    <div className="text-lg font-black text-[#73F4DB]">
+                    <div className="text-lg font-black text-[#093AD3]">
                       <LiveBetrPriceValue
                         row={row}
                         selectedTeam={row.predictedWinner}
@@ -5107,7 +5107,7 @@ function PremiumMarketPlayCard({ play }: { play: PremiumMarketPlay }) {
           <div className="text-[9px] font-black text-white/45 uppercase tracking-widest mb-1">
             Odds
           </div>
-          <div className={isBetrBookmaker(play.bookmaker) ? "text-base md:text-lg font-black text-[#73F4DB]" : "text-base md:text-lg font-black text-[#FFEA00]"}>
+          <div className={isBetrBookmaker(play.bookmaker) ? "text-base md:text-lg font-black text-[#093AD3]" : "text-base md:text-lg font-black text-[#FFEA00]"}>
             ${play.odds.toFixed(2)}
           </div>
         </div>
@@ -5337,7 +5337,7 @@ function BestBetsPage({
                     <div className="text-[9px] font-black text-white/45 uppercase tracking-widest mb-1">
                       Odds
                     </div>
-                    <div className={isBetrBookmaker(row.bookmaker) ? "text-base md:text-lg font-black text-[#73F4DB]" : "text-base md:text-lg font-black text-[#00E676]"}>
+                    <div className={isBetrBookmaker(row.bookmaker) ? "text-base md:text-lg font-black text-[#093AD3]" : "text-base md:text-lg font-black text-[#00E676]"}>
                       ${row.bestOdds.toFixed(2)}
                     </div>
                   </div>
@@ -5572,7 +5572,7 @@ function TryScorersPage({
                             {formatPercent(row.marketImpliedPct, 1)}
                           </td>
                           <td className="py-4 px-3">
-                            <div className={isBetrBookmaker(row.bookmaker) ? "text-sm font-black text-[#73F4DB]" : "text-sm font-black text-[#00E676]"}>
+                            <div className={isBetrBookmaker(row.bookmaker) ? "text-sm font-black text-[#093AD3]" : "text-sm font-black text-[#00E676]"}>
                               ${row.bestOdds.toFixed(2)}
                             </div>
                           </td>
@@ -5618,7 +5618,7 @@ function TryScorersPage({
                           </div>
                         </div>
                         <div className="flex flex-col items-end gap-1 shrink-0">
-                          <div className={isBetrBookmaker(row.bookmaker) ? "text-xl font-black text-[#73F4DB]" : "text-xl font-black text-white"}>
+                          <div className={isBetrBookmaker(row.bookmaker) ? "text-xl font-black text-[#093AD3]" : "text-xl font-black text-white"}>
                             ${row.bestOdds.toFixed(2)}
                           </div>
                           <AffiliateMarketButton
