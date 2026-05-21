@@ -3569,9 +3569,11 @@ function FreeBetrMarketsPanel({
 
   useEffect(() => {
     let isMounted = true;
+    let lastFetchAt = 0;
     setIsLoadingOdds(true);
 
     const fetchRealOdds = async () => {
+      lastFetchAt = Date.now();
       try {
         const data = await fetchLiveOddsCached("betr");
         if (!isMounted) return;
@@ -3584,12 +3586,27 @@ function FreeBetrMarketsPanel({
       }
     };
 
+    const refreshVisibleOdds = () => {
+      if (document.visibilityState !== "visible") return;
+      fetchRealOdds();
+    };
+
+    const refreshOddsOnReturn = () => {
+      if (document.visibilityState !== "visible") return;
+      if (Date.now() - lastFetchAt < 5 * 1000) return;
+      fetchRealOdds();
+    };
+
     fetchRealOdds();
-    const refreshTimer = window.setInterval(fetchRealOdds, BETR_ODDS_REFRESH_MS);
+    const refreshTimer = window.setInterval(refreshVisibleOdds, BETR_ODDS_REFRESH_MS);
+    window.addEventListener("focus", refreshOddsOnReturn);
+    document.addEventListener("visibilitychange", refreshOddsOnReturn);
 
     return () => {
       isMounted = false;
       window.clearInterval(refreshTimer);
+      window.removeEventListener("focus", refreshOddsOnReturn);
+      document.removeEventListener("visibilitychange", refreshOddsOnReturn);
     };
   }, [row.match]);
 
