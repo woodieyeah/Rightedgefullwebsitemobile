@@ -577,38 +577,28 @@ function ResponsibleGamblingNotice({
 }) {
   return (
     <div
-      className={`border-2 border-black bg-white text-black ${
-        compact ? "p-4" : "p-5 md:p-6"
-      }`}
+      className={`border-2 border-black bg-white text-black ${compact ? "px-3 py-2" : "px-3 py-2 md:px-4"}`}
     >
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 md:gap-5">
-        <div>
-          <div className="text-sm md:text-xl font-black uppercase tracking-tight mb-1">
-            What&apos;s gambling really costing you?
-          </div>
-          <div className="text-[11px] md:text-sm font-bold leading-relaxed">
-            For free and confidential support call{" "}
-            <a
-              href="tel:1800858858"
-              className="underline decoration-2 underline-offset-2 hover:text-[#0047FF] transition-colors"
-            >
-              1800 858 858
-            </a>{" "}
-            or visit{" "}
-            <a
-              href="https://www.gamblinghelponline.org.au/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline decoration-2 underline-offset-2 hover:text-[#0047FF] transition-colors"
-            >
-              gamblinghelponline.org.au
-            </a>
-            .
-          </div>
-        </div>
-        <div className="text-[10px] md:text-xs font-black uppercase tracking-widest whitespace-nowrap">
-          18+ only
-        </div>
+      <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-center text-[10px] md:text-xs font-black uppercase tracking-widest leading-tight">
+        <span>Gamble responsibly</span>
+        <span className="text-black/35">·</span>
+        <a
+          href="tel:1800858858"
+          className="underline decoration-2 underline-offset-2 hover:text-[#0047FF] transition-colors"
+        >
+          1800 858 858
+        </a>
+        <span className="text-black/35">·</span>
+        <a
+          href="https://www.gamblinghelponline.org.au/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline decoration-2 underline-offset-2 hover:text-[#0047FF] transition-colors"
+        >
+          gamblinghelponline.org.au
+        </a>
+        <span className="text-black/35">·</span>
+        <span>18+ only</span>
       </div>
     </div>
   );
@@ -4783,9 +4773,7 @@ function PredictionsPage({
                         </div>
                         <div
                           className={`border border-white/10 bg-white/[0.04] px-2 py-1.5 text-center text-2xl md:text-3xl font-black tabular-nums ${
-                            homeIsPredictedWinner
-                              ? "text-[#00E676]"
-                              : hasPredictedWinner
+                            hasPredictedWinner && !homeIsPredictedWinner
                                 ? "text-white/50"
                                 : "text-white"
                           }`}
@@ -4823,9 +4811,7 @@ function PredictionsPage({
                         </div>
                         <div
                           className={`border border-white/10 bg-white/[0.04] px-2 py-1.5 text-center text-2xl md:text-3xl font-black tabular-nums ${
-                            awayIsPredictedWinner
-                              ? "text-[#00E676]"
-                              : hasPredictedWinner
+                            hasPredictedWinner && !awayIsPredictedWinner
                                 ? "text-white/50"
                                 : "text-white"
                           }`}
