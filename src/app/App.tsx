@@ -2851,7 +2851,6 @@ type FreeBetrMarketOutcome = {
   label: string;
   subLabel: string;
   odds: number;
-  modelPct?: number;
   payload: string;
   logoTeam?: string;
   teamColors?: { primary: string; secondary: string };
@@ -3390,7 +3389,6 @@ function getFreeBetrH2hOutcomes(row: PredictionRow, markets?: SgmMarketBookmaker
         label: team,
         subLabel: "Head to head",
         odds,
-        modelPct: getTeamModelPct(row, team),
         payload: buildFreeBetrPayload(row, "h2h", team),
         logoTeam: team,
         teamColors: getTeamColors(team),
@@ -3406,7 +3404,6 @@ function getFreeBetrLineOutcomes(row: PredictionRow, markets?: SgmMarketBookmake
 
   return [row.homeTeam, row.awayTeam]
     .map((team) => {
-      const projectedMargin = getSelectedTeamProjectedMargin(row, team);
       const spread = getFreeBetrPrimarySpread(markets, team);
 
       if (!spread || spread.odds <= 1) return null;
@@ -3416,7 +3413,6 @@ function getFreeBetrLineOutcomes(row: PredictionRow, markets?: SgmMarketBookmake
         label: `${team} ${formatSgmLine(spread.point)}`,
         subLabel: "Line",
         odds: spread.odds,
-        modelPct: probabilityFromEdge(projectedMargin + spread.point, 7.5),
         payload: buildFreeBetrPayload(row, "line", `${team}_${spread.point}`),
         logoTeam: team,
         teamColors: getTeamColors(team),
@@ -3442,52 +3438,17 @@ function getFreeBetrTotalOutcomes(row: PredictionRow, markets?: SgmMarketBookmak
       const total = markets.totals.find((item) => item.side === side && item.point === closestPoint);
       if (!total || total.odds <= 1) return null;
 
-      const edge = side === "Over"
-        ? projectedTotal - total.point
-        : total.point - projectedTotal;
-
       return {
         id: `total-${side}`,
         label: `${side} ${total.point}`,
         subLabel: "Total points",
         odds: total.odds,
-        modelPct: probabilityFromEdge(edge, 8),
         payload: buildFreeBetrPayload(row, "total", `${side}_${total.point}`),
         tag: side,
         tone: side === "Over" ? "over" : "under",
       };
     })
     .filter(Boolean) as FreeBetrMarketOutcome[];
-}
-
-function LiveBetrPriceValue({
-  row,
-  selectedTeam,
-}: {
-  row: PredictionRow;
-  selectedTeam: string;
-}) {
-  const [betrOdds, setBetrOdds] = useState(0);
-
-  useEffect(() => {
-    let isMounted = true;
-
-    fetchLiveOddsCached("betr")
-      .then((data) => {
-        if (!isMounted) return;
-        const markets = getBetrMatchMarketsFromRaw(data, row);
-        setBetrOdds(markets?.h2h[normalizeTeamName(selectedTeam)] || 0);
-      })
-      .catch(() => {
-        if (isMounted) setBetrOdds(0);
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  }, [row.match, selectedTeam]);
-
-  return <>{betrOdds ? `$${betrOdds.toFixed(2)}` : "View"}</>;
 }
 
 function hexToRgba(hex: string, alpha: number) {
@@ -3681,7 +3642,6 @@ function FreeBetrMarketsPanel({
                           </div>
                           <div className="mt-1 text-[9px] font-black uppercase tracking-widest text-white/50">
                             {outcome.subLabel}
-                            {outcome.modelPct ? ` · Model ${formatPercent(outcome.modelPct, 0)}` : ""}
                           </div>
                         </div>
                         <ArrowUpRight className="mt-1 h-5 w-5 shrink-0 text-white/35 transition group-hover:text-white" />
@@ -3691,7 +3651,7 @@ function FreeBetrMarketsPanel({
                       <div className="flex items-center gap-2 min-w-0">
                         <BetrLogoMark className="h-6 w-6 rounded-sm" />
                         <span className="text-[10px] font-black uppercase tracking-widest">
-                          Open at Betr
+                          Back at Betr
                         </span>
                       </div>
                       <div className="shrink-0 text-2xl font-black leading-none">
@@ -3716,7 +3676,7 @@ function FreeBetrMarketsPanel({
                 </span>
               </div>
               <div className="text-sm font-black text-white uppercase">
-                Open at Betr
+                Back at Betr
               </div>
               <div className="mt-1 text-[9px] font-black uppercase tracking-widest text-white/70">
                 View live markets
@@ -4750,6 +4710,8 @@ function PredictionsPage({
           const awayIsPredictedWinner =
             predictedWinnerKey === normalizeTeamName(row.awayTeam);
           const hasPredictedWinner = homeIsPredictedWinner || awayIsPredictedWinner;
+          const homeModelPct = getTeamModelPct(row, row.homeTeam);
+          const awayModelPct = getTeamModelPct(row, row.awayTeam);
 
           return (
             <GlassCard
@@ -4765,7 +4727,7 @@ function PredictionsPage({
                         : "TBC"}
                     </div>
                     <div className="flex flex-col gap-3 mb-3">
-                      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
+                      <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3">
                         <div className="flex min-w-0 items-center gap-3">
                           <TeamLogo
                             teamName={row.homeTeam}
@@ -4792,8 +4754,19 @@ function PredictionsPage({
                         >
                           {projectedHomeScore ?? "—"}
                         </div>
+                        <div
+                          className={`min-w-[48px] text-right text-sm md:text-base font-black tabular-nums ${
+                            homeIsPredictedWinner
+                              ? "text-[#00E676]"
+                              : hasPredictedWinner
+                                ? "text-white/55"
+                                : "text-white/70"
+                          }`}
+                        >
+                          {formatPercent(homeModelPct, 0)}
+                        </div>
                       </div>
-                      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
+                      <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3">
                         <div className="flex min-w-0 items-center gap-3">
                           <TeamLogo
                             teamName={row.awayTeam}
@@ -4820,6 +4793,17 @@ function PredictionsPage({
                         >
                           {projectedAwayScore ?? "—"}
                         </div>
+                        <div
+                          className={`min-w-[48px] text-right text-sm md:text-base font-black tabular-nums ${
+                            awayIsPredictedWinner
+                              ? "text-[#00E676]"
+                              : hasPredictedWinner
+                                ? "text-white/55"
+                                : "text-white/70"
+                          }`}
+                        >
+                          {formatPercent(awayModelPct, 0)}
+                        </div>
                       </div>
                     </div>
                     <div className="text-[10px] font-bold text-white/50 mt-4 uppercase tracking-widest">
@@ -4830,63 +4814,6 @@ function PredictionsPage({
               </div>
 
               <div className="relative px-5 md:px-6 pb-5 md:pb-6">
-                <div className="grid grid-cols-[52px_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] gap-2 items-center border-t-2 border-white/10 pt-5 text-xs">
-                  <div className="font-black text-white/50 uppercase tracking-widest text-[10px] pr-2">
-                    Win %
-                  </div>
-                  <div className="font-black text-[#00E676] uppercase tracking-widest text-[10px] text-center">
-                    Model
-                  </div>
-                  <div className="font-black text-[#FFEA00] uppercase tracking-widest text-[10px] text-center">
-                    Model Odds
-                  </div>
-                  <div className="font-black text-[#093AD3] uppercase tracking-widest text-[10px] text-center">
-                    Market
-                  </div>
-
-                  <div className="font-black text-white/70 uppercase text-[11px] tracking-wider">
-                    Home
-                  </div>
-                  <div className="bg-[#1E232B] py-2.5 text-center font-black text-white border-b-2 border-[#00E676]/30">
-                    {formatPercent(
-                      getImpliedWinPctFromOdds(
-                        row.modelHomeOdds,
-                      ),
-                      1,
-                    )}
-                  </div>
-                  <div className="bg-[#1E232B] py-2.5 text-center font-black text-white border-b-2 border-[#FFEA00]/30">
-                    {row.modelHomeOdds ? row.modelHomeOdds.toFixed(2) : "—"}
-                  </div>
-                  <div className="bg-[#1E232B] py-2.5 text-center font-black text-[#093AD3] border-b-2 border-[#093AD3]/45">
-                    <LiveBetrPriceValue
-                      row={row}
-                      selectedTeam={row.homeTeam}
-                    />
-                  </div>
-
-                  <div className="font-black text-white/70 uppercase text-[11px] tracking-wider">
-                    Away
-                  </div>
-                  <div className="bg-[#1E232B] py-2.5 text-center font-black text-white border-b-2 border-[#00E676]/30">
-                    {formatPercent(
-                      getImpliedWinPctFromOdds(
-                        row.modelAwayOdds,
-                      ),
-                      1,
-                    )}
-                  </div>
-                  <div className="bg-[#1E232B] py-2.5 text-center font-black text-white border-b-2 border-[#FFEA00]/30">
-                    {row.modelAwayOdds ? row.modelAwayOdds.toFixed(2) : "—"}
-                  </div>
-                  <div className="bg-[#1E232B] py-2.5 text-center font-black text-[#093AD3] border-b-2 border-[#093AD3]/45">
-                    <LiveBetrPriceValue
-                      row={row}
-                      selectedTeam={row.awayTeam}
-                    />
-                  </div>
-                </div>
-
                 <FreeBetrMarketsPanel
                   row={row}
                 />
