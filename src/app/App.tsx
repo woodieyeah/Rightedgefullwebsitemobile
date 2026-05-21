@@ -4745,15 +4745,7 @@ function PredictionsPage({
                       </div>
                     </div>
                     <div className="flex flex-col gap-2">
-                      <div
-                        className="relative grid grid-cols-[minmax(0,1fr)_minmax(74px,auto)] items-center gap-2 overflow-hidden border bg-[#111317] p-2.5"
-                        style={{
-                          borderColor: hexToRgba(homeColors.primary, homeIsPredictedWinner ? 0.85 : 0.42),
-                          boxShadow: homeIsPredictedWinner
-                            ? `3px 3px 0 0 ${hexToRgba(homeColors.secondary, 0.3)}`
-                            : undefined,
-                        }}
-                      >
+                      <div className="relative grid grid-cols-[minmax(0,1fr)_minmax(74px,auto)] items-center gap-2 overflow-hidden bg-[#111317] p-2.5">
                         <span
                           className="absolute left-0 top-0 h-full w-1"
                           style={{ backgroundColor: homeColors.secondary }}
@@ -4783,15 +4775,7 @@ function PredictionsPage({
                           {projectedHomeScore ?? "—"}
                         </div>
                       </div>
-                      <div
-                        className="relative grid grid-cols-[minmax(0,1fr)_minmax(74px,auto)] items-center gap-2 overflow-hidden border bg-[#111317] p-2.5"
-                        style={{
-                          borderColor: hexToRgba(awayColors.primary, awayIsPredictedWinner ? 0.85 : 0.42),
-                          boxShadow: awayIsPredictedWinner
-                            ? `3px 3px 0 0 ${hexToRgba(awayColors.secondary, 0.3)}`
-                            : undefined,
-                        }}
-                      >
+                      <div className="relative grid grid-cols-[minmax(0,1fr)_minmax(74px,auto)] items-center gap-2 overflow-hidden bg-[#111317] p-2.5">
                         <span
                           className="absolute left-0 top-0 h-full w-1"
                           style={{ backgroundColor: awayColors.secondary }}
