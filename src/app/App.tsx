@@ -3647,50 +3647,55 @@ function FreeBetrMarketsPanel({
                 <BetrAffiliateLink
                   key={outcome.id}
                   payload={outcome.payload}
-                  className="group relative min-h-[86px] overflow-hidden border-2 bg-[#111317] p-3 transition hover:-translate-y-0.5 hover:bg-[#171B22]"
+                  className="group relative min-h-[118px] overflow-hidden border-2 bg-[#111317] transition hover:-translate-y-0.5 hover:bg-[#171B22]"
                   style={outcomeStyle.cardStyle}
                 >
                   <span
                     className="absolute left-0 top-0 h-full w-1"
                     style={outcomeStyle.accentStyle}
                   />
-                  <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 pl-2">
-                    <div className="min-w-0 pr-1">
-                      <div className="flex items-center gap-2 mb-2">
-                        {outcome.logoTeam ? (
-                          <TeamLogo teamName={outcome.logoTeam} className="h-7 w-7 text-[9px]" />
-                        ) : (
-                          <BetrLogoMark className="h-7 w-7" />
-                        )}
+                  <div className="relative pl-1">
+                    <div className="p-3 pb-2">
+                      <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
-                          <span
-                            className="inline-flex px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest"
-                            style={outcomeStyle.tagStyle}
-                          >
-                            {outcome.tag}
-                          </span>
-                          <div className="mt-1 text-[9px] font-black uppercase tracking-widest text-white/45">
-                            Betr
+                          <div className="flex items-center gap-2 mb-2">
+                            {outcome.logoTeam ? (
+                              <TeamLogo teamName={outcome.logoTeam} className="h-7 w-7 text-[9px]" />
+                            ) : (
+                              <BetrLogoMark className="h-7 w-7" />
+                            )}
+                            <div className="min-w-0">
+                              <span
+                                className="inline-flex px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest"
+                                style={outcomeStyle.tagStyle}
+                              >
+                                {outcome.tag}
+                              </span>
+                              <div className="mt-1 text-[9px] font-black uppercase tracking-widest text-white/45">
+                                Betr
+                              </div>
+                            </div>
+                          </div>
+                          <div className="text-base font-black text-white uppercase leading-tight">
+                            {outcome.label}
+                          </div>
+                          <div className="mt-1 text-[9px] font-black uppercase tracking-widest text-white/50">
+                            {outcome.subLabel}
+                            {outcome.modelPct ? ` · Model ${formatPercent(outcome.modelPct, 0)}` : ""}
                           </div>
                         </div>
-                      </div>
-                      <div className="text-base font-black text-white uppercase leading-tight">
-                        {outcome.label}
-                      </div>
-                      <div className="mt-1 text-[9px] font-black uppercase tracking-widest text-white/50">
-                        {outcome.subLabel}
-                        {outcome.modelPct ? ` · Model ${formatPercent(outcome.modelPct, 0)}` : ""}
+                        <ArrowUpRight className="mt-1 h-5 w-5 shrink-0 text-white/35 transition group-hover:text-white" />
                       </div>
                     </div>
-                    <div className="shrink-0 text-right">
-                      <div
-                        className="text-2xl font-black leading-none"
-                        style={outcomeStyle.priceStyle}
-                      >
-                        ${outcome.odds.toFixed(2)}
+                    <div className="mx-3 mb-3 flex items-center justify-between gap-3 bg-[#093AD3] px-3 py-2 text-white shadow-[3px_3px_0_0_rgba(9,58,211,0.45)] transition group-hover:brightness-110">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <BetrLogoMark className="h-6 w-6 rounded-sm" />
+                        <span className="text-[10px] font-black uppercase tracking-widest">
+                          Open at Betr
+                        </span>
                       </div>
-                      <div className="mt-2 inline-flex items-center gap-1 text-[8px] font-black uppercase tracking-widest text-white/60 group-hover:text-white">
-                        Open <ArrowUpRight className="h-3 w-3" />
+                      <div className="shrink-0 text-2xl font-black leading-none">
+                        ${outcome.odds.toFixed(2)}
                       </div>
                     </div>
                   </div>
@@ -3701,7 +3706,7 @@ function FreeBetrMarketsPanel({
         ) : (
           <BetrAffiliateLink
             payload={buildFreeBetrPayload(row, activeMarket, "markets")}
-            className="flex min-h-[92px] items-center justify-between gap-3 border-2 border-[#093AD3] bg-[#093AD3] p-4 shadow-[3px_3px_0_0_rgba(9,58,211,0.48)] transition hover:-translate-y-0.5 hover:brightness-110"
+            className="group flex min-h-[92px] items-center justify-between gap-3 border-2 border-[#093AD3] bg-[#093AD3] p-4 shadow-[3px_3px_0_0_rgba(9,58,211,0.48)] transition hover:-translate-y-0.5 hover:brightness-110"
           >
             <div className="min-w-0">
               <div className="flex items-center gap-2 mb-1">
@@ -3711,13 +3716,13 @@ function FreeBetrMarketsPanel({
                 </span>
               </div>
               <div className="text-sm font-black text-white uppercase">
+                Open at Betr
+              </div>
+              <div className="mt-1 text-[9px] font-black uppercase tracking-widest text-white/70">
                 View live markets
               </div>
-              <div className="mt-1 text-[9px] font-black uppercase tracking-widest text-white/45">
-                Price unavailable in feed
-              </div>
             </div>
-            <ArrowUpRight className="h-5 w-5 shrink-0 text-white/70" />
+            <ArrowUpRight className="h-5 w-5 shrink-0 text-white/80 transition group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
           </BetrAffiliateLink>
         )}
       </div>
