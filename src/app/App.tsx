@@ -3582,13 +3582,6 @@ function FreeBetrMarketsPanel({
 
   return (
     <div className="mt-3">
-      <div className="text-[10px] font-black text-white/45 mb-3 uppercase tracking-widest flex items-center justify-between">
-        <span>Betr markets</span>
-        <span className="flex h-2 w-2 relative">
-          <span className="animate-ping-pong absolute inline-flex h-full w-full rounded-full bg-[#00E676] opacity-75" />
-          <span className="relative inline-flex rounded-full h-2 w-2 bg-[#00E676]" />
-        </span>
-      </div>
       <div className="grid grid-cols-3 gap-1 mb-3 border border-white/10 bg-[#0A0C10] p-1">
         {([
           ["h2h", "H2H"],
@@ -3648,9 +3641,6 @@ function FreeBetrMarketsPanel({
                               >
                                 {outcome.tag}
                               </span>
-                              <div className="mt-1 text-[9px] font-black uppercase tracking-widest text-white/45">
-                                Betr
-                              </div>
                             </div>
                           </div>
                           <div className="text-base font-black text-white uppercase leading-tight">
@@ -4733,8 +4723,6 @@ function PredictionsPage({
           const awayIsPredictedWinner =
             predictedWinnerKey === normalizeTeamName(row.awayTeam);
           const hasPredictedWinner = homeIsPredictedWinner || awayIsPredictedWinner;
-          const homeModelPct = getTeamModelPct(row, row.homeTeam);
-          const awayModelPct = getTeamModelPct(row, row.awayTeam);
           const homeColors = getTeamColors(row.homeTeam);
           const awayColors = getTeamColors(row.awayTeam);
 
@@ -4756,20 +4744,17 @@ function PredictionsPage({
                     </span>
                   </div>
                   <div className="p-3 md:p-4">
-                    <div className="mb-2 grid grid-cols-[minmax(0,1fr)_minmax(74px,auto)_minmax(52px,auto)] items-center gap-2 border-b border-white/10 pb-2">
+                    <div className="mb-2 grid grid-cols-[minmax(0,1fr)_minmax(74px,auto)] items-center gap-2 border-b border-white/10 pb-2">
                       <div className="text-[9px] md:text-[10px] font-black uppercase tracking-widest text-white/35">
                         Teams
                       </div>
                       <div className="text-right text-[9px] md:text-[10px] font-black uppercase tracking-widest text-white/45 whitespace-nowrap">
                         Proj score
                       </div>
-                      <div className="text-right text-[9px] md:text-[10px] font-black uppercase tracking-widest text-white/45 whitespace-nowrap">
-                        Win %
-                      </div>
                     </div>
                     <div className="flex flex-col gap-2">
                       <div
-                        className="relative grid grid-cols-[minmax(0,1fr)_minmax(74px,auto)_minmax(52px,auto)] items-center gap-2 overflow-hidden border bg-[#111317] p-2.5"
+                        className="relative grid grid-cols-[minmax(0,1fr)_minmax(74px,auto)] items-center gap-2 overflow-hidden border bg-[#111317] p-2.5"
                         style={{
                           borderColor: hexToRgba(homeColors.primary, homeIsPredictedWinner ? 0.85 : 0.42),
                           boxShadow: homeIsPredictedWinner
@@ -4807,20 +4792,9 @@ function PredictionsPage({
                         >
                           {projectedHomeScore ?? "—"}
                         </div>
-                        <div
-                          className={`border border-white/10 bg-white/[0.03] px-2 py-1.5 text-center text-sm md:text-base font-black tabular-nums ${
-                            homeIsPredictedWinner
-                              ? "text-[#00E676]"
-                              : hasPredictedWinner
-                                ? "text-white/50"
-                                : "text-white/70"
-                          }`}
-                        >
-                          {formatPercent(homeModelPct, 0)}
-                        </div>
                       </div>
                       <div
-                        className="relative grid grid-cols-[minmax(0,1fr)_minmax(74px,auto)_minmax(52px,auto)] items-center gap-2 overflow-hidden border bg-[#111317] p-2.5"
+                        className="relative grid grid-cols-[minmax(0,1fr)_minmax(74px,auto)] items-center gap-2 overflow-hidden border bg-[#111317] p-2.5"
                         style={{
                           borderColor: hexToRgba(awayColors.primary, awayIsPredictedWinner ? 0.85 : 0.42),
                           boxShadow: awayIsPredictedWinner
@@ -4857,17 +4831,6 @@ function PredictionsPage({
                           }`}
                         >
                           {projectedAwayScore ?? "—"}
-                        </div>
-                        <div
-                          className={`border border-white/10 bg-white/[0.03] px-2 py-1.5 text-center text-sm md:text-base font-black tabular-nums ${
-                            awayIsPredictedWinner
-                              ? "text-[#00E676]"
-                              : hasPredictedWinner
-                                ? "text-white/50"
-                                : "text-white/70"
-                          }`}
-                        >
-                          {formatPercent(awayModelPct, 0)}
                         </div>
                       </div>
                     </div>
