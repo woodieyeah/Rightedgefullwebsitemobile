@@ -4740,6 +4740,11 @@ function PredictionsPage({
             ? Math.round(row.predictedAwayScore)
             : null;
           const predictedWinnerKey = normalizeTeamName(row.predictedWinner);
+          const homeIsPredictedWinner =
+            predictedWinnerKey === normalizeTeamName(row.homeTeam);
+          const awayIsPredictedWinner =
+            predictedWinnerKey === normalizeTeamName(row.awayTeam);
+          const hasPredictedWinner = homeIsPredictedWinner || awayIsPredictedWinner;
 
           return (
             <GlassCard
@@ -4761,15 +4766,23 @@ function PredictionsPage({
                             teamName={row.homeTeam}
                             className="w-10 h-10 rounded-sm shadow-[2px_2px_0_0_rgba(255,255,255,0.1)]"
                           />
-                          <span className="min-w-0 text-xl md:text-2xl font-black text-white uppercase tracking-tight truncate">
+                          <span
+                            className={`min-w-0 text-xl md:text-2xl font-black uppercase tracking-tight truncate ${
+                              hasPredictedWinner && !homeIsPredictedWinner
+                                ? "text-white/55"
+                                : "text-white"
+                            }`}
+                          >
                             {row.homeTeam}
                           </span>
                         </div>
                         <div
                           className={`min-w-[44px] text-right text-2xl md:text-3xl font-black tabular-nums ${
-                            predictedWinnerKey === normalizeTeamName(row.homeTeam)
+                            homeIsPredictedWinner
                               ? "text-[#00E676]"
-                              : "text-white"
+                              : hasPredictedWinner
+                                ? "text-white/55"
+                                : "text-white"
                           }`}
                         >
                           {projectedHomeScore ?? "—"}
@@ -4781,15 +4794,23 @@ function PredictionsPage({
                             teamName={row.awayTeam}
                             className="w-10 h-10 rounded-sm shadow-[2px_2px_0_0_rgba(255,255,255,0.1)]"
                           />
-                          <span className="min-w-0 text-xl md:text-2xl font-black text-white uppercase tracking-tight truncate">
+                          <span
+                            className={`min-w-0 text-xl md:text-2xl font-black uppercase tracking-tight truncate ${
+                              hasPredictedWinner && !awayIsPredictedWinner
+                                ? "text-white/55"
+                                : "text-white"
+                            }`}
+                          >
                             {row.awayTeam}
                           </span>
                         </div>
                         <div
                           className={`min-w-[44px] text-right text-2xl md:text-3xl font-black tabular-nums ${
-                            predictedWinnerKey === normalizeTeamName(row.awayTeam)
+                            awayIsPredictedWinner
                               ? "text-[#00E676]"
-                              : "text-white"
+                              : hasPredictedWinner
+                                ? "text-white/55"
+                                : "text-white"
                           }`}
                         >
                           {projectedAwayScore ?? "—"}
