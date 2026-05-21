@@ -808,7 +808,9 @@ function normalizeTeamName(value: string) {
     tigers: "Tigers",
   };
 
-  for (const [key, normalized] of Object.entries(aliases)) {
+  for (const [key, normalized] of Object.entries(aliases).sort(
+    ([a], [b]) => b.length - a.length,
+  )) {
     if (lower.includes(key)) return normalized;
   }
 
@@ -1784,10 +1786,12 @@ function getBetrAffiliateUrl(payload: string) {
 function BetrAffiliateLink({
   payload,
   className,
+  style,
   children,
 }: {
   payload: string;
   className?: string;
+  style?: React.CSSProperties;
   children: React.ReactNode;
 }) {
   return (
@@ -1796,6 +1800,7 @@ function BetrAffiliateLink({
       target="_blank"
       rel="sponsored noopener noreferrer"
       className={className}
+      style={style}
     >
       {children}
     </a>
@@ -2849,6 +2854,7 @@ type FreeBetrMarketOutcome = {
   modelPct?: number;
   payload: string;
   logoTeam?: string;
+  teamColors?: { primary: string; secondary: string };
   tag: string;
   tone: "home" | "away" | "over" | "under";
 };
@@ -3301,7 +3307,27 @@ function ReadMore({ children }: { children: React.ReactNode }) {
 }
 
 function getBetrMatchMarketsFromRaw(rawOdds: any[], row: PredictionRow) {
-  return getSgmMatchMarkets(buildSgmMarketMap(rawOdds), row).betr || null;
+  const marketMap = buildSgmMarketMap(rawOdds);
+  const candidateKeys = [
+    buildMatchLabelKey(row.match),
+    buildMatchKey(row.homeTeam, row.awayTeam),
+    buildMatchKey(row.awayTeam, row.homeTeam),
+  ];
+
+  for (const key of candidateKeys) {
+    const markets = marketMap[key]?.betr;
+    if (markets) return markets;
+  }
+
+  const rowPairKey = buildTeamPairKey(row.homeTeam, row.awayTeam);
+  for (const [matchKey, bookmakers] of Object.entries(marketMap)) {
+    const [teamA, teamB] = matchKey.split("__");
+    if (teamA && teamB && buildTeamPairKey(teamA, teamB) === rowPairKey) {
+      return bookmakers.betr || null;
+    }
+  }
+
+  return null;
 }
 
 function buildFreeBetrPayload(row: PredictionRow, market: string, selection: string) {
@@ -3334,6 +3360,7 @@ function getFreeBetrH2hOutcomes(row: PredictionRow, markets?: SgmMarketBookmaker
         modelPct: getTeamModelPct(row, team),
         payload: buildFreeBetrPayload(row, "h2h", team),
         logoTeam: team,
+        teamColors: getTeamColors(team),
         tag: normalizeTeamName(team) === normalizeTeamName(row.homeTeam) ? "Home" : "Away",
         tone: normalizeTeamName(team) === normalizeTeamName(row.homeTeam) ? "home" : "away",
       };
@@ -3361,6 +3388,7 @@ function getFreeBetrLineOutcomes(row: PredictionRow, markets?: SgmMarketBookmake
         modelPct: probabilityFromEdge(projectedMargin + spread.point, 7.5),
         payload: buildFreeBetrPayload(row, "line", `${team}_${spread.point}`),
         logoTeam: team,
+        teamColors: getTeamColors(team),
         tag: normalizeTeamName(team) === normalizeTeamName(row.homeTeam) ? "Home line" : "Away line",
         tone: normalizeTeamName(team) === normalizeTeamName(row.homeTeam) ? "home" : "away",
       };
@@ -3431,40 +3459,76 @@ function LiveBetrPriceValue({
   return <>{betrOdds ? `$${betrOdds.toFixed(2)}` : "View"}</>;
 }
 
-function getFreeBetrOutcomeToneClasses(tone: FreeBetrMarketOutcome["tone"]) {
-  if (tone === "away") {
+function hexToRgba(hex: string, alpha: number) {
+  const clean = String(hex || "").replace("#", "");
+  if (!/^[0-9a-f]{6}$/i.test(clean)) return `rgba(115,244,219,${alpha})`;
+  const value = Number.parseInt(clean, 16);
+  const r = (value >> 16) & 255;
+  const g = (value >> 8) & 255;
+  const b = value & 255;
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+function getContrastTextColor(hex: string) {
+  const clean = String(hex || "").replace("#", "");
+  if (!/^[0-9a-f]{6}$/i.test(clean)) return "#05070b";
+  const value = Number.parseInt(clean, 16);
+  const r = (value >> 16) & 255;
+  const g = (value >> 8) & 255;
+  const b = value & 255;
+  const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+  return brightness > 150 ? "#05070b" : "#ffffff";
+}
+
+function getFreeBetrOutcomeStyle(outcome: FreeBetrMarketOutcome) {
+  if (outcome.teamColors) {
+    const { primary, secondary } = outcome.teamColors;
+    const priceColor = secondary || primary;
+
     return {
-      border: "border-[#FFEA00]",
-      shadow: "shadow-[3px_3px_0_0_rgba(255,234,0,0.32)]",
-      tag: "bg-[#FFEA00] text-[#05070b]",
-      price: "text-[#FFEA00]",
-      accent: "bg-[#FFEA00]",
+      cardStyle: {
+        borderColor: primary,
+        boxShadow: `3px 3px 0 0 ${hexToRgba(secondary || primary, 0.35)}`,
+      },
+      accentStyle: { backgroundColor: secondary || primary },
+      tagStyle: {
+        backgroundColor: secondary || primary,
+        color: getContrastTextColor(secondary || primary),
+      },
+      priceStyle: { color: priceColor },
     };
   }
-  if (tone === "over") {
+
+  if (outcome.tone === "over") {
     return {
-      border: "border-[#00E676]",
-      shadow: "shadow-[3px_3px_0_0_rgba(0,230,118,0.30)]",
-      tag: "bg-[#00E676] text-[#05070b]",
-      price: "text-[#00E676]",
-      accent: "bg-[#00E676]",
+      cardStyle: {
+        borderColor: "#00E676",
+        boxShadow: "3px 3px 0 0 rgba(0,230,118,0.30)",
+      },
+      accentStyle: { backgroundColor: "#00E676" },
+      tagStyle: { backgroundColor: "#00E676", color: "#05070b" },
+      priceStyle: { color: "#00E676" },
     };
   }
-  if (tone === "under") {
+  if (outcome.tone === "under") {
     return {
-      border: "border-[#FF4D6D]",
-      shadow: "shadow-[3px_3px_0_0_rgba(255,77,109,0.28)]",
-      tag: "bg-[#FF4D6D] text-white",
-      price: "text-[#FF4D6D]",
-      accent: "bg-[#FF4D6D]",
+      cardStyle: {
+        borderColor: "#FF4D6D",
+        boxShadow: "3px 3px 0 0 rgba(255,77,109,0.28)",
+      },
+      accentStyle: { backgroundColor: "#FF4D6D" },
+      tagStyle: { backgroundColor: "#FF4D6D", color: "#ffffff" },
+      priceStyle: { color: "#FF4D6D" },
     };
   }
   return {
-    border: "border-[#73F4DB]",
-    shadow: "shadow-[3px_3px_0_0_rgba(115,244,219,0.36)]",
-    tag: "bg-[#73F4DB] text-[#05070b]",
-    price: "text-[#73F4DB]",
-    accent: "bg-[#73F4DB]",
+    cardStyle: {
+      borderColor: "#73F4DB",
+      boxShadow: "3px 3px 0 0 rgba(115,244,219,0.36)",
+    },
+    accentStyle: { backgroundColor: "#73F4DB" },
+    tagStyle: { backgroundColor: "#73F4DB", color: "#05070b" },
+    priceStyle: { color: "#73F4DB" },
   };
 }
 
@@ -3544,19 +3608,23 @@ function FreeBetrMarketsPanel({
             <div className="h-10 bg-white/5 animate-pulse border-2 border-white/5" />
           </div>
         ) : outcomes.length > 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 gap-2">
             {outcomes.map((outcome) => {
-              const toneClasses = getFreeBetrOutcomeToneClasses(outcome.tone);
+              const outcomeStyle = getFreeBetrOutcomeStyle(outcome);
 
               return (
                 <BetrAffiliateLink
                   key={outcome.id}
                   payload={outcome.payload}
-                  className={`group relative min-h-[84px] overflow-hidden border-2 ${toneClasses.border} ${toneClasses.shadow} bg-[#111317] p-3 transition hover:-translate-y-0.5 hover:bg-[#171B22]`}
+                  className="group relative min-h-[86px] overflow-hidden border-2 bg-[#111317] p-3 transition hover:-translate-y-0.5 hover:bg-[#171B22]"
+                  style={outcomeStyle.cardStyle}
                 >
-                  <span className={`absolute left-0 top-0 h-full w-1 ${toneClasses.accent}`} />
-                  <div className="flex items-start justify-between gap-3 pl-2">
-                    <div className="min-w-0">
+                  <span
+                    className="absolute left-0 top-0 h-full w-1"
+                    style={outcomeStyle.accentStyle}
+                  />
+                  <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 pl-2">
+                    <div className="min-w-0 pr-1">
                       <div className="flex items-center gap-2 mb-2">
                         {outcome.logoTeam ? (
                           <TeamLogo teamName={outcome.logoTeam} className="h-7 w-7 text-[9px]" />
@@ -3564,7 +3632,10 @@ function FreeBetrMarketsPanel({
                           <BetrLogoMark className="h-7 w-7" />
                         )}
                         <div className="min-w-0">
-                          <span className={`inline-flex px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest ${toneClasses.tag}`}>
+                          <span
+                            className="inline-flex px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest"
+                            style={outcomeStyle.tagStyle}
+                          >
                             {outcome.tag}
                           </span>
                           <div className="mt-1 text-[9px] font-black uppercase tracking-widest text-white/45">
@@ -3581,7 +3652,10 @@ function FreeBetrMarketsPanel({
                       </div>
                     </div>
                     <div className="shrink-0 text-right">
-                      <div className={`text-2xl font-black ${toneClasses.price} leading-none`}>
+                      <div
+                        className="text-2xl font-black leading-none"
+                        style={outcomeStyle.priceStyle}
+                      >
                         ${outcome.odds.toFixed(2)}
                       </div>
                       <div className="mt-2 inline-flex items-center gap-1 text-[8px] font-black uppercase tracking-widest text-white/60 group-hover:text-white">
