@@ -2764,6 +2764,7 @@ function mapTeamToOddsApi(team: string): string {
 const fetchOddsPromises = new Map<string, Promise<any>>();
 const ODDS_CACHE_KEY = "rightedge_odds_cache_v5_no_betfair";
 const ODDS_CACHE_DURATION = 30 * 60 * 1000; // Protect the 500/month free Odds API quota
+const BETR_ODDS_REFRESH_MS = 60 * 1000;
 
 async function fetchLiveOddsCached(bookmaker?: "betr") {
   const cacheKey = bookmaker ? `${ODDS_CACHE_KEY}_${bookmaker}` : ODDS_CACHE_KEY;
@@ -2796,8 +2797,10 @@ async function fetchLiveOddsCached(bookmaker?: "betr") {
   const fetchOddsPromise = fetch(
     `/api/live-odds${query}`,
     {
+      cache: bookmaker === "betr" ? "no-store" : "default",
       headers: {
         Authorization: `Bearer ${publicAnonKey}`,
+        ...(bookmaker === "betr" ? { "Cache-Control": "no-cache" } : {}),
       },
     },
   )
@@ -3425,19 +3428,42 @@ function getFreeBetrLineOutcomes(row: PredictionRow, markets?: SgmMarketBookmake
     .filter(Boolean) as FreeBetrMarketOutcome[];
 }
 
+function getFreeBetrPrimaryTotalPoint(markets: SgmMarketBookmakerData) {
+  const points = [...new Set(markets.totals.map((item) => item.point))]
+    .filter((point) => Number.isFinite(point));
+
+  return points
+    .map((point) => {
+      const over = markets.totals.find((item) => item.side === "Over" && item.point === point && item.odds > 1);
+      const under = markets.totals.find((item) => item.side === "Under" && item.point === point && item.odds > 1);
+      if (!over || !under) return null;
+
+      return {
+        point,
+        priceGap: Math.abs(over.odds - under.odds),
+        marketDistance: Math.abs(((over.odds + under.odds) / 2) - 1.9),
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) =>
+      (a!.priceGap - b!.priceGap) ||
+      (a!.marketDistance - b!.marketDistance) ||
+      Math.abs(a!.point) - Math.abs(b!.point)
+    )[0]?.point;
+}
+
 function getFreeBetrTotalOutcomes(row: PredictionRow, markets?: SgmMarketBookmakerData | null): FreeBetrMarketOutcome[] {
   if (!markets) return [];
 
   const projectedTotal = row.predictedHomeScore + row.predictedAwayScore;
   if (!projectedTotal) return [];
 
-  const closestPoint = [...new Set(markets.totals.map((item) => item.point))]
-    .sort((a, b) => Math.abs(projectedTotal - a) - Math.abs(projectedTotal - b))[0];
-  if (!Number.isFinite(closestPoint)) return [];
+  const primaryPoint = getFreeBetrPrimaryTotalPoint(markets);
+  if (!Number.isFinite(primaryPoint)) return [];
 
   return (["Over", "Under"] as const)
     .map((side) => {
-      const total = markets.totals.find((item) => item.side === side && item.point === closestPoint);
+      const total = markets.totals.find((item) => item.side === side && item.point === primaryPoint);
       if (!total || total.odds <= 1) return null;
       const edge = side === "Over"
         ? projectedTotal - total.point
@@ -3559,9 +3585,11 @@ function FreeBetrMarketsPanel({
     };
 
     fetchRealOdds();
+    const refreshTimer = window.setInterval(fetchRealOdds, BETR_ODDS_REFRESH_MS);
 
     return () => {
       isMounted = false;
+      window.clearInterval(refreshTimer);
     };
   }, [row.match]);
 

@@ -1559,6 +1559,8 @@ async function fetchBlueBetJson(path: string) {
   const response = await fetch(`${BLUEBET_API_BASE_URL}${path}`, {
     headers: {
       Accept: "application/json",
+      "Cache-Control": "no-cache",
+      Pragma: "no-cache",
       "User-Agent": BLUEBET_AFFILIATE_USER_AGENT,
     },
   });
@@ -1605,6 +1607,40 @@ function normalizeBlueBetOutcomeTeam(name: string, homeTeam: string, awayTeam: s
   return "";
 }
 
+function selectBlueBetPrimaryTotalOutcomes(outcomes: any[]) {
+  const pairs = new Map<number, { over?: any; under?: any }>();
+
+  for (const outcome of outcomes) {
+    const point = Number(outcome?.point);
+    if (!Number.isFinite(point)) continue;
+
+    const pair = pairs.get(point) || {};
+    if (outcome.name === "Over") pair.over = outcome;
+    if (outcome.name === "Under") pair.under = outcome;
+    pairs.set(point, pair);
+  }
+
+  const primary = [...pairs.entries()]
+    .map(([point, pair]) => {
+      if (!pair.over || !pair.under) return null;
+
+      return {
+        point,
+        pair,
+        priceGap: Math.abs(Number(pair.over.price) - Number(pair.under.price)),
+        marketDistance: Math.abs(((Number(pair.over.price) + Number(pair.under.price)) / 2) - 1.9),
+      };
+    })
+    .filter(Boolean)
+    .sort((a: any, b: any) =>
+      (a.priceGap - b.priceGap) ||
+      (a.marketDistance - b.marketDistance) ||
+      Math.abs(a.point) - Math.abs(b.point)
+    )[0];
+
+  return primary ? [primary.pair.over, primary.pair.under] : [];
+}
+
 function buildBlueBetEventOdds(payload: any) {
   const masterEvent = payload?.MasterEvent || {};
   const masterEventName = masterEvent.MasterEventName || "";
@@ -1618,7 +1654,8 @@ function buildBlueBetEventOdds(payload: any) {
 
   for (const event of asBlueBetArray(payload?.Events)) {
     const eventName = String(event?.EventName || "");
-    const isTotalsEvent = eventName.toLowerCase().includes("total points over/under");
+    const eventClass = String(event?.EventClass || "");
+    const isTotalsEvent = `${eventName} ${eventClass}`.toLowerCase().includes("total points over/under");
 
     for (const outcome of asBlueBetArray(event?.Outcomes)) {
       const price = Number(outcome?.Price);
@@ -1676,7 +1713,7 @@ function buildBlueBetEventOdds(payload: any) {
   const markets = [
     h2hOutcomes.length ? { key: "h2h", outcomes: h2hOutcomes } : null,
     spreadOutcomes.length ? { key: "spreads", outcomes: spreadOutcomes } : null,
-    totalOutcomes.length ? { key: "totals", outcomes: totalOutcomes } : null,
+    totalOutcomes.length ? { key: "totals", outcomes: selectBlueBetPrimaryTotalOutcomes(totalOutcomes) } : null,
   ].filter(Boolean);
 
   return {
@@ -2066,6 +2103,7 @@ app.get("/live-odds", async (c) => {
     const force = allowOddsForceRefresh(c);
     const bookmaker = c.req.query("bookmaker") || "";
     if (normalizeBookmakerFilter(bookmaker) === "betr") {
+      c.header("Cache-Control", "no-store, no-cache, max-age=0, must-revalidate");
       return c.json(await fetchBlueBetNrlOddsRaw());
     }
 
