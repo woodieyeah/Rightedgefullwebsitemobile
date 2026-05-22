@@ -7296,9 +7296,10 @@ export default function App() {
       : "best-bets";
     setSitePage("app");
     window.location.hash = targetHash;
+    setShowEmailGate(false);
     if (hasPaidAccess()) {
       setPaidAccessState(true);
-      setShowEmailGate(false);
+      setShowPaymentGate(false);
       return;
     }
 
@@ -7312,10 +7313,30 @@ export default function App() {
   const checkHash = () => {
     const hash = window.location.hash.replace("#", "");
     const appHashes = ["matches", "best-bets", "try-scorers", "performance", "admin"];
+    const premiumHashes = ["best-bets", "try-scorers"];
     const publicHashes = ["results", "methodology", "ad-studio", "articles", "article-round-5-2026", "article-methodology"];
 
     if (hash === "sgm-builder") {
       window.location.hash = "best-bets";
+      return;
+    }
+
+    if (premiumHashes.includes(hash)) {
+      trackHashPageView(hash);
+      setSitePage("app");
+      setShowEmailGate(false);
+
+      if (hasPaidAccess()) {
+        setPaidAccessState(true);
+        setShowPaymentGate(false);
+      } else {
+        setPaidAccessState(false);
+        (window as any).trackAnalyticsEvent?.("premium_paywall_open", {
+          section: hash,
+          cta_source: "direct_hash",
+        });
+        setShowPaymentGate(true);
+      }
       return;
     }
 
