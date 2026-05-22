@@ -274,6 +274,7 @@ type FixtureRow = {
 
 type PredictionRow = {
   match: string;
+  roundNumber: number;
   homeTeam: string;
   awayTeam: string;
   predictedWinner: string;
@@ -976,14 +977,16 @@ function sortPredictionsByFixture(a: PredictionRow, b: PredictionRow) {
 function chooseBestFixtureCandidate(candidates: FixtureRow[], now = Date.now()) {
   if (!candidates.length) return null;
 
+  const currentWindowStart = now - 6 * 60 * 60 * 1000;
+
   return [...candidates].sort((a, b) => {
     const aKickoff = getFixtureUtcKickoffMs(a);
     const bKickoff = getFixtureUtcKickoffMs(b);
-    const aUpcoming = aKickoff >= now;
-    const bUpcoming = bKickoff >= now;
+    const aCurrentOrUpcoming = aKickoff >= currentWindowStart;
+    const bCurrentOrUpcoming = bKickoff >= currentWindowStart;
 
-    if (aUpcoming !== bUpcoming) return aUpcoming ? -1 : 1;
-    if (aUpcoming && bUpcoming) return aKickoff - bKickoff;
+    if (aCurrentOrUpcoming !== bCurrentOrUpcoming) return aCurrentOrUpcoming ? -1 : 1;
+    if (aCurrentOrUpcoming && bCurrentOrUpcoming) return aKickoff - bKickoff;
     return bKickoff - aKickoff;
   })[0];
 }
@@ -1170,6 +1173,9 @@ function parsePredictions(
           "Projected Winner",
         ]),
       );
+      const predictionRound = toRoundNumber(
+        getValue(row, ["Round", "Round Number", "RoundNumber", "NRL Round"]),
+      );
 
       const predictedHomeScore = toNumber(
         getValue(row, [
@@ -1239,15 +1245,24 @@ function parsePredictions(
       const bestEdge = Math.max(homeOverlay, awayOverlay, 0);
       const exactFixtures = fixtureMap.get(buildMatchKey(homeTeam, awayTeam)) || [];
       const pairFixtures = fixturePairMap.get(buildTeamPairKey(homeTeam, awayTeam)) || [];
+      const exactRoundFixtures = predictionRound
+        ? exactFixtures.filter((candidate) => candidate.roundNumber === predictionRound)
+        : [];
+      const pairRoundFixtures = predictionRound
+        ? pairFixtures.filter((candidate) => candidate.roundNumber === predictionRound)
+        : [];
+      const exactRoundFixture = chooseBestFixtureCandidate(exactRoundFixtures);
+      const pairRoundFixture = chooseBestFixtureCandidate(pairRoundFixtures);
       const exactFixture = chooseBestFixtureCandidate(exactFixtures);
       const pairFixture = chooseBestFixtureCandidate(pairFixtures);
-      const fixture = pairFixture || exactFixture;
+      const fixture = exactRoundFixture || pairRoundFixture || exactFixture || pairFixture;
 
       return {
         match:
           homeTeam && awayTeam
             ? `${homeTeam} v ${awayTeam}`
             : "",
+        roundNumber: predictionRound || fixture?.roundNumber || 0,
         homeTeam,
         awayTeam,
         predictedWinner,
@@ -1550,7 +1565,7 @@ function buildDashboardData(
 
   const modelRoundNumbers = [
     ...predictions
-      .map((row) => row.fixture?.roundNumber || 0)
+      .map((row) => row.roundNumber || row.fixture?.roundNumber || 0)
       .filter((round) => Number.isFinite(round) && round > 0),
     ...tryScorers
       .map((row) => row.round)
