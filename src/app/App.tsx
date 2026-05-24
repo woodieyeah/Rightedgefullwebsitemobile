@@ -2981,17 +2981,9 @@ function HomeCard({
   );
 }
 
-function PublicHero({
-  data,
-  onGoApp,
-  onRequestPremium,
-}: {
-  data: DashboardData | null;
-  onGoApp: (source: string) => void;
-  onRequestPremium: (source: string) => void;
-}) {
+function PublicHero() {
   return (
-    <section className="relative overflow-hidden pt-14 pb-10 sm:pt-20 sm:pb-14 md:pt-24 md:pb-16">
+    <section className="relative overflow-hidden pt-12 pb-3 sm:pt-16 sm:pb-4 md:pt-20 md:pb-5">
       <div className="max-w-[760px]">
         <div className="inline-flex items-center gap-2 bg-[#16161D] border border-[#1E1E2E] px-3 py-1.5 text-[10px] sm:text-xs font-medium text-[#9CA3AF] mb-6 uppercase tracking-wider">
           <Sparkles className="w-3.5 h-3.5" />
@@ -3002,27 +2994,9 @@ function PublicHero({
           The NRL model that gives you the edge.
         </h1>
         
-        <p className="text-base sm:text-lg md:text-xl text-[#9CA3AF] leading-relaxed mb-9 font-normal max-w-[640px]">
+        <p className="text-base sm:text-lg md:text-xl text-[#9CA3AF] leading-relaxed font-normal max-w-[640px]">
           See projected scores, model probabilities and match analysis for every NRL round.
         </p>
-
-        <div className="flex flex-col sm:flex-row flex-wrap gap-3">
-          <button
-            onClick={() => onRequestPremium('hero_unlock_premium_picks')}
-            className="order-1 sm:order-2 hidden sm:inline-flex w-full sm:w-auto items-center justify-center gap-2 re-secondary-cta border border-[#1E1E2E] rounded-full px-6 py-3 text-base font-medium text-white hover:opacity-80 transition"
-          >
-            <Lock className="w-4 h-4 stroke-[2px]" />
-            Unlock Premium Picks
-          </button>
-
-          <button
-            onClick={() => onGoApp('hero_unlock_best_bets')}
-            className="order-1 inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-full border border-white/90 bg-white px-6 py-3.5 text-[15px] font-medium text-[#0A0A0F] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.35)] transition hover:opacity-90 sm:px-7"
-          >
-            View Free Match Predictions
-            <ArrowRight className="w-4 h-4 stroke-[2px]" />
-          </button>
-        </div>
       </div>
     </section>
   );
@@ -3532,139 +3506,166 @@ function FeaturedMatchPreview({
 
   const displayBestBet =
     row.bestBet?.replace("Sydney", "Roosters") || row.bestBet;
+  const homeScore = Math.round(row.predictedHomeScore);
+  const awayScore = Math.round(row.predictedAwayScore);
+  const homeWinsProjection = homeScore > awayScore;
+  const awayWinsProjection = awayScore > homeScore;
+  const fixtureMeta = row.fixture
+    ? `${row.fixture.day} ${row.fixture.dateLabel} @ ${row.fixture.aedt} AEST`
+    : "Time TBC";
+
+  const ScoreRow = ({
+    team,
+    score,
+    isWinner,
+  }: {
+    team: string;
+    score: number;
+    isWinner: boolean;
+  }) => {
+    const colors = getTeamColors(team);
+
+    return (
+      <div className="relative grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 border-t border-[#1E1E2E] px-4 py-5 first:border-t-0 sm:px-6 sm:py-6">
+        <span
+          aria-hidden="true"
+          className="absolute left-0 top-4 h-[calc(100%-32px)] w-0.5 rounded-full opacity-80"
+          style={{ backgroundColor: colors.primary }}
+        />
+        <div className="flex min-w-0 items-center gap-4">
+          <TeamLogo
+            teamName={team}
+            className={`h-10 w-10 shrink-0 sm:h-12 sm:w-12 ${isWinner ? "" : "opacity-70"}`}
+          />
+          <span
+            className={`min-w-0 truncate text-2xl font-semibold uppercase tracking-tight sm:text-3xl md:text-4xl ${
+              isWinner ? "text-white" : "text-[#9CA3AF]"
+            }`}
+          >
+            {team}
+          </span>
+        </div>
+        <div
+          className={`min-w-[68px] rounded-xl border border-[#1E1E2E] bg-[#16161D] px-4 py-2 text-center text-3xl font-semibold leading-none tracking-tight sm:min-w-[80px] sm:text-4xl ${
+            isWinner ? "text-white" : "text-[#9CA3AF]"
+          }`}
+        >
+          {score}
+        </div>
+      </div>
+    );
+  };
 
   return (
-    <div className="mt-5 mb-4">
-      <HomeCard className="p-8 md:p-12 relative overflow-hidden">
-        <div className="absolute inset-0 bg-[#111116]" />
-        <div className="relative z-10 flex flex-col md:flex-row md:items-start justify-between gap-10">
-          <div className="flex-1">
-            <div className="flex flex-wrap items-center gap-4 mb-8">
-              {isOfficialPlay ? (
-                <span className="inline-flex items-center gap-2 bg-[#16161D] border border-[#1E1E2E] px-3 py-1.5 text-sm font-medium text-[#9CA3AF] uppercase tracking-wider">
-                  <Lock className="w-4 h-4" />
-                  Premium
-                </span>
-              ) : (
-                <span className="inline-flex items-center bg-[#16161D] border border-[#1E1E2E] px-3 py-1.5 text-sm font-medium text-white uppercase tracking-wider">
-                  Featured Match
-                </span>
-              )}
-              <span className="text-sm font-medium text-[#9CA3AF] uppercase tracking-widest">
-                {row.fixture?.stadium || "Venue TBC"} •{" "}
-                {row.fixture
-                  ? `${row.fixture.day} ${row.fixture.dateLabel} @ ${row.fixture.aedt} AEST`
-                  : "Time TBC"}
-              </span>
+    <div className="mb-5">
+      <HomeCard className="rounded-2xl p-5 sm:p-6 md:p-8">
+        <div className="flex flex-col gap-5">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="text-xs font-medium uppercase tracking-[0.14em] text-[#9CA3AF]">
+              {row.fixture?.stadium || "Venue TBC"}
             </div>
-
-            {/* Score card */}
-            <div 
-              className="flex flex-col mb-8 max-w-3xl border border-[#1E1E2E] bg-[#111116] relative"
-            >
-              <div className="absolute -top-3 -right-3 bg-[#16161D] border border-[#1E1E2E] text-[#9CA3AF] text-[10px] sm:text-xs font-medium uppercase tracking-widest px-4 py-2 z-30">
-                Projected Score
-              </div>
-
-              <div className="flex items-center justify-between p-6 sm:p-8 border-b border-[#1E1E2E] relative overflow-hidden">
-                <div className="flex items-center gap-4 sm:gap-6 relative z-10">
-                  <TeamLogo
-                    teamName={row.homeTeam}
-                    className="w-12 h-12 sm:w-16 sm:h-16 opacity-80"
-                  />
-                  <span className="text-3xl sm:text-4xl md:text-5xl font-semibold text-white tracking-tight uppercase">
-                    {row.homeTeam}
-                  </span>
-                </div>
-                <div className="min-w-[82px] border border-[#1E1E2E] bg-[#16161D] px-3 py-2 text-center text-4xl sm:min-w-[96px] sm:text-5xl md:text-6xl font-semibold text-white tracking-tight leading-none relative z-10">
-                  {Math.round(row.predictedHomeScore)}
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between p-6 sm:p-8 relative overflow-hidden">
-                <div className="flex items-center gap-4 sm:gap-6 relative z-10">
-                  <TeamLogo
-                    teamName={row.awayTeam}
-                    className="w-12 h-12 sm:w-16 sm:h-16 opacity-80"
-                  />
-                  <span className="text-3xl sm:text-4xl md:text-5xl font-semibold text-white tracking-tight uppercase">
-                    {row.awayTeam}
-                  </span>
-                </div>
-                <div className="min-w-[82px] border border-[#1E1E2E] bg-[#16161D] px-3 py-2 text-center text-4xl sm:min-w-[96px] sm:text-5xl md:text-6xl font-semibold text-white tracking-tight leading-none relative z-10">
-                  {Math.round(row.predictedAwayScore)}
-                </div>
-              </div>
+            <div className="text-xs font-medium uppercase tracking-[0.14em] text-[#6B7280]">
+              {fixtureMeta}
             </div>
-
-            {/* Best Bet — blurred until email entered */}
-            {isOfficialPlay && (
-              <div className="mb-10 inline-flex flex-col items-start border border-[#1E1E2E] bg-[#16161D] px-6 py-5">
-                <span className="text-xs font-medium text-[#9CA3AF] uppercase tracking-widest mb-1">
-                  Model Play
-                </span>
-                <span className="text-3xl md:text-4xl font-semibold text-white uppercase tracking-tight">
-                  {displayBestBet}
-                </span>
-              </div>
-            )}
-
-            {/* Stats row — blurred until email entered */}
-            <div className="flex flex-wrap items-center gap-6 sm:gap-10 pt-8 border-t border-[#1E1E2E]">
-              <div>
-                <div className="text-[10px] sm:text-xs font-medium text-[#9CA3AF] mb-1 sm:mb-2 uppercase tracking-widest">
-                  Win Prob
-                </div>
-                <div className="text-xl sm:text-2xl font-semibold text-[#4ADE80]">
-                  {formatPercent(featuredWinPct, 2)}
-                </div>
-              </div>
-              <div>
-                <div className="text-[10px] sm:text-xs font-medium text-[#9CA3AF] mb-1 sm:mb-2 uppercase tracking-widest">
-                  Model Odds
-                </div>
-                <div className="text-xl sm:text-2xl font-semibold text-white">
-                  {selectedModel ? selectedModel.toFixed(2) : "—"}
-                </div>
-              </div>
-              <div>
-                <div className="text-[10px] sm:text-xs font-medium text-[#9CA3AF] mb-1 sm:mb-2 uppercase tracking-widest">
-                  Market Odds
-                </div>
-                <div className="text-xl sm:text-2xl font-semibold text-white">
-                  {selectedOdds ? selectedOdds.toFixed(2) : "—"}
-                </div>
-              </div>
-              <div>
-                <div className="text-xs font-medium text-[#9CA3AF] mb-2 uppercase tracking-widest">
-                  Model Edge
-                </div>
-                <div className="text-2xl font-semibold text-[#4ADE80]">
-                  +{formatPercent(row.bestEdge, 2)}
-                </div>
-              </div>
-            </div>
-
           </div>
 
-          <div className="w-full md:w-auto flex flex-col items-end gap-4 mt-4 md:mt-0">
-            <button
-              onClick={() => onGoApp('featured_view_predictions')}
-              className="w-full md:w-auto inline-flex items-center justify-center gap-2 re-primary-cta border px-8 py-4 text-lg font-medium hover:opacity-90 transition uppercase tracking-wide"
-            >
-              View All Predictions
-              <ArrowRight className="w-5 h-5 stroke-[3px]" />
-            </button>
-            <AffiliateMarketButton
-              payload="rightedge_featured_match"
-              bookmaker="Betr"
-              label="Open Betr market"
-              className="w-full md:w-[286px]"
+          <div className="overflow-hidden rounded-2xl border border-[#1E1E2E] bg-[#0A0A0F]/40">
+            <ScoreRow
+              team={row.homeTeam}
+              score={homeScore}
+              isWinner={homeWinsProjection || homeScore === awayScore}
             />
+            <ScoreRow
+              team={row.awayTeam}
+              score={awayScore}
+              isWinner={awayWinsProjection || homeScore === awayScore}
+            />
+          </div>
+
+          {isOfficialPlay && (
+            <div className="rounded-xl border border-[#1E1E2E] bg-[#16161D] p-4 sm:p-5">
+              <div className="mb-2 flex items-center gap-2 text-[10px] font-medium uppercase tracking-[0.14em] text-[#9CA3AF]">
+                <Lock className="h-3.5 w-3.5" />
+                Premium model play
+              </div>
+              <div className="text-2xl font-semibold uppercase tracking-tight text-white sm:text-3xl">
+                {displayBestBet}
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <div className="rounded-xl border border-[#1E1E2E] bg-[#16161D] p-4">
+              <div className="mb-2 text-[10px] font-medium uppercase tracking-[0.14em] text-[#9CA3AF]">
+                Win prob
+              </div>
+              <div className="text-xl font-semibold text-[#4ADE80]">
+                {formatPercent(featuredWinPct, 2)}
+              </div>
+            </div>
+            <div className="rounded-xl border border-[#1E1E2E] bg-[#16161D] p-4">
+              <div className="mb-2 text-[10px] font-medium uppercase tracking-[0.14em] text-[#9CA3AF]">
+                Model odds
+              </div>
+              <div className="text-xl font-semibold text-white">
+                {selectedModel ? selectedModel.toFixed(2) : "—"}
+              </div>
+            </div>
+            <div className="rounded-xl border border-[#1E1E2E] bg-[#16161D] p-4">
+              <div className="mb-2 text-[10px] font-medium uppercase tracking-[0.14em] text-[#9CA3AF]">
+                Market odds
+              </div>
+              <div className="text-xl font-semibold text-white">
+                {selectedOdds ? selectedOdds.toFixed(2) : "—"}
+              </div>
+            </div>
+            <div className="rounded-xl border border-[#1E1E2E] bg-[#16161D] p-4">
+              <div className="mb-2 text-[10px] font-medium uppercase tracking-[0.14em] text-[#9CA3AF]">
+                Model edge
+              </div>
+              <div className="text-xl font-semibold text-[#4ADE80]">
+                +{formatPercent(row.bestEdge, 2)}
+              </div>
+            </div>
           </div>
         </div>
       </HomeCard>
+      <button
+        onClick={() => onGoApp("featured_see_all_predictions")}
+        className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-white transition hover:opacity-75"
+      >
+        See all predictions
+        <ArrowRight className="h-4 w-4" />
+      </button>
     </div>
+  );
+}
+
+function HomeConversionCta({
+  onRequestPremium,
+}: {
+  onRequestPremium: (source: string) => void;
+}) {
+  return (
+    <HomeCard className="mb-4 mt-4 rounded-2xl p-5 sm:p-6 md:p-7">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <div className="text-base font-semibold tracking-tight text-white sm:text-lg">
+            Want the full round card?
+          </div>
+          <p className="mt-1 max-w-[560px] text-sm leading-relaxed text-[#9CA3AF]">
+            Premium plays and try scorer signals, updated with the live market.
+          </p>
+        </div>
+        <button
+          onClick={() => onRequestPremium("homepage_conversion_strip")}
+          className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-medium text-[#0A0A0F] transition hover:opacity-85"
+        >
+          <Lock className="h-4 w-4" />
+          Unlock premium
+        </button>
+      </div>
+    </HomeCard>
   );
 }
 
@@ -3746,19 +3747,16 @@ function HomePage({
   );
 
   return (
-    <div className="flex flex-col gap-3 sm:gap-4">
+    <div className="flex flex-col">
       <TryScorerTicker data={data} />
-      <PublicHero
-        data={data}
-        onGoApp={onGoApp}
-        onRequestPremium={onRequestPremium}
-      />
-      <div id="featured-match-section" className="mt-1 sm:mt-2">
+      <PublicHero />
+      <div id="featured-match-section">
         <FeaturedMatchPreview
           row={featured}
           onGoApp={onGoApp}
         />
       </div>
+      <HomeConversionCta onRequestPremium={onRequestPremium} />
       <HomeMethodology onGoApp={onGoApp} />
     </div>
   );
