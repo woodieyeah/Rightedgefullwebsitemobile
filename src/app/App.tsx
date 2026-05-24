@@ -957,6 +957,46 @@ function hasPredictionKickedOff(row?: PredictionRow | null, now = Date.now()) {
   return getFixtureUtcKickoffMs(row.fixture) <= now;
 }
 
+function getFixtureStatusBadge(fixture?: FixtureRow | null, now = Date.now()) {
+  const kickoff = getFixtureUtcKickoffMs(fixture);
+  if (!Number.isFinite(kickoff) || kickoff === Number.MAX_SAFE_INTEGER) {
+    return {
+      label: "Time TBC",
+      className: "border-white/10 bg-white/[0.04] text-white/40",
+    };
+  }
+
+  const diffMs = kickoff - now;
+  if (diffMs > 0) {
+    const totalMinutes = Math.ceil(diffMs / (60 * 1000));
+    const days = Math.floor(totalMinutes / (24 * 60));
+    const hours = Math.floor((totalMinutes % (24 * 60)) / 60);
+    const minutes = totalMinutes % 60;
+    const label = days > 0
+      ? `Starts in ${days}d ${hours}h`
+      : hours > 0
+        ? `Starts in ${hours}h ${minutes}m`
+        : `Starts in ${minutes}m`;
+
+    return {
+      label,
+      className: "border-[#093AD3]/70 bg-[#093AD3]/18 text-[#6FEBDD]",
+    };
+  }
+
+  if (now - kickoff <= 3 * 60 * 60 * 1000) {
+    return {
+      label: "Live",
+      className: "border-[#00E676]/60 bg-[#00E676]/14 text-[#00E676]",
+    };
+  }
+
+  return {
+    label: "Completed",
+    className: "border-white/10 bg-white/[0.04] text-white/35",
+  };
+}
+
 function useMinuteNow() {
   const [now, setNow] = useState(() => Date.now());
 
@@ -4757,6 +4797,7 @@ function PredictionsPage({
   data: DashboardData;
   onRequestAccess: (targetHash?: string) => void;
 }) {
+  const now = useMinuteNow();
   const rows = [...data.predictions].sort(sortPredictionsByFixture);
 
   return (
@@ -4779,6 +4820,7 @@ function PredictionsPage({
           const hasPredictedWinner = homeIsPredictedWinner || awayIsPredictedWinner;
           const homeColors = getTeamColors(row.homeTeam);
           const awayColors = getTeamColors(row.awayTeam);
+          const fixtureStatus = getFixtureStatusBadge(row.fixture, now);
 
           return (
             <GlassCard
@@ -4788,11 +4830,16 @@ function PredictionsPage({
               <div className="p-5 md:p-6">
                 <div className="overflow-hidden border-2 border-white/10 bg-[#0A0C10] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
                   <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 bg-white/[0.03] px-3 py-2 text-[10px] uppercase font-black text-white/55 tracking-widest">
-                    <span>
-                      {row.fixture
-                        ? `${row.fixture.day} ${row.fixture.dateLabel} @ ${row.fixture.aedt} AEST`
-                        : "TBC"}
-                    </span>
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                      <span>
+                        {row.fixture
+                          ? `${row.fixture.day} ${row.fixture.dateLabel} @ ${row.fixture.aedt} AEST`
+                          : "TBC"}
+                      </span>
+                      <span className={`inline-flex shrink-0 border px-2 py-0.5 text-[8px] font-black uppercase tracking-widest ${fixtureStatus.className}`}>
+                        {fixtureStatus.label}
+                      </span>
+                    </div>
                     <span className="text-white/40">
                       {row.fixture?.stadium || "Venue TBC"}
                     </span>
@@ -5030,8 +5077,9 @@ function buildPremiumMarketPlays(
     .filter(Boolean) as PremiumMarketPlay[];
 }
 
-function PremiumMarketPlayCard({ play }: { play: PremiumMarketPlay }) {
+function PremiumMarketPlayCard({ play, now }: { play: PremiumMarketPlay; now: number }) {
   const { row } = play;
+  const fixtureStatus = getFixtureStatusBadge(row.fixture, now);
   const predictedScore =
     row.predictedHomeScore || row.predictedAwayScore
       ? `${Math.round(row.predictedHomeScore)}-${Math.round(row.predictedAwayScore)}`
@@ -5047,10 +5095,15 @@ function PremiumMarketPlayCard({ play }: { play: PremiumMarketPlay }) {
     <GlassCard className="p-4 md:p-6 border-l-4 border-l-[#00E676]">
       <div className="flex items-start justify-between gap-3 md:gap-4 mb-4">
         <div>
-          <div className="text-[10px] uppercase font-black text-white/45 tracking-widest mb-2">
-            {row.fixture
-              ? `${row.fixture.day} ${row.fixture.dateLabel} @ ${row.fixture.aedt} AEST`
-              : "Time TBC"}
+          <div className="mb-2 flex flex-wrap items-center gap-2 text-[10px] uppercase font-black text-white/45 tracking-widest">
+            <span>
+              {row.fixture
+                ? `${row.fixture.day} ${row.fixture.dateLabel} @ ${row.fixture.aedt} AEST`
+                : "Time TBC"}
+            </span>
+            <span className={`inline-flex shrink-0 border px-2 py-0.5 text-[8px] font-black uppercase tracking-widest ${fixtureStatus.className}`}>
+              {fixtureStatus.label}
+            </span>
           </div>
           <div className="flex items-center gap-2.5 md:gap-3">
             <TeamLogo
@@ -5260,7 +5313,7 @@ function BestBetsPage({
         ) : (
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 md:gap-6">
             {matchReads.map((play) => (
-              <PremiumMarketPlayCard key={play.id} play={play} />
+              <PremiumMarketPlayCard key={play.id} play={play} now={now} />
             ))}
           </div>
         )}
