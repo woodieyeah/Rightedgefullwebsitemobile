@@ -7359,7 +7359,7 @@ export default function App() {
     "inLanguage": "en-AU"
   })}</script>
 </Helmet>
-    <div className="min-h-screen bg-[#0A0A0F] text-white relative overflow-hidden font-sans">
+    <div className="min-h-screen bg-[#0A0A0F] text-white relative overflow-x-clip font-sans">
       <div className="absolute inset-0 pointer-events-none" />
 
       <div
