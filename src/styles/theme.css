@@ -2,43 +2,43 @@
 
 :root {
   --font-size: 16px;
-  --background: #ffffff;
-  --foreground: oklch(0.145 0 0);
-  --card: #ffffff;
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: #030213;
-  --primary-foreground: oklch(1 0 0);
-  --secondary: oklch(0.95 0.0058 264.53);
-  --secondary-foreground: #030213;
-  --muted: #ececf0;
-  --muted-foreground: #717182;
-  --accent: #e9ebef;
-  --accent-foreground: #030213;
-  --destructive: #d4183d;
+  --background: #0A0A0F;
+  --foreground: #FFFFFF;
+  --card: #111116;
+  --card-foreground: #FFFFFF;
+  --popover: #16161D;
+  --popover-foreground: #FFFFFF;
+  --primary: #FFFFFF;
+  --primary-foreground: #0A0A0F;
+  --secondary: #16161D;
+  --secondary-foreground: #FFFFFF;
+  --muted: #16161D;
+  --muted-foreground: #9CA3AF;
+  --accent: #16161D;
+  --accent-foreground: #FFFFFF;
+  --destructive: #F87171;
   --destructive-foreground: #ffffff;
-  --border: rgba(0, 0, 0, 0.1);
-  --input: transparent;
-  --input-background: #f3f3f5;
-  --switch-background: #cbced4;
+  --border: #1E1E2E;
+  --input: #1E1E2E;
+  --input-background: #111116;
+  --switch-background: #1E1E2E;
   --font-weight-medium: 500;
   --font-weight-normal: 400;
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
+  --ring: #9CA3AF;
+  --chart-1: #4ADE80;
+  --chart-2: #9CA3AF;
+  --chart-3: #6B7280;
+  --chart-4: #FFFFFF;
+  --chart-5: #F87171;
   --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: #030213;
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --sidebar: #111116;
+  --sidebar-foreground: #FFFFFF;
+  --sidebar-primary: #FFFFFF;
+  --sidebar-primary-foreground: #0A0A0F;
+  --sidebar-accent: #16161D;
+  --sidebar-accent-foreground: #FFFFFF;
+  --sidebar-border: #1E1E2E;
+  --sidebar-ring: #9CA3AF;
 }
 
 .dark {
@@ -126,6 +126,157 @@
 
   body {
     @apply bg-background text-foreground;
+  }
+
+  body {
+    font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: #0A0A0F;
+    color: #FFFFFF;
+    line-height: 1.6;
+  }
+
+  #root {
+    background: #0A0A0F;
+  }
+
+  #root .font-black,
+  #root .font-extrabold {
+    font-weight: 600 !important;
+  }
+
+  #root .font-bold {
+    font-weight: 500 !important;
+  }
+
+  #root h1,
+  #root h2,
+  #root h3,
+  #root h4 {
+    font-weight: 600 !important;
+    letter-spacing: -0.02em !important;
+    line-height: 1.12;
+  }
+
+  #root p {
+    font-weight: 400;
+    line-height: 1.6;
+  }
+
+  #root [class*="tracking-widest"],
+  #root [class*="tracking-wider"] {
+    letter-spacing: 0.05em !important;
+  }
+
+  #root [class*="bg-gradient"],
+  #root [class*="bg-[linear-gradient"],
+  #root [class*="bg-[radial-gradient"] {
+    background-image: none !important;
+  }
+
+  #root [class*="shadow-"] {
+    box-shadow: none !important;
+  }
+
+  #root [class*="border-2"],
+  #root [class*="border-4"],
+  #root [class*="border-t-2"],
+  #root [class*="border-t-4"],
+  #root [class*="border-t-8"],
+  #root [class*="border-b-2"],
+  #root [class*="border-b-4"],
+  #root [class*="border-l-4"],
+  #root [class*="border-l-[6px]"] {
+    border-width: 1px !important;
+  }
+
+  #root [class*="border-[#FFEA00]"],
+  #root [class*="border-[#FFD600]"],
+  #root [class*="border-[#FF2E63]"],
+  #root [class*="border-[#FF2F7D]"],
+  #root [class*="border-[#FF3366]"],
+  #root [class*="border-[#0047FF]"],
+  #root [class*="border-l-[#FFEA00]"],
+  #root [class*="border-l-[#FF2E63]"],
+  #root [class*="border-l-[#0047FF]"],
+  #root [class*="border-t-8 border-[#0047FF]"],
+  #root [class*="border-[#00E676]"] {
+    border-color: #1E1E2E !important;
+  }
+
+  #root [class*="bg-[#FFEA00]"],
+  #root [class*="bg-[#FFD600]"],
+  #root [class*="bg-[#FF2E63]"],
+  #root [class*="bg-[#FF2F7D]"],
+  #root [class*="bg-[#FF3366]"],
+  #root [class*="bg-[#0047FF]"],
+  #root [class*="bg-[#003BCC]"],
+  #root [class*="bg-[#1E232B]"],
+  #root [class*="bg-[#0A0C10]"],
+  #root [class*="bg-[#0B0D10]"],
+  #root [class*="bg-[#111317]"] {
+    background-color: #111116 !important;
+  }
+
+  #root [class*="bg-[#1A1D24]"] {
+    background-color: #16161D !important;
+  }
+
+  #root [class*="text-[#FFEA00]"],
+  #root [class*="text-[#FFD600]"],
+  #root [class*="text-[#0047FF]"],
+  #root [class*="text-[#093AD3]"] {
+    color: #FFFFFF !important;
+  }
+
+  #root [class*="text-[#FF2E63]"],
+  #root [class*="text-[#FF2F7D]"],
+  #root [class*="text-[#FF3366]"] {
+    color: #F87171 !important;
+  }
+
+  #root [class*="text-[#00E676]"] {
+    color: #4ADE80 !important;
+  }
+
+  #root [class*="bg-[#00E676]"] {
+    background-color: #4ADE80 !important;
+    color: #0A0A0F !important;
+  }
+
+  #root [class*="text-white/70"],
+  #root [class*="text-white/60"],
+  #root [class*="text-white/50"],
+  #root [class*="text-white/45"] {
+    color: #9CA3AF !important;
+  }
+
+  #root [class*="text-white/40"],
+  #root [class*="text-white/35"],
+  #root [class*="text-white/30"],
+  #root [class*="text-white/20"] {
+    color: #6B7280 !important;
+  }
+
+  #root .re-primary-cta {
+    background: #FFFFFF !important;
+    color: #0A0A0F !important;
+    border-color: #FFFFFF !important;
+  }
+
+  #root .re-secondary-cta {
+    background: transparent !important;
+    color: #FFFFFF !important;
+    border-color: #1E1E2E !important;
+  }
+
+  #root .re-betr-button {
+    background: #093AD3 !important;
+    border-color: #093AD3 !important;
+    color: #FFFFFF !important;
+  }
+
+  #root .re-betr-button:hover {
+    opacity: 0.9;
   }
 
   /**

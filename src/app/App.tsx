@@ -120,12 +120,12 @@ const NRL_COLORS: Record<
 
 function getTeamColors(teamName: string) {
   if (!teamName)
-    return { primary: "#0B0D10", secondary: "#0047FF" };
+    return { primary: "#16161D", secondary: "#9CA3AF" };
   const normalized = teamName.toLowerCase();
   for (const [key, value] of Object.entries(NRL_COLORS)) {
     if (normalized.includes(key)) return value;
   }
-  return { primary: "#0B0D10", secondary: "#0047FF" };
+  return { primary: "#16161D", secondary: "#9CA3AF" };
 }
 
 const NRL_MASCOTS: Record<string, React.ElementType> = {
@@ -238,7 +238,7 @@ function TeamLogo({
 
   return (
     <div
-      className={`flex items-center justify-center border-2 shadow-[2px_2px_0px_rgba(255,255,255,0.1)] shrink-0 ${className}`}
+      className={`flex items-center justify-center border shrink-0 ${className}`}
       style={{
         backgroundColor: colors.primary,
         color: colors.secondary,
@@ -408,8 +408,8 @@ function GlowOrb({
 }) {
   return (
     <div
-      className={`absolute blur-3xl opacity-20 pointer-events-none ${className || ""}`}
-      style={{ background: gradient }}
+      className={`absolute hidden pointer-events-none ${className || ""}`}
+      style={{ background: "transparent" }}
     />
   );
 }
@@ -423,7 +423,7 @@ function GlassCard({
 }) {
   return (
     <div
-      className={`bg-[#111317] border-2 border-white/10 shadow-[8px_8px_0_0_#0047FF] ${className}`}
+      className={`bg-[#111116] border border-[#1E1E2E] ${className}`}
     >
       {children}
     </div>
@@ -443,35 +443,20 @@ function MetricCard({
   icon: React.ReactNode;
   accent?: "neutral" | "green" | "gold" | "blue";
 }) {
-  const accentBorder = {
-    neutral: "border-white/10",
-    green: "border-[#00E676]",
-    gold: "border-[#FFEA00]",
-    blue: "border-[#0047FF]",
-  }[accent];
-
   const accentText = {
     neutral: "text-white/50",
-    green: "text-[#00E676]",
-    gold: "text-[#FFEA00]",
-    blue: "text-[#0047FF]",
-  }[accent];
-
-  const accentShadow = {
-    neutral: "shadow-[4px_4px_0_0_#1E232B]",
-    green: "shadow-[4px_4px_0_0_#00E676]",
-    gold: "shadow-[4px_4px_0_0_#FFEA00]",
-    blue: "shadow-[4px_4px_0_0_#0047FF]",
+    green: "text-[#4ADE80]",
+    gold: "text-white",
+    blue: "text-white",
   }[accent];
 
   return (
     <div
-      className={`bg-[#111317] p-4 md:p-6 flex flex-col justify-between min-h-[120px] md:min-h-[150px] relative overflow-hidden border-2 ${accentBorder} ${accentShadow}`}
+      className="bg-[#111116] p-6 md:p-7 flex flex-col justify-between min-h-[120px] md:min-h-[150px] relative overflow-hidden border border-[#1E1E2E]"
     >
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.02),transparent_50%)]" />
       <div className="relative z-10">
         <div className="flex justify-between items-start mb-2 md:mb-4">
-          <div className="text-[10px] md:text-xs uppercase tracking-widest text-white/50 font-black">
+          <div className="text-[10px] md:text-xs uppercase tracking-widest text-[#9CA3AF] font-medium">
             {label}
           </div>
           <div
@@ -481,14 +466,14 @@ function MetricCard({
           </div>
         </div>
         <div
-          className="text-2xl md:text-3xl lg:text-4xl font-black tracking-tight text-white mb-1 md:mb-2 truncate"
+          className="text-2xl md:text-3xl lg:text-4xl font-semibold tracking-tight text-white mb-1 md:mb-2 truncate"
           title={value}
         >
           {value}
         </div>
       </div>
       <div
-        className="text-[10px] md:text-xs lg:text-sm font-bold text-white/50 relative z-10 uppercase tracking-wider truncate"
+        className="text-[10px] md:text-xs lg:text-sm font-medium text-[#9CA3AF] relative z-10 uppercase tracking-wider truncate"
         title={typeof subtext === "string" ? subtext : ""}
       >
         {subtext}
@@ -513,39 +498,40 @@ function SidebarItem({
   return (
     <button
       onClick={onClick}
-      className={`w-full flex items-center justify-between px-4 py-4 min-h-[64px] transition-all border-l-4 ${
+      className={`w-full flex items-center justify-between px-4 py-4 min-h-[64px] transition-all border ${
         active
-          ? "bg-[#1E232B] border-[#FFEA00] text-white shadow-[4px_4px_0_0_#FF2E63]"
-          : "bg-transparent border-transparent text-white/50 hover:text-white hover:bg-white/[0.03]"
+          ? "bg-[#16161D] border-[#1E1E2E] text-white"
+          : "bg-transparent border-transparent text-[#6B7280] hover:text-white hover:bg-white/[0.03]"
       }`}
     >
       <div className="flex items-center gap-4 min-w-0">
         <div
-          className={`w-8 h-8 flex items-center justify-center shrink-0 ${active ? "text-[#FFEA00]" : "text-white/50"}`}
+          className={`w-8 h-8 flex items-center justify-center shrink-0 ${active ? "text-white" : "text-[#6B7280]"}`}
         >
           {icon}
         </div>
         <div className="flex flex-col items-start gap-1 min-w-0">
           <span
-            className={`text-base tracking-wide uppercase whitespace-nowrap ${active ? "font-black" : "font-bold"}`}
+            className={`text-base tracking-wide uppercase whitespace-nowrap ${active ? "font-semibold" : "font-medium"}`}
           >
             {label}
           </span>
           {premium && (
             <span
-              className={`inline-flex w-fit px-2 py-0.5 text-[8px] font-black uppercase tracking-widest border leading-none ${
+              className={`inline-flex w-fit items-center gap-1 px-0 py-0.5 text-[8px] font-medium uppercase tracking-widest leading-none ${
                 active
-                  ? "bg-[#FFEA00] text-black border-[#FFEA00]"
-                  : "bg-[#FF2E63]/10 text-[#FF2E63] border-[#FF2E63]/40"
+                  ? "text-[#9CA3AF]"
+                  : "text-[#6B7280]"
               }`}
             >
+              <Lock className="w-2.5 h-2.5" />
               Premium
             </span>
           )}
         </div>
       </div>
       <ChevronRight
-        className={`w-5 h-5 shrink-0 ${active ? "opacity-100 text-[#FFEA00]" : "opacity-0"}`}
+        className={`w-5 h-5 shrink-0 ${active ? "opacity-100 text-white" : "opacity-0"}`}
       />
     </button>
   );
@@ -559,11 +545,11 @@ function SectionHeader({
   subtitle: string;
 }) {
   return (
-    <div className="mb-4 md:mb-8 border-b-2 border-white/10 pb-3 md:pb-4">
-      <h2 className="text-xl md:text-2xl font-black text-white uppercase tracking-tight mb-1 md:mb-2">
+    <div className="mb-6 md:mb-8 border-b border-[#1E1E2E] pb-4 md:pb-5">
+      <h2 className="text-xl md:text-2xl font-semibold text-white uppercase tracking-tight mb-1 md:mb-2">
         {title}
       </h2>
-      <div className="text-[10px] md:text-sm font-bold text-white/50 uppercase tracking-widest">
+      <div className="text-[10px] md:text-sm font-medium text-[#9CA3AF] uppercase tracking-widest">
         {subtitle}
       </div>
     </div>
@@ -576,17 +562,15 @@ function ResponsibleGamblingNotice({
   compact?: boolean;
 }) {
   return (
-    <div
-      className={`border-2 border-black bg-white text-black ${compact ? "px-3 py-2" : "px-3 py-2 md:px-4"}`}
-    >
-      <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-center text-[9px] md:text-[10px] font-black uppercase tracking-widest leading-snug">
+    <div className={`border border-[#1E1E2E] bg-[#111116] text-[#9CA3AF] ${compact ? "px-3 py-2" : "px-3 py-2 md:px-4"}`}>
+      <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-center text-[9px] md:text-[10px] font-medium uppercase tracking-widest leading-snug">
         <span>What&apos;s gambling really costing you?</span>
-        <span className="text-black/35">·</span>
+        <span className="text-[#6B7280]">·</span>
         <span>Free confidential support:</span>
         <span>call</span>
         <a
           href="tel:1800858858"
-          className="underline decoration-2 underline-offset-2 hover:text-[#0047FF] transition-colors"
+          className="text-white underline underline-offset-2 hover:opacity-80 transition"
         >
           1800 858 858
         </a>
@@ -595,11 +579,11 @@ function ResponsibleGamblingNotice({
           href="https://www.gamblinghelponline.org.au/"
           target="_blank"
           rel="noopener noreferrer"
-          className="underline decoration-2 underline-offset-2 hover:text-[#0047FF] transition-colors"
+          className="text-white underline underline-offset-2 hover:opacity-80 transition"
         >
           gamblinghelponline.org.au
         </a>
-        <span className="text-black/35">·</span>
+        <span className="text-[#6B7280]">·</span>
         <span>18+ only</span>
       </div>
     </div>
@@ -1093,7 +1077,7 @@ function getTryScorerSignal(row: TryScorerRow, bestBetKeys?: Set<string>) {
   if (bestBetKeys?.has(getTryScorerKey(row))) {
     return {
       label: "Best Bet",
-      className: "bg-[#FF2E63] text-white",
+      className: "bg-[#16161D] border border-[#1E1E2E] text-white",
       sortRank: 3,
     };
   }
@@ -1101,7 +1085,7 @@ function getTryScorerSignal(row: TryScorerRow, bestBetKeys?: Set<string>) {
   if (highProbabilityNearFair) {
     return {
       label: "High Prob",
-      className: "bg-[#0047FF] text-white",
+      className: "bg-[#16161D] border border-[#1E1E2E] text-white",
       sortRank: 2,
     };
   }
@@ -1109,7 +1093,7 @@ function getTryScorerSignal(row: TryScorerRow, bestBetKeys?: Set<string>) {
   if (clearValue) {
     return {
       label: "Value",
-      className: "bg-[#FFEA00] text-black",
+      className: "bg-[#16161D] border border-[#1E1E2E] text-white",
       sortRank: 1,
     };
   }
@@ -1118,10 +1102,10 @@ function getTryScorerSignal(row: TryScorerRow, bestBetKeys?: Set<string>) {
 }
 
 function getTryScorerSignalClass(label?: string) {
-  if (label === "Best Bet") return "bg-[#FF2E63] text-white";
-  if (label === "High Prob") return "bg-[#0047FF] text-white";
-  if (label === "Value") return "bg-[#FFEA00] text-black";
-  return "bg-white/10 text-white/50";
+  if (label === "Best Bet") return "bg-[#16161D] border border-[#1E1E2E] text-white";
+  if (label === "High Prob") return "bg-[#16161D] border border-[#1E1E2E] text-white";
+  if (label === "Value") return "bg-[#16161D] border border-[#1E1E2E] text-white";
+  return "bg-[#16161D] border border-[#1E1E2E] text-[#9CA3AF]";
 }
 
 function getFeaturedPrediction(predictions: PredictionRow[]) {
@@ -1672,7 +1656,7 @@ function buildDashboardData(
 function ResultPill({ result }: { result: "W" | "L" | "P" }) {
   if (result === "W") {
     return (
-      <span className="inline-flex items-center justify-center w-8 h-8 bg-[#00E676] text-black text-sm font-black shadow-[4px_4px_0_0_#111317]">
+      <span className="inline-flex items-center justify-center w-8 h-8 bg-[#4ADE80] text-[#0A0A0F] text-sm font-semibold">
         W
       </span>
     );
@@ -1680,14 +1664,14 @@ function ResultPill({ result }: { result: "W" | "L" | "P" }) {
 
   if (result === "L") {
     return (
-      <span className="inline-flex items-center justify-center w-8 h-8 bg-[#FF2E63] text-white text-sm font-black shadow-[4px_4px_0_0_#111317]">
+      <span className="inline-flex items-center justify-center w-8 h-8 bg-[#F87171] text-[#0A0A0F] text-sm font-semibold">
         L
       </span>
     );
   }
 
   return (
-    <span className="inline-flex items-center justify-center h-8 px-3 bg-[#1E232B] text-white/50 text-xs font-bold uppercase tracking-widest border border-white/10">
+    <span className="inline-flex items-center justify-center h-8 px-3 bg-[#16161D] text-[#9CA3AF] text-xs font-medium uppercase tracking-widest border border-[#1E1E2E]">
       Placed
     </span>
   );
@@ -1700,10 +1684,10 @@ function ConfidenceBadge({
 }) {
   const styles =
     confidence === "Strong"
-      ? "bg-[#FFEA00] text-black"
+      ? "bg-[#16161D] text-white border border-[#1E1E2E]"
       : confidence === "Value"
-        ? "bg-[#00E676] text-black"
-        : "bg-[#1E232B] text-white border border-white/10";
+        ? "bg-[#16161D] text-white border border-[#1E1E2E]"
+        : "bg-[#16161D] text-[#9CA3AF] border border-[#1E1E2E]";
 
   return (
     <span
@@ -1774,10 +1758,10 @@ function isBetrBookmaker(name?: string) {
 
 function getAffiliateButtonClass(bookmaker: string | undefined, sizeClasses: string) {
   const colorClasses = isBetrBookmaker(bookmaker)
-    ? "border-[#093AD3] bg-[#093AD3] text-white shadow-[4px_4px_0_0_rgba(9,58,211,0.65)]"
-    : "border-[#FFEA00] bg-[#FFEA00] text-black shadow-[4px_4px_0_0_#FF2E63]";
+    ? "re-betr-button border-[#093AD3] bg-[#093AD3] text-white"
+    : "re-primary-cta border-white bg-white text-[#0A0A0F]";
 
-  return `inline-flex max-w-full items-center justify-center gap-2 border-2 ${sizeClasses} font-black uppercase tracking-widest ${colorClasses} transition hover:-translate-y-0.5 hover:brightness-110`;
+  return `inline-flex max-w-full items-center justify-center gap-2 border ${sizeClasses} font-medium uppercase tracking-widest ${colorClasses} transition hover:opacity-90`;
 }
 
 function AffiliateMarketButton({
@@ -2135,7 +2119,7 @@ function PaymentGateModal({
         className="absolute inset-0 bg-black/80 backdrop-blur-sm"
         onClick={onClose}
       />
-      <div className="relative w-full max-w-md bg-[#111317] border-4 border-[#FF2E63] shadow-[8px_8px_0_0_#FF2E63] p-8 sm:p-10">
+      <div className="relative w-full max-w-md bg-[#111116] border border-[#1E1E2E] p-8 sm:p-10">
         <button
           onClick={onClose}
           className="absolute top-4 right-4 text-white/40 hover:text-white transition-colors"
@@ -2144,30 +2128,30 @@ function PaymentGateModal({
         </button>
 
         <div className="flex items-center gap-3 mb-6">
-          <div className="bg-[#FF2E63] p-2.5">
+          <div className="bg-[#16161D] border border-[#1E1E2E] p-2.5">
             <Lock className="w-6 h-6 text-white stroke-[3px]" />
           </div>
           <div>
-            <h3 className="text-xl font-black text-white uppercase tracking-tight">
+            <h3 className="text-xl font-semibold text-white uppercase tracking-tight">
               Premium Access
             </h3>
-            <p className="text-[10px] font-bold text-[#FFEA00] uppercase tracking-widest">
+            <p className="text-[10px] font-medium text-[#9CA3AF] uppercase tracking-widest">
               Subscriber login or $9/week
             </p>
           </div>
         </div>
 
-        <p className="text-sm text-white/70 font-bold leading-relaxed mb-6">
+        <p className="text-sm text-[#9CA3AF] font-normal leading-relaxed mb-6">
           Already Premium? Enter your subscriber email and we’ll unlock access instantly. New here? Use the same email to continue to secure Stripe checkout.
         </p>
 
         {step === "processing" ? (
           <div className="flex flex-col items-center text-center py-6">
-            <RefreshCw className="w-10 h-10 mb-5 animate-spin text-[#FF2E63]" />
-            <div className="text-white font-black uppercase tracking-tight mb-2">
+            <RefreshCw className="w-10 h-10 mb-5 animate-spin text-white" />
+            <div className="text-white font-semibold uppercase tracking-tight mb-2">
               Redirecting to Stripe
             </div>
-            <p className="text-xs text-white/50 font-bold uppercase tracking-wider">
+            <p className="text-xs text-[#9CA3AF] font-medium uppercase tracking-wider">
               Secure checkout is opening now.
             </p>
           </div>
@@ -2188,12 +2172,12 @@ function PaymentGateModal({
                 placeholder="your@email.com"
                 autoFocus
                 disabled={submitting}
-                className="w-full bg-[#0B0D10] border-2 border-white/10 text-white font-bold text-base pl-12 pr-4 py-4 placeholder:text-white/20 focus:outline-none focus:border-[#FF2E63] transition-colors disabled:opacity-50"
+                className="w-full bg-[#0A0A0F] border border-[#1E1E2E] text-white font-normal text-base pl-12 pr-4 py-4 placeholder:text-[#6B7280] focus:outline-none focus:border-white/40 transition-colors disabled:opacity-50"
               />
             </div>
 
             {errorMsg && (
-              <p className="text-[#FF2E63] text-xs font-bold uppercase tracking-wider">
+              <p className="text-[#F87171] text-xs font-medium uppercase tracking-wider">
                 {errorMsg}
               </p>
             )}
@@ -2201,7 +2185,7 @@ function PaymentGateModal({
             <button
               type="submit"
               disabled={submitting}
-              className="w-full bg-[#FF2E63] text-white py-4 text-base font-black uppercase tracking-wider hover:bg-[#E62959] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-[4px_4px_0_0_#0047FF]"
+              className="w-full re-primary-cta border py-4 text-base font-medium uppercase tracking-wider hover:opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {submitting ? (
                 <RefreshCw className="w-5 h-5 animate-spin" />
@@ -2215,7 +2199,7 @@ function PaymentGateModal({
           </form>
         )}
 
-        <p className="text-[10px] text-white/30 font-bold uppercase tracking-wider mt-4 text-center">
+        <p className="text-[10px] text-[#6B7280] font-medium uppercase tracking-wider mt-4 text-center">
           Existing subscribers will not be charged again. Secure payment handled by Stripe.
         </p>
       </div>
@@ -2305,7 +2289,7 @@ function EmailGateModal({
         className="absolute inset-0 bg-black/80 backdrop-blur-sm"
         onClick={onClose}
       />
-      <div className="relative w-full max-w-md bg-[#111317] border-4 border-white shadow-[8px_8px_0_0_#0047FF] p-8 sm:p-10">
+      <div className="relative w-full max-w-md bg-[#111116] border border-[#1E1E2E] p-8 sm:p-10">
         <button
           onClick={onClose}
           className="absolute top-4 right-4 text-white/40 hover:text-white transition-colors"
@@ -2314,20 +2298,20 @@ function EmailGateModal({
         </button>
 
         <div className="flex items-center gap-3 mb-6">
-          <div className="bg-[#FFEA00] p-2.5">
-            <Lock className="w-6 h-6 text-black stroke-[3px]" />
+          <div className="bg-[#16161D] border border-[#1E1E2E] p-2.5">
+            <Lock className="w-6 h-6 text-white stroke-[3px]" />
           </div>
           <div>
-            <h3 className="text-xl font-black text-white uppercase tracking-tight">
+            <h3 className="text-xl font-semibold text-white uppercase tracking-tight">
               UNLOCK INSTANT ACCESS
             </h3>
-            <p className="text-[10px] font-bold text-[#FFEA00] uppercase tracking-widest">
+            <p className="text-[10px] font-medium text-[#9CA3AF] uppercase tracking-widest">
               FREE — NO CREDIT CARD NEEDED
             </p>
           </div>
         </div>
 
-        <p className="text-sm text-white/70 font-bold leading-relaxed mb-6">
+        <p className="text-sm text-[#9CA3AF] font-normal leading-relaxed mb-6">
           Enter your email to access model predictions, projected scores and Betr market links instantly. Free, no credit card needed.
         </p>
 
@@ -2349,7 +2333,7 @@ function EmailGateModal({
                   placeholder="your@email.com"
                   autoFocus
                   disabled={submitting}
-                  className="w-full bg-[#0B0D10] border-2 border-white/10 text-white font-bold text-base pl-12 pr-4 py-4 placeholder:text-white/20 focus:outline-none focus:border-[#FFEA00] transition-colors disabled:opacity-50"
+                  className="w-full bg-[#0A0A0F] border border-[#1E1E2E] text-white font-normal text-base pl-12 pr-4 py-4 placeholder:text-[#6B7280] focus:outline-none focus:border-white/40 transition-colors disabled:opacity-50"
                 />
               </div>
               <div className="relative">
@@ -2360,7 +2344,7 @@ function EmailGateModal({
                     setErrorMsg("");
                   }}
                   disabled={submitting}
-                  className="w-full appearance-none bg-[#0B0D10] border-2 border-white/10 text-white font-bold text-base px-4 py-4 focus:outline-none focus:border-[#FFEA00] transition-colors disabled:opacity-50"
+                  className="w-full appearance-none bg-[#0A0A0F] border border-[#1E1E2E] text-white font-normal text-base px-4 py-4 focus:outline-none focus:border-white/40 transition-colors disabled:opacity-50"
                 >
                   <option value="" className="text-black">
                     Select your team
@@ -2376,7 +2360,7 @@ function EmailGateModal({
           ) : (
             <>
               {successMsg && (
-                <div className="bg-[#00E676]/10 text-[#00E676] border border-[#00E676]/20 p-3 text-xs font-bold uppercase tracking-wider">
+                <div className="bg-[#16161D] text-[#4ADE80] border border-[#1E1E2E] p-3 text-xs font-medium uppercase tracking-wider">
                   {successMsg}
                 </div>
               )}
@@ -2392,14 +2376,14 @@ function EmailGateModal({
                   maxLength={6}
                   autoFocus
                   disabled={submitting}
-                  className="w-full bg-[#0B0D10] border-2 border-white/10 text-white font-black text-2xl text-center tracking-[0.5em] py-4 placeholder:text-white/20 placeholder:tracking-normal focus:outline-none focus:border-[#00E676] transition-colors disabled:opacity-50"
+                  className="w-full bg-[#0A0A0F] border border-[#1E1E2E] text-white font-semibold text-2xl text-center tracking-[0.5em] py-4 placeholder:text-[#6B7280] placeholder:tracking-normal focus:outline-none focus:border-white/40 transition-colors disabled:opacity-50"
                 />
               </div>
             </>
           )}
 
           {errorMsg && (
-            <p className="text-[#FF2E63] text-xs font-bold uppercase tracking-wider">
+            <p className="text-[#F87171] text-xs font-medium uppercase tracking-wider">
               {errorMsg}
             </p>
           )}
@@ -2407,7 +2391,7 @@ function EmailGateModal({
           <button
             type="submit"
             disabled={submitting}
-            className="w-full bg-[#FFEA00] text-black py-4 text-base font-black uppercase tracking-wider hover:bg-[#FFD600] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-[4px_4px_0_0_#FF2E63]"
+            className="w-full re-primary-cta border py-4 text-base font-medium uppercase tracking-wider hover:opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             {submitting ? (
               <RefreshCw className="w-5 h-5 animate-spin" />
@@ -2425,7 +2409,7 @@ function EmailGateModal({
             <button
               type="button"
               onClick={() => { setStep("email"); setOtp(""); setSuccessMsg(""); setErrorMsg(""); }}
-              className="text-white/40 hover:text-white text-xs font-bold uppercase tracking-wider transition-colors mt-2"
+              className="text-[#6B7280] hover:text-white text-xs font-medium uppercase tracking-wider transition-colors mt-2"
             >
               Use a different email
             </button>
@@ -2434,13 +2418,13 @@ function EmailGateModal({
 
         {step === "email" && (
           <div className="mt-6 text-center">
-            <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest">
+            <p className="text-[10px] font-medium text-[#6B7280] uppercase tracking-widest">
               INSTANT ACCESS. NO WAITING.
             </p>
           </div>
         )}
 
-        <p className="text-[10px] text-white/30 font-bold uppercase tracking-wider mt-4 text-center">
+        <p className="text-[10px] text-[#6B7280] font-medium uppercase tracking-wider mt-4 text-center">
           FREE FOREVER. UNSUBSCRIBE ANYTIME.
         </p>
       </div>
@@ -2467,13 +2451,13 @@ function PublicNav({
   ];
 
   return (
-    <div className="px-4 py-3 sm:px-6 sm:py-5 sticky top-2 sm:top-6 z-40 bg-[#111317] border-4 border-white shadow-[4px_4px_0_0_#0047FF] sm:shadow-[8px_8px_0_0_#0047FF]">
+    <div className="px-4 py-3 sm:px-6 sm:py-5 sticky top-2 sm:top-6 z-40 bg-[#111116] border border-[#1E1E2E]">
       <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3 sm:gap-6">
         <div>
-          <div className="text-2xl sm:text-4xl font-black tracking-tighter text-white uppercase">
+          <div className="text-2xl sm:text-4xl font-semibold tracking-tight text-white uppercase">
             RightEdge
           </div>
-          <div className="text-[9px] sm:text-xs text-[#00E676] font-bold tracking-widest uppercase mt-1">
+          <div className="text-[9px] sm:text-xs text-[#9CA3AF] font-medium tracking-widest uppercase mt-1">
             NRL analytics and value insights
           </div>
         </div>
@@ -2487,14 +2471,14 @@ function PublicNav({
                 <button
                   key={item.id}
                   onClick={() => setPage(item.id)}
-                  className={`${item.id === "home" ? "hidden sm:inline-flex" : "inline-flex flex-1 sm:flex-none"} shrink-0 items-center justify-center px-3 py-2 sm:px-5 sm:py-2.5 text-[11px] sm:text-sm font-black uppercase tracking-wider transition-colors ${
+                  className={`${item.id === "home" ? "hidden sm:inline-flex" : "inline-flex flex-1 sm:flex-none"} shrink-0 items-center justify-center px-3 py-2 sm:px-5 sm:py-2.5 text-[11px] sm:text-sm font-medium uppercase tracking-wider transition ${
                     active && isPredictions
-                      ? "bg-[#1E232B] text-[#FFEA00] border border-[#FFEA00]/60 sm:bg-[#FFEA00] sm:text-black sm:border-0 sm:shadow-[4px_4px_0_0_#FF2E63]"
+                      ? "bg-white text-[#0A0A0F] border border-white"
                       : active
-                        ? "bg-[#1E232B] text-[#FFEA00] border-2 border-[#FFEA00] shadow-none translate-x-[2px] translate-y-[2px] sm:translate-x-[4px] sm:translate-y-[4px]"
+                        ? "bg-white text-[#0A0A0F] border border-white"
                         : isPredictions
-                          ? "bg-[#1E232B] text-white border border-white/15 hover:border-[#FFEA00]/70 sm:bg-[#FFEA00] sm:text-black sm:hover:bg-[#FFD600] sm:border-0 sm:shadow-[4px_4px_0_0_#FF2E63]"
-                          : "bg-[#1E232B] text-white hover:bg-white hover:text-black border border-white/10 hover:border-white"
+                          ? "bg-transparent text-white border border-[#1E1E2E] hover:bg-white hover:text-[#0A0A0F]"
+                          : "bg-transparent text-white border border-[#1E1E2E] hover:bg-white hover:text-[#0A0A0F]"
                   }`}
                 >
                   {item.label}
@@ -2503,10 +2487,10 @@ function PublicNav({
             })}
             <button
               onClick={onPremiumLogin}
-              className="shrink-0 inline-flex flex-1 sm:flex-none items-center justify-center gap-2 px-3 py-2 sm:px-5 sm:py-2.5 text-[11px] sm:text-sm font-black uppercase tracking-wider transition-colors bg-[#FF2E63] text-white hover:bg-[#E62959] shadow-[2px_2px_0_0_#0047FF] sm:shadow-[4px_4px_0_0_#0047FF]"
+              className="shrink-0 inline-flex flex-1 sm:flex-none items-center justify-center gap-2 px-3 py-2 sm:px-5 sm:py-2.5 text-[11px] sm:text-sm font-medium uppercase tracking-wider transition re-secondary-cta border hover:opacity-80"
             >
               Premium Login
-              <Crown className="w-4 h-4 stroke-[3px]" />
+              <Lock className="w-4 h-4 stroke-[2px]" />
             </button>
           </div>
           <div className="hidden sm:flex gap-2 sm:gap-3">
@@ -2523,10 +2507,10 @@ function PublicNav({
                       setPage(item.id);
                     }
                   }}
-                  className={`shrink-0 px-4 py-2 sm:px-5 sm:py-2.5 text-xs sm:text-sm font-black uppercase tracking-wider transition-colors ${
+                  className={`shrink-0 px-4 py-2 sm:px-5 sm:py-2.5 text-xs sm:text-sm font-medium uppercase tracking-wider transition ${
                     active
-                      ? "bg-[#1E232B] text-[#FFEA00] border-2 border-[#FFEA00] shadow-none translate-x-[2px] translate-y-[2px] sm:translate-x-[4px] sm:translate-y-[4px]"
-                      : "bg-[#1E232B] text-white hover:bg-white hover:text-black border border-white/10 hover:border-white"
+                      ? "bg-white text-[#0A0A0F] border border-white"
+                      : "bg-transparent text-white hover:bg-white hover:text-[#0A0A0F] border border-[#1E1E2E]"
                   }`}
                 >
                   {item.label}
@@ -2885,13 +2869,12 @@ function OfficialPlayCard({ row }: { row: PredictionRow }) {
   ]);
 
   return (
-    <GlassCard className="p-5 md:p-8 relative overflow-hidden !border-[#FF2E63] !shadow-[8px_8px_0_0_#FF2E63] flex flex-col h-full">
-      <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(255,46,99,0.05),transparent_50%)]" />
+    <GlassCard className="p-6 md:p-8 relative overflow-hidden flex flex-col h-full">
       <div className="relative z-10 flex-1 flex flex-col">
         <div className="flex items-center justify-between mb-4 md:mb-6">
-          <span className="inline-flex items-center gap-2 bg-[#FF2E63] px-3 py-1.5 text-[10px] md:text-xs font-black text-white uppercase tracking-wider">
-            <Flame className="w-3 h-3 md:w-4 md:h-4" />
-            Official Play
+          <span className="inline-flex items-center gap-2 text-[10px] md:text-xs font-medium text-[#9CA3AF] uppercase tracking-wider">
+            <Lock className="w-3 h-3 md:w-4 md:h-4" />
+            Premium
           </span>
         </div>
 
@@ -2900,18 +2883,18 @@ function OfficialPlayCard({ row }: { row: PredictionRow }) {
             teamName={row.bestBet || row.predictedWinner}
             className="w-10 h-10 md:w-12 md:h-12 text-lg"
           />
-          <div className="text-xl md:text-3xl font-black text-white tracking-tight uppercase leading-none">
+          <div className="text-xl md:text-3xl font-semibold text-white tracking-tight uppercase leading-none">
             {row.bestBet || row.match}
           </div>
         </div>
-        <div className="text-[10px] md:text-sm font-bold text-[#FFEA00] uppercase tracking-widest mb-4 md:mb-6">
+        <div className="text-[10px] md:text-sm font-medium text-[#9CA3AF] uppercase tracking-widest mb-4 md:mb-6">
           {row.match} •{" "}
           {row.fixture
             ? `${row.fixture.day} ${row.fixture.dateLabel} @ ${row.fixture.aedt} AEST`
             : "Time TBC"}
         </div>
         {(row.predictedHomeScore || row.predictedAwayScore) && (
-          <div className="text-[10px] md:text-sm font-bold text-white/50 mb-6 md:mb-8 uppercase tracking-widest">
+          <div className="text-[10px] md:text-sm font-medium text-[#9CA3AF] mb-6 md:mb-8 uppercase tracking-widest">
             Projection:{" "}
             <span className="text-white">
               {row.homeTeam}{" "}
@@ -2922,59 +2905,59 @@ function OfficialPlayCard({ row }: { row: PredictionRow }) {
           </div>
         )}
 
-        <div className="grid grid-cols-3 gap-2 md:gap-4 border-t-2 border-white/10 pt-4 md:pt-6 mb-4 md:mb-6">
+        <div className="grid grid-cols-3 gap-2 md:gap-4 border-t border-[#1E1E2E] pt-4 md:pt-6 mb-4 md:mb-6">
           <div>
-            <div className="text-[10px] md:text-xs uppercase tracking-widest text-white/50 font-bold mb-1 md:mb-2">
+            <div className="text-[10px] md:text-xs uppercase tracking-widest text-[#9CA3AF] font-medium mb-1 md:mb-2">
               Market
             </div>
-            <div className="text-lg md:text-2xl font-black text-white">
+            <div className="text-lg md:text-2xl font-semibold text-white">
               {selectedOdds ? selectedOdds.toFixed(2) : "—"}
             </div>
           </div>
           <div>
-            <div className="text-[10px] md:text-xs uppercase tracking-widest text-white/50 font-bold mb-1 md:mb-2">
+            <div className="text-[10px] md:text-xs uppercase tracking-widest text-[#9CA3AF] font-medium mb-1 md:mb-2">
               Model
             </div>
-            <div className="text-lg md:text-2xl font-black text-white">
+            <div className="text-lg md:text-2xl font-semibold text-white">
               {selectedModel ? selectedModel.toFixed(2) : "—"}
             </div>
           </div>
           <div>
-            <div className="text-[10px] md:text-xs uppercase tracking-widest text-[#00E676] font-bold mb-1 md:mb-2">
+            <div className="text-[10px] md:text-xs uppercase tracking-widest text-[#9CA3AF] font-medium mb-1 md:mb-2">
               Edge
             </div>
-            <div className="text-lg md:text-2xl font-black text-[#00E676]">
+            <div className="text-lg md:text-2xl font-semibold text-[#4ADE80]">
               +{formatPercent(row.bestEdge, 2)}
             </div>
           </div>
         </div>
 
         {/* Live Multi-Bookie Comparison */}
-        <div className="mt-auto border-t-2 border-white/10 pt-6">
-          <div className="text-xs font-bold text-white/50 mb-4 uppercase tracking-widest flex items-center justify-between">
+        <div className="mt-auto border-t border-[#1E1E2E] pt-6">
+          <div className="text-xs font-medium text-[#9CA3AF] mb-4 uppercase tracking-widest flex items-center justify-between">
             <span>Live Bookmaker Prices</span>
             <span className="flex h-2 w-2 relative">
-              <span className="animate-ping-pong absolute inline-flex h-full w-full rounded-full bg-[#00E676] opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-[#00E676]"></span>
+              <span className="animate-ping-pong absolute inline-flex h-full w-full rounded-full bg-[#4ADE80] opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-[#4ADE80]"></span>
             </span>
           </div>
           <div className="flex flex-col gap-2 mb-6 min-h-[160px]">
             {isLoadingOdds ? (
               <div className="flex flex-col gap-2 h-full justify-center opacity-50">
-                <div className="h-12 bg-white/5 animate-pulse border-2 border-white/5" />
-                <div className="h-12 bg-white/5 animate-pulse border-2 border-white/5" />
-                <div className="h-12 bg-white/5 animate-pulse border-2 border-white/5" />
+                <div className="h-12 bg-white/5 animate-pulse border border-[#1E1E2E]" />
+                <div className="h-12 bg-white/5 animate-pulse border border-[#1E1E2E]" />
+                <div className="h-12 bg-white/5 animate-pulse border border-[#1E1E2E]" />
               </div>
             ) : (
               liveOdds.map((bookie) => {
                 const isBetr = isBetrBookmaker(bookie.name);
-                const className = `group flex items-center justify-between min-h-[52px] p-3.5 border-2 ${
+                const className = `group flex items-center justify-between min-h-[52px] p-3.5 border ${
                   isBetr
                     ? "border-[#093AD3] bg-[#093AD3]"
                     : bookie.isBest
-                      ? "border-[#00E676] bg-[rgba(0,230,118,0.05)]"
-                      : "border-white/10 bg-white/[0.03]"
-                } shadow-[3px_3px_0_0_rgba(0,71,255,0.35)] transition hover:-translate-y-0.5 hover:border-[#FFEA00] hover:bg-white/[0.06] hover:brightness-110`;
+                      ? "border-[#1E1E2E] bg-[#16161D]"
+                      : "border-[#1E1E2E] bg-white/[0.03]"
+                } transition hover:bg-white/[0.06]`;
                 const content = (
                   <>
                     <BookmakerName name={bookie.name} />
@@ -2985,15 +2968,15 @@ function OfficialPlayCard({ row }: { row: PredictionRow }) {
                             isBetr
                               ? "text-white"
                               : bookie.isBest
-                                ? "text-[#00E676]"
-                                : "text-white/70"
+                                ? "text-[#4ADE80]"
+                                : "text-[#9CA3AF]"
                           }`}
                         >
                           ${bookie.odds.toFixed(2)}
                         </span>
-                        <ArrowUpRight className="h-4 w-4 text-white/35 transition group-hover:text-[#FFEA00]" />
+                        <ArrowUpRight className="h-4 w-4 text-[#6B7280] transition group-hover:text-white" />
                       </div>
-                      <span className={isBetr ? "text-[9px] font-black uppercase tracking-widest text-white/80" : "text-[9px] font-black uppercase tracking-widest text-white/35 group-hover:text-[#FFEA00]"}>
+                      <span className={isBetr ? "text-[9px] font-medium uppercase tracking-widest text-white/80" : "text-[9px] font-medium uppercase tracking-widest text-[#6B7280] group-hover:text-white"}>
                         {isBetr ? "Back this market at Betr" : "View NRL markets"}
                       </span>
                     </div>
@@ -3017,11 +3000,11 @@ function OfficialPlayCard({ row }: { row: PredictionRow }) {
           </div>
         </div>
 
-        <div className="bg-[#111317] border-2 border-[#0047FF] shadow-[4px_4px_0_0_#0047FF] px-6 py-4 flex items-center justify-between">
-          <span className="text-sm font-bold text-white/50 uppercase tracking-widest">
+        <div className="bg-[#16161D] border border-[#1E1E2E] px-6 py-4 flex items-center justify-between">
+          <span className="text-sm font-medium text-[#9CA3AF] uppercase tracking-widest">
             Suggested stake
           </span>
-          <span className="text-2xl font-black text-white">
+          <span className="text-2xl font-semibold text-white">
             {row.stake > 0 ? formatCurrency(row.stake, 0) : "—"}
           </span>
         </div>
@@ -3039,7 +3022,7 @@ function HomeCard({
 }) {
   return (
     <div
-      className={`bg-[#111317] border-l-4 border-[#0047FF] shadow-2xl ${className}`}
+      className={`bg-[#111116] border border-[#1E1E2E] ${className}`}
     >
       {children}
     </div>
@@ -3056,40 +3039,37 @@ function PublicHero({
   onRequestPremium: (source: string) => void;
 }) {
   return (
-    <HomeCard className="p-6 md:p-8 md:py-10 relative overflow-hidden !border-[#FF2E63]">
-      <div className="absolute inset-0 bg-[#111317]" />
-      <div className="absolute -top-10 -left-8 h-[230px] w-[62%] rounded-br-[190px] bg-[#FF2E63]/95 sm:bg-[#FF2E63]/38" />
-      <div className="absolute -right-24 bottom-0 h-[210px] w-[58%] rounded-tl-[180px] bg-[#0047FF]/65 sm:bg-[#0047FF]/24" />
-      <div className="absolute inset-0 bg-[linear-gradient(100deg,rgba(17,19,23,0)_0%,rgba(17,19,23,0.08)_34%,rgba(17,19,23,0.92)_76%)] sm:bg-[linear-gradient(100deg,rgba(17,19,23,0.08),rgba(17,19,23,0.9)_74%)]" />
+    <HomeCard className="p-7 md:p-10 relative overflow-hidden">
+      <div className="absolute inset-0 bg-[#111116]" />
       <div className="relative z-10 max-w-[800px]">
-        <div className="inline-flex items-center gap-2 bg-[#FF2E63]/15 border border-[#FF2E63]/50 px-3 py-1.5 text-[10px] sm:text-xs font-bold text-[#FFEA00] sm:text-white mb-4 uppercase tracking-wider">
+        <div className="inline-flex items-center gap-2 bg-[#16161D] border border-[#1E1E2E] px-3 py-1.5 text-[10px] sm:text-xs font-medium text-[#9CA3AF] mb-5 uppercase tracking-wider">
           <Sparkles className="w-3.5 h-3.5" />
           NRL Match Intelligence
         </div>
 
-        <h1 className="text-3xl sm:text-4xl md:text-5xl font-black tracking-tighter text-white leading-[1.05] mb-4">
+        <h1 className="text-3xl sm:text-4xl md:text-5xl font-semibold tracking-tight text-white leading-[1.08] mb-5">
           Don&apos;t Go In Blind This NRL Round – Backed by Data, Not Guesswork.
         </h1>
         
-        <p className="text-sm sm:text-base md:text-lg text-white/70 leading-relaxed mb-6 font-bold max-w-[680px]">
+        <p className="text-sm sm:text-base md:text-lg text-[#9CA3AF] leading-relaxed mb-8 font-normal max-w-[680px]">
           See projected scores, model probabilities and match analysis for every NRL round.
         </p>
 
         <div className="flex flex-col sm:flex-row flex-wrap gap-3">
           <button
             onClick={() => onRequestPremium('hero_unlock_premium_picks')}
-            className="order-1 sm:order-2 hidden sm:inline-flex w-full sm:w-auto items-center justify-center gap-2 bg-[#0047FF] px-6 py-3 text-base font-black text-white hover:bg-[#003BCC] transition-colors uppercase tracking-wide"
+            className="order-1 sm:order-2 hidden sm:inline-flex w-full sm:w-auto items-center justify-center gap-2 re-secondary-cta border px-6 py-3 text-base font-medium text-white hover:opacity-80 transition uppercase tracking-wide"
           >
+            <Lock className="w-4 h-4 stroke-[2px]" />
             Unlock Premium Picks
-            <Crown className="w-4 h-4 stroke-[3px]" />
           </button>
 
           <button
             onClick={() => onGoApp('hero_unlock_best_bets')}
-            className="order-1 inline-flex w-full sm:w-auto items-center justify-center gap-2 bg-[#FFEA00] text-black px-8 py-3 text-base font-black hover:bg-[#FFD600] transition-colors uppercase tracking-wide shadow-[4px_4px_0_0_#FF2E63]"
+            className="order-1 inline-flex w-full sm:w-auto items-center justify-center gap-2 re-primary-cta border px-8 py-3 text-base font-medium hover:opacity-90 transition uppercase tracking-wide"
           >
             View Free Match Predictions
-            <ArrowRight className="w-4 h-4 stroke-[3px]" />
+            <ArrowRight className="w-4 h-4 stroke-[2px]" />
           </button>
         </div>
       </div>
@@ -3109,7 +3089,7 @@ function ReadMore({ children }: { children: React.ReactNode }) {
       {!expanded && (
         <button
           onClick={() => setExpanded(true)}
-          className="md:hidden text-[#FFEA00] text-[10px] font-black uppercase tracking-widest mt-2 border-b border-[#FFEA00]/30 hover:border-[#FFEA00]"
+          className="md:hidden text-white text-[10px] font-medium uppercase tracking-widest mt-2 border-b border-[#1E1E2E] hover:opacity-80"
         >
           + Read more
         </button>
@@ -3301,76 +3281,15 @@ function getFreeBetrTotalOutcomes(row: PredictionRow, markets?: SgmMarketBookmak
     .filter(Boolean) as FreeBetrMarketOutcome[];
 }
 
-function hexToRgba(hex: string, alpha: number) {
-  const clean = String(hex || "").replace("#", "");
-  if (!/^[0-9a-f]{6}$/i.test(clean)) return `rgba(9,58,211,${alpha})`;
-  const value = Number.parseInt(clean, 16);
-  const r = (value >> 16) & 255;
-  const g = (value >> 8) & 255;
-  const b = value & 255;
-  return `rgba(${r},${g},${b},${alpha})`;
-}
-
-function getContrastTextColor(hex: string) {
-  const clean = String(hex || "").replace("#", "");
-  if (!/^[0-9a-f]{6}$/i.test(clean)) return "#05070b";
-  const value = Number.parseInt(clean, 16);
-  const r = (value >> 16) & 255;
-  const g = (value >> 8) & 255;
-  const b = value & 255;
-  const brightness = (r * 299 + g * 587 + b * 114) / 1000;
-  return brightness > 150 ? "#05070b" : "#ffffff";
-}
-
 function getFreeBetrOutcomeStyle(outcome: FreeBetrMarketOutcome) {
-  if (outcome.teamColors) {
-    const { primary, secondary } = outcome.teamColors;
-    const priceColor = secondary || primary;
-
-    return {
-      cardStyle: {
-        borderColor: primary,
-        boxShadow: `3px 3px 0 0 ${hexToRgba(secondary || primary, 0.35)}`,
-      },
-      accentStyle: { backgroundColor: secondary || primary },
-      tagStyle: {
-        backgroundColor: secondary || primary,
-        color: getContrastTextColor(secondary || primary),
-      },
-      priceStyle: { color: priceColor },
-    };
-  }
-
-  if (outcome.tone === "over") {
-    return {
-      cardStyle: {
-        borderColor: "#00E676",
-        boxShadow: "3px 3px 0 0 rgba(0,230,118,0.30)",
-      },
-      accentStyle: { backgroundColor: "#00E676" },
-      tagStyle: { backgroundColor: "#00E676", color: "#05070b" },
-      priceStyle: { color: "#00E676" },
-    };
-  }
-  if (outcome.tone === "under") {
-    return {
-      cardStyle: {
-        borderColor: "#FF4D6D",
-        boxShadow: "3px 3px 0 0 rgba(255,77,109,0.28)",
-      },
-      accentStyle: { backgroundColor: "#FF4D6D" },
-      tagStyle: { backgroundColor: "#FF4D6D", color: "#ffffff" },
-      priceStyle: { color: "#FF4D6D" },
-    };
-  }
   return {
     cardStyle: {
-      borderColor: "#093AD3",
-      boxShadow: "3px 3px 0 0 rgba(9,58,211,0.36)",
+      borderColor: "#1E1E2E",
+      boxShadow: "none",
     },
-    accentStyle: { backgroundColor: "#093AD3" },
-    tagStyle: { backgroundColor: "#093AD3", color: "#ffffff" },
-    priceStyle: { color: "#093AD3" },
+    accentStyle: { backgroundColor: "transparent" },
+    tagStyle: { backgroundColor: "#16161D", color: "#FFFFFF", border: "1px solid #1E1E2E" },
+    priceStyle: { color: "#FFFFFF" },
   };
 }
 
@@ -3435,7 +3354,7 @@ function FreeBetrMarketsPanel({
 
   return (
     <div className="mt-3">
-      <div className="grid grid-cols-3 gap-1 mb-3 border border-white/10 bg-[#0A0C10] p-1">
+      <div className="grid grid-cols-3 gap-1 mb-4 border border-[#1E1E2E] bg-[#0A0A0F] p-1">
         {([
           ["h2h", "H2H"],
           ["line", "Line"],
@@ -3445,10 +3364,10 @@ function FreeBetrMarketsPanel({
             key={market}
             type="button"
             onClick={() => setActiveMarket(market)}
-            className={`min-h-[36px] px-2 text-[10px] font-black uppercase tracking-widest transition ${
+            className={`min-h-[36px] px-2 text-[10px] font-medium uppercase tracking-widest transition ${
               activeMarket === market
-                ? "bg-[#093AD3] text-white"
-                : "bg-transparent text-white/45 hover:bg-white/5 hover:text-white"
+                ? "bg-white text-[#0A0A0F]"
+                : "bg-transparent text-[#6B7280] hover:bg-white/5 hover:text-white"
             }`}
           >
             {label}
@@ -3458,8 +3377,8 @@ function FreeBetrMarketsPanel({
       <div className="min-h-[132px]">
         {isLoadingOdds ? (
           <div className="flex flex-col gap-2 opacity-50">
-            <div className="h-10 bg-white/5 animate-pulse border-2 border-white/5" />
-            <div className="h-10 bg-white/5 animate-pulse border-2 border-white/5" />
+            <div className="h-10 bg-white/5 animate-pulse border border-[#1E1E2E]" />
+            <div className="h-10 bg-white/5 animate-pulse border border-[#1E1E2E]" />
           </div>
         ) : outcomes.length > 0 ? (
           <div className="grid grid-cols-1 gap-2">
@@ -3470,7 +3389,7 @@ function FreeBetrMarketsPanel({
                 <BetrAffiliateLink
                   key={outcome.id}
                   payload={outcome.payload}
-                  className="group relative min-h-[118px] overflow-hidden border-2 bg-[#111317] transition hover:-translate-y-0.5 hover:bg-[#171B22]"
+                  className="group relative min-h-[118px] overflow-hidden border bg-[#111116] transition hover:bg-[#16161D]"
                   style={outcomeStyle.cardStyle}
                 >
                   <span
@@ -3478,7 +3397,7 @@ function FreeBetrMarketsPanel({
                     style={outcomeStyle.accentStyle}
                   />
                   <div className="relative pl-1">
-                    <div className="p-3 pb-2">
+                    <div className="p-4 pb-3">
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <div className="flex items-center gap-2 mb-2">
@@ -3489,38 +3408,38 @@ function FreeBetrMarketsPanel({
                             )}
                             <div className="min-w-0">
                               <span
-                                className="inline-flex px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest"
+                                className="inline-flex px-1.5 py-0.5 text-[8px] font-medium uppercase tracking-widest"
                                 style={outcomeStyle.tagStyle}
                               >
                                 {outcome.tag}
                               </span>
                             </div>
                           </div>
-                          <div className="text-base font-black text-white uppercase leading-tight">
+                          <div className="text-base font-semibold text-white uppercase leading-tight">
                             {outcome.label}
                           </div>
-                          <div className="mt-1 text-[9px] font-black uppercase tracking-widest text-white/50">
+                          <div className="mt-1 text-[9px] font-medium uppercase tracking-widest text-[#9CA3AF]">
                             {outcome.subLabel}
                           </div>
                         </div>
-                        <div className="mt-1 flex shrink-0 flex-col items-end border border-white/10 bg-white/[0.04] px-2 py-1 text-right shadow-[2px_2px_0_0_rgba(255,255,255,0.05)]">
-                          <span className="text-[7px] font-black uppercase tracking-widest text-white/40">
+                        <div className="mt-1 flex shrink-0 flex-col items-end border border-[#1E1E2E] bg-[#16161D] px-2 py-1 text-right">
+                          <span className="text-[7px] font-medium uppercase tracking-widest text-[#9CA3AF]">
                             Model
                           </span>
-                          <span className="text-base font-black leading-none text-[#00E676] tabular-nums">
+                          <span className="text-base font-semibold leading-none text-[#4ADE80] tabular-nums">
                             {Number.isFinite(outcome.modelPct) ? formatPercent(outcome.modelPct || 0, 0) : "—"}
                           </span>
                         </div>
                       </div>
                     </div>
-                    <div className="mx-3 mb-3 flex items-center justify-between gap-3 bg-[#093AD3] px-3 py-2 text-white shadow-[3px_3px_0_0_rgba(9,58,211,0.45)] transition group-hover:brightness-110">
+                    <div className="re-betr-button mx-4 mb-4 flex items-center justify-between gap-3 border border-[#093AD3] bg-[#093AD3] px-3 py-2 text-white transition group-hover:opacity-90">
                       <div className="flex items-center gap-2 min-w-0">
                         <BetrLogoMark className="h-6 w-6 rounded-sm" />
-                        <span className="text-[10px] font-black uppercase tracking-widest">
+                        <span className="text-[10px] font-medium uppercase tracking-widest">
                           Back at Betr
                         </span>
                       </div>
-                      <div className="shrink-0 text-2xl font-black leading-none">
+                      <div className="shrink-0 text-2xl font-semibold leading-none">
                         ${outcome.odds.toFixed(2)}
                       </div>
                     </div>
@@ -3532,19 +3451,19 @@ function FreeBetrMarketsPanel({
         ) : (
           <BetrAffiliateLink
             payload={buildFreeBetrPayload(row, activeMarket, "markets")}
-            className="group flex min-h-[92px] items-center justify-between gap-3 border-2 border-[#093AD3] bg-[#093AD3] p-4 shadow-[3px_3px_0_0_rgba(9,58,211,0.48)] transition hover:-translate-y-0.5 hover:brightness-110"
+            className="re-betr-button group flex min-h-[92px] items-center justify-between gap-3 border border-[#093AD3] bg-[#093AD3] p-4 transition hover:opacity-90"
           >
             <div className="min-w-0">
               <div className="flex items-center gap-2 mb-1">
                 <BetrLogoMark className="h-7 w-7" />
-                <span className="text-[10px] font-black uppercase tracking-widest text-white">
+                <span className="text-[10px] font-medium uppercase tracking-widest text-white">
                   Betr
                 </span>
               </div>
-              <div className="text-sm font-black text-white uppercase">
+              <div className="text-sm font-semibold text-white uppercase">
                 Back at Betr
               </div>
-              <div className="mt-1 text-[9px] font-black uppercase tracking-widest text-white/70">
+              <div className="mt-1 text-[9px] font-medium uppercase tracking-widest text-white/70">
                 View live markets
               </div>
             </div>
@@ -3592,28 +3511,25 @@ function FeaturedMatchPreview({
 
   return (
     <div className="mt-8 mb-4">
-      <h2 className="text-3xl font-black text-white mb-6 px-2 uppercase tracking-tight">
+      <h2 className="text-3xl font-semibold text-white mb-6 px-2 uppercase tracking-tight">
         Featured Match
       </h2>
-      <HomeCard className="p-8 md:p-12 relative overflow-hidden !border-[#0047FF]">
-        <div className="absolute inset-0 bg-[#111317]" />
-        <div className="absolute top-0 right-0 h-[390px] w-[82%] bg-[#0047FF]/95 sm:bg-[#0047FF]/58" />
-        <div className="absolute -left-48 top-0 h-[520px] w-[520px] rounded-full bg-[#111317]/95" />
-        <div className="absolute inset-x-0 bottom-0 h-2/5 bg-[linear-gradient(180deg,rgba(17,19,23,0),#111317_62%)]" />
+      <HomeCard className="p-8 md:p-12 relative overflow-hidden">
+        <div className="absolute inset-0 bg-[#111116]" />
         <div className="relative z-10 flex flex-col md:flex-row md:items-start justify-between gap-10">
           <div className="flex-1">
             <div className="flex flex-wrap items-center gap-4 mb-8">
               {isOfficialPlay ? (
-                <span className="inline-flex items-center gap-2 bg-[#FF2E63] px-3 py-1.5 text-sm font-bold text-white uppercase tracking-wider">
-                  <Flame className="w-4 h-4" />
-                  Official Play
+                <span className="inline-flex items-center gap-2 bg-[#16161D] border border-[#1E1E2E] px-3 py-1.5 text-sm font-medium text-[#9CA3AF] uppercase tracking-wider">
+                  <Lock className="w-4 h-4" />
+                  Premium
                 </span>
               ) : (
-                <span className="inline-flex items-center bg-white/[0.1] px-3 py-1.5 text-sm font-bold text-white uppercase tracking-wider">
+                <span className="inline-flex items-center bg-[#16161D] border border-[#1E1E2E] px-3 py-1.5 text-sm font-medium text-white uppercase tracking-wider">
                   Match Preview
                 </span>
               )}
-              <span className="text-sm font-bold text-[#FFEA00] uppercase tracking-widest">
+              <span className="text-sm font-medium text-[#9CA3AF] uppercase tracking-widest">
                 {row.fixture?.stadium || "Venue TBC"} •{" "}
                 {row.fixture
                   ? `${row.fixture.day} ${row.fixture.dateLabel} @ ${row.fixture.aedt} AEST`
@@ -3623,40 +3539,38 @@ function FeaturedMatchPreview({
 
             {/* Score card */}
             <div 
-              className="flex flex-col mb-8 max-w-3xl border-4 border-[#00E676]/40 bg-black/40 relative shadow-[8px_8px_0_0_rgba(255,255,255,0.05)]"
+              className="flex flex-col mb-8 max-w-3xl border border-[#1E1E2E] bg-[#111116] relative"
             >
-              <div className="absolute -top-3 -right-3 bg-[#0047FF] text-white text-[10px] sm:text-xs font-black uppercase tracking-widest px-4 py-2 shadow-[4px_4px_0_0_#111317] z-30">
+              <div className="absolute -top-3 -right-3 bg-[#16161D] border border-[#1E1E2E] text-[#9CA3AF] text-[10px] sm:text-xs font-medium uppercase tracking-widest px-4 py-2 z-30">
                 Projected Score
               </div>
 
-              <div className="flex items-center justify-between p-6 sm:p-8 border-b-4 border-white/10 relative overflow-hidden">
-                <div className="absolute inset-0 bg-gradient-to-r from-transparent to-[#0047FF]/10 mix-blend-overlay"></div>
+              <div className="flex items-center justify-between p-6 sm:p-8 border-b border-[#1E1E2E] relative overflow-hidden">
                 <div className="flex items-center gap-4 sm:gap-6 relative z-10">
                   <TeamLogo
                     teamName={row.homeTeam}
                     className="w-12 h-12 sm:w-16 sm:h-16 opacity-80"
                   />
-                  <span className="text-3xl sm:text-4xl md:text-5xl font-black text-white tracking-tight uppercase">
+                  <span className="text-3xl sm:text-4xl md:text-5xl font-semibold text-white tracking-tight uppercase">
                     {row.homeTeam}
                   </span>
                 </div>
-                <div className="text-4xl sm:text-5xl md:text-6xl font-black text-[#0047FF] tracking-tighter leading-none relative z-10">
+                <div className="text-4xl sm:text-5xl md:text-6xl font-semibold text-white tracking-tight leading-none relative z-10">
                   {Math.round(row.predictedHomeScore)}
                 </div>
               </div>
 
               <div className="flex items-center justify-between p-6 sm:p-8 relative overflow-hidden">
-                <div className="absolute inset-0 bg-gradient-to-r from-transparent to-[#0047FF]/10 mix-blend-overlay"></div>
                 <div className="flex items-center gap-4 sm:gap-6 relative z-10">
                   <TeamLogo
                     teamName={row.awayTeam}
                     className="w-12 h-12 sm:w-16 sm:h-16 opacity-80"
                   />
-                  <span className="text-3xl sm:text-4xl md:text-5xl font-black text-white tracking-tight uppercase">
+                  <span className="text-3xl sm:text-4xl md:text-5xl font-semibold text-white tracking-tight uppercase">
                     {row.awayTeam}
                   </span>
                 </div>
-                <div className="text-4xl sm:text-5xl md:text-6xl font-black text-[#0047FF] tracking-tighter leading-none relative z-10">
+                <div className="text-4xl sm:text-5xl md:text-6xl font-semibold text-white tracking-tight leading-none relative z-10">
                   {Math.round(row.predictedAwayScore)}
                 </div>
               </div>
@@ -3664,47 +3578,47 @@ function FeaturedMatchPreview({
 
             {/* Best Bet — blurred until email entered */}
             {isOfficialPlay && (
-              <div className="mb-10 inline-flex flex-col items-start border-l-[6px] border-[#00E676] bg-[#00E676]/10 px-6 py-5 shadow-[4px_4px_0_0_rgba(0,230,118,0.2)]">
-                <span className="text-xs font-black text-[#00E676] uppercase tracking-widest mb-1">
+              <div className="mb-10 inline-flex flex-col items-start border border-[#1E1E2E] bg-[#16161D] px-6 py-5">
+                <span className="text-xs font-medium text-[#9CA3AF] uppercase tracking-widest mb-1">
                   Model Play
                 </span>
-                <span className="text-3xl md:text-4xl font-black text-white uppercase tracking-tight">
+                <span className="text-3xl md:text-4xl font-semibold text-white uppercase tracking-tight">
                   {displayBestBet}
                 </span>
               </div>
             )}
 
             {/* Stats row — blurred until email entered */}
-            <div className="flex flex-wrap items-center gap-6 sm:gap-10 pt-8 border-t border-white/[0.08]">
+            <div className="flex flex-wrap items-center gap-6 sm:gap-10 pt-8 border-t border-[#1E1E2E]">
               <div>
-                <div className="text-[10px] sm:text-xs font-bold text-white/50 mb-1 sm:mb-2 uppercase tracking-widest">
+                <div className="text-[10px] sm:text-xs font-medium text-[#9CA3AF] mb-1 sm:mb-2 uppercase tracking-widest">
                   Win Prob
                 </div>
-                <div className="text-xl sm:text-2xl font-black text-[#00E676]">
+                <div className="text-xl sm:text-2xl font-semibold text-[#4ADE80]">
                   {formatPercent(featuredWinPct, 2)}
                 </div>
               </div>
               <div>
-                <div className="text-[10px] sm:text-xs font-bold text-white/50 mb-1 sm:mb-2 uppercase tracking-widest">
+                <div className="text-[10px] sm:text-xs font-medium text-[#9CA3AF] mb-1 sm:mb-2 uppercase tracking-widest">
                   Model Odds
                 </div>
-                <div className="text-xl sm:text-2xl font-black text-white">
+                <div className="text-xl sm:text-2xl font-semibold text-white">
                   {selectedModel ? selectedModel.toFixed(2) : "—"}
                 </div>
               </div>
               <div>
-                <div className="text-[10px] sm:text-xs font-bold text-white/50 mb-1 sm:mb-2 uppercase tracking-widest">
+                <div className="text-[10px] sm:text-xs font-medium text-[#9CA3AF] mb-1 sm:mb-2 uppercase tracking-widest">
                   Market Odds
                 </div>
-                <div className="text-xl sm:text-2xl font-black text-white">
+                <div className="text-xl sm:text-2xl font-semibold text-white">
                   {selectedOdds ? selectedOdds.toFixed(2) : "—"}
                 </div>
               </div>
               <div>
-                <div className="text-xs font-bold text-white/50 mb-2 uppercase tracking-widest">
+                <div className="text-xs font-medium text-[#9CA3AF] mb-2 uppercase tracking-widest">
                   Model Edge
                 </div>
-                <div className="text-2xl font-black text-[#FF2E63]">
+                <div className="text-2xl font-semibold text-[#4ADE80]">
                   +{formatPercent(row.bestEdge, 2)}
                 </div>
               </div>
@@ -3715,7 +3629,7 @@ function FeaturedMatchPreview({
           <div className="w-full md:w-auto flex flex-col items-end gap-4 mt-4 md:mt-0">
             <button
               onClick={() => onGoApp('featured_view_predictions')}
-              className="w-full md:w-auto inline-flex items-center justify-center gap-2 bg-[#FFEA00] text-black px-8 py-4 text-lg font-black hover:bg-[#FFD600] transition-colors uppercase tracking-wide shadow-[4px_4px_0_0_#FF2E63]"
+              className="w-full md:w-auto inline-flex items-center justify-center gap-2 re-primary-cta border px-8 py-4 text-lg font-medium hover:opacity-90 transition uppercase tracking-wide"
             >
               View All Predictions
               <ArrowRight className="w-5 h-5 stroke-[3px]" />
@@ -3738,55 +3652,55 @@ function HomeMethodology({ onGoApp }: { onGoApp: (source: string) => void }) {
     <div className="mt-8 mb-4" id="how-it-works">
       <div className="flex flex-col md:flex-row md:items-end justify-between mb-6 gap-4 px-2">
         <div>
-          <h2 className="text-3xl font-black text-white uppercase tracking-tight">
+          <h2 className="text-3xl font-semibold text-white uppercase tracking-tight">
             How it works
           </h2>
-          <div className="text-[#00E676] font-bold uppercase tracking-widest text-xs mt-1">
+          <div className="text-[#9CA3AF] font-medium uppercase tracking-widest text-xs mt-1">
             How the model works
           </div>
         </div>
         <button
           onClick={() => onGoApp('methodology_view_predictions')}
-          className="text-sm font-black text-white hover:text-[#FFEA00] uppercase tracking-widest transition-colors flex items-center gap-2"
+          className="text-sm font-medium text-white hover:opacity-80 uppercase tracking-widest transition flex items-center gap-2"
         >
           View Predictions <ArrowRight className="w-4 h-4" />
         </button>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <HomeCard className="p-8 border-t-8 border-[#0047FF]">
-          <div className="text-4xl font-black text-[#0047FF] mb-4">
+        <HomeCard className="p-8">
+          <div className="text-sm font-medium text-white mb-4 uppercase tracking-widest">
             01
           </div>
-          <h3 className="text-xl font-black text-white uppercase mb-2">
+          <h3 className="text-xl font-semibold text-white uppercase mb-2">
             Model Probability
           </h3>
-          <p className="text-white/70 font-bold text-sm leading-relaxed">
+          <p className="text-[#9CA3AF] font-normal text-sm leading-relaxed">
             We simulate every NRL matchup thousands of times
             using advanced team ratings, player values, and
             historical data to generate true win probabilities.
           </p>
         </HomeCard>
-        <HomeCard className="p-8 border-t-8 border-[#FFEA00]">
-          <div className="text-4xl font-black text-[#FFEA00] mb-4">
+        <HomeCard className="p-8">
+          <div className="text-sm font-medium text-white mb-4 uppercase tracking-widest">
             02
           </div>
-          <h3 className="text-xl font-black text-white uppercase mb-2">
+          <h3 className="text-xl font-semibold text-white uppercase mb-2">
             Market Comparison
           </h3>
-          <p className="text-white/70 font-bold text-sm leading-relaxed">
+          <p className="text-[#9CA3AF] font-normal text-sm leading-relaxed">
             Our true probabilities are converted into fair odds
             and continuously compared against live bookmaker
             pricing to identify mathematical overlays.
           </p>
         </HomeCard>
-        <HomeCard className="p-8 border-t-8 border-[#FF2E63]">
-          <div className="text-4xl font-black text-[#FF2E63] mb-4">
+        <HomeCard className="p-8">
+          <div className="text-sm font-medium text-white mb-4 uppercase tracking-widest">
             03
           </div>
-          <h3 className="text-xl font-black text-white uppercase mb-2">
+          <h3 className="text-xl font-semibold text-white uppercase mb-2">
             Model Plays
           </h3>
-          <p className="text-white/70 font-bold text-sm leading-relaxed">
+          <p className="text-[#9CA3AF] font-normal text-sm leading-relaxed">
             When the model identifies a meaningful gap
             between its probability and the market price,
             it becomes a model play.
@@ -3832,7 +3746,7 @@ function ArticlesPage() {
     {
       hash: "article-round-5-2026",
       tag: "PREDICTIONS",
-      tagColor: "bg-[#FF2E63]",
+      tagColor: "bg-[#16161D] border border-[#1E1E2E] text-[#9CA3AF]",
       title: "NRL Round 5 2026 — Model vs Market",
       excerpt: "Full model output for every Round 5 match. Projected scores, win probabilities, and identified edges across all eight games.",
       date: "April 2026",
@@ -3840,7 +3754,7 @@ function ArticlesPage() {
     {
       hash: "article-methodology",
       tag: "METHODOLOGY",
-      tagColor: "bg-[#0047FF]",
+      tagColor: "bg-[#16161D] border border-[#1E1E2E] text-[#9CA3AF]",
       title: "How the RightEdge Model Works",
       excerpt: "A deep dive into how we simulate every NRL match, calculate true win probabilities, and identify where bookmakers are mispricing the market.",
       date: "April 2026",
@@ -3849,11 +3763,11 @@ function ArticlesPage() {
 
   return (
     <div className="flex flex-col gap-8">
-      <GlassCard className="p-8 border-l-4 border-l-[#0047FF]">
-        <h1 className="text-4xl font-black text-white uppercase tracking-tighter mb-2">
+      <GlassCard className="p-8">
+        <h1 className="text-4xl font-semibold text-white uppercase tracking-tight mb-2">
           Articles
         </h1>
-        <p className="text-white/50 font-bold uppercase tracking-widest text-sm">
+        <p className="text-[#9CA3AF] font-medium uppercase tracking-widest text-sm">
           Model insights, methodology and round previews
         </p>
       </GlassCard>
@@ -3862,22 +3776,22 @@ function ArticlesPage() {
           <div
             key={article.hash}
             onClick={() => { window.location.hash = article.hash; }}
-            className="bg-[#111317] border-2 border-white/10 shadow-[8px_8px_0_0_#0047FF] p-8 border-l-4 border-l-[#FFEA00] cursor-pointer hover:border-l-[#0047FF] transition-all"
+            className="bg-[#111116] border border-[#1E1E2E] p-8 cursor-pointer hover:bg-[#16161D] transition"
           >
-            <div className={`inline-flex px-3 py-1 text-xs font-black text-white uppercase tracking-widest mb-4 ${article.tagColor}`}>
+            <div className={`inline-flex px-3 py-1 text-xs font-medium uppercase tracking-widest mb-4 ${article.tagColor}`}>
               {article.tag}
             </div>
-            <h2 className="text-xl font-black text-white uppercase tracking-tighter mb-3">
+            <h2 className="text-xl font-semibold text-white uppercase tracking-tight mb-3">
               {article.title}
             </h2>
-            <p className="text-white/60 font-bold text-sm leading-relaxed mb-6">
+            <p className="text-[#9CA3AF] font-normal text-sm leading-relaxed mb-6">
               {article.excerpt}
             </p>
             <div className="flex items-center justify-between">
-              <span className="text-white/30 text-xs font-bold uppercase tracking-widest">
+              <span className="text-[#6B7280] text-xs font-medium uppercase tracking-widest">
                 {article.date}
               </span>
-              <span className="text-[#FFEA00] text-xs font-black uppercase tracking-widest flex items-center gap-1">
+              <span className="text-white text-xs font-medium uppercase tracking-widest flex items-center gap-1">
                 Read <ArrowRight className="w-3 h-3" />
               </span>
             </div>
@@ -3893,52 +3807,52 @@ function MethodologyPage() {
     {
       title: "1. Model Probability",
       text: "Each matchup is assigned a model-based probability and converted into fair odds.",
-      color: "text-[#0047FF]",
-      borderColor: "border-[#0047FF]",
+      color: "text-white",
+      borderColor: "border-[#1E1E2E]",
     },
     {
       title: "2. Market Comparison",
       text: "Market prices are pulled alongside model odds so edges can be evaluated in real time.",
-      color: "text-[#FF2E63]",
-      borderColor: "border-[#FF2E63]",
+      color: "text-white",
+      borderColor: "border-[#1E1E2E]",
     },
     {
       title: "3. Value Detection",
       text: "A value edge exists when the market offers a better price than the model implies.",
-      color: "text-[#FFEA00]",
-      borderColor: "border-[#FFEA00]",
+      color: "text-white",
+      borderColor: "border-[#1E1E2E]",
     },
     {
       title: "4. Official Play Filter",
       text: "Not every lean becomes an official play. The product should clearly separate interest from action.",
-      color: "text-[#00E676]",
-      borderColor: "border-[#00E676]",
+      color: "text-white",
+      borderColor: "border-[#1E1E2E]",
     },
     {
       title: "5. Staking Discipline",
       text: "Stake sizing uses Kelly-derived logic with a conservative fractional cap.",
-      color: "text-[#0047FF]",
-      borderColor: "border-[#0047FF]",
+      color: "text-white",
+      borderColor: "border-[#1E1E2E]",
     },
     {
       title: "6. Performance Measurement",
       text: "Track realised profit, ROI, bankroll curve and CLV to judge whether the edge is real.",
-      color: "text-[#FF2E63]",
-      borderColor: "border-[#FF2E63]",
+      color: "text-white",
+      borderColor: "border-[#1E1E2E]",
     },
   ];
 
   return (
     <div className="flex flex-col gap-8">
-      <GlassCard className="p-8 md:p-12 border-l-4 border-l-[#0047FF]">
-        <div className="inline-flex items-center gap-2 bg-[#0047FF] px-4 py-2 text-sm font-black text-white mb-6 uppercase tracking-widest">
+      <GlassCard className="p-8 md:p-12">
+        <div className="inline-flex items-center gap-2 bg-[#16161D] border border-[#1E1E2E] px-4 py-2 text-sm font-medium text-[#9CA3AF] mb-6 uppercase tracking-widest">
           <Info className="w-4 h-4" />
           How RightEdge Works
         </div>
-        <h2 className="text-3xl sm:text-4xl md:text-5xl font-black text-white tracking-tighter mb-4 sm:mb-6 uppercase">
+        <h2 className="text-3xl sm:text-4xl md:text-5xl font-semibold text-white tracking-tight mb-4 sm:mb-6 uppercase">
           Mathematical precision over gut instinct.
         </h2>
-        <div className="text-white/70 font-bold leading-relaxed text-sm sm:text-base md:text-lg max-w-[840px]">
+        <div className="text-[#9CA3AF] font-normal leading-relaxed text-sm sm:text-base md:text-lg max-w-[840px]">
           <ReadMore>
             RightEdge is an analytics service that provides
             serious NRL bettors with the data needed to make
@@ -3956,21 +3870,21 @@ function MethodologyPage() {
         {blocks.map((block) => (
           <GlassCard
             key={block.title}
-            className={`p-8 border-l-4 ${block.borderColor}`}
+            className={`p-8 ${block.borderColor}`}
           >
             <div
-              className={`text-xl font-black mb-4 uppercase tracking-tighter ${block.color}`}
+              className={`text-xl font-semibold mb-4 uppercase tracking-tight ${block.color}`}
             >
               {block.title}
             </div>
-            <div className="text-white/70 font-bold text-base leading-7">
+            <div className="text-[#9CA3AF] font-normal text-base leading-7">
               {block.text}
             </div>
           </GlassCard>
         ))}
       </div>
 
-      <GlassCard className="p-8 border-l-4 border-l-[#FFEA00]">
+      <GlassCard className="p-8">
         <SectionHeader
           title="Transparency checklist"
           subtitle="These are the trust markers the public product should show over time"
@@ -3986,9 +3900,9 @@ function MethodologyPage() {
           ].map((item) => (
             <div
               key={item}
-              className="bg-[#1E232B] p-6 flex items-center gap-4 text-white font-bold uppercase tracking-wider text-sm border border-white/5"
+              className="bg-[#16161D] p-6 flex items-center gap-4 text-white font-medium uppercase tracking-wider text-sm border border-[#1E1E2E]"
             >
-              <BadgeCheck className="w-6 h-6 text-[#FFEA00]" />
+              <BadgeCheck className="w-6 h-6 text-white" />
               <span>{item}</span>
             </div>
           ))}
@@ -4296,20 +4210,20 @@ function OverviewPage({ data }: { data: DashboardData }) {
                     "Bankroll",
                   ]}
                   contentStyle={{
-                    background: "#FFEA00",
-                    border: "none",
+                    background: "#16161D",
+                    border: "1px solid #1E1E2E",
                     borderRadius: "0px",
-                    color: "#000",
-                    fontWeight: "900",
-                    boxShadow: "8px 8px 0px rgba(0,0,0,1)",
+                    color: "#FFFFFF",
+                    fontWeight: "500",
+                    boxShadow: "none",
                   }}
                 />
                 <Area
                   type="monotone"
                   dataKey="bankroll"
-                  stroke="#FFEA00"
-                  strokeWidth={4}
-                  fill="rgba(255,234,0,0.1)"
+                  stroke="#FFFFFF"
+                  strokeWidth={2}
+                  fill="rgba(255,255,255,0.06)"
                 />
               </AreaChart>
             </ResponsiveContainer>
@@ -4366,19 +4280,19 @@ function OverviewPage({ data }: { data: DashboardData }) {
                     "CLV",
                   ]}
                   contentStyle={{
-                    background: "#00E676",
-                    border: "none",
+                    background: "#16161D",
+                    border: "1px solid #1E1E2E",
                     borderRadius: "0px",
-                    color: "#000",
-                    fontWeight: "900",
-                    boxShadow: "8px 8px 0px rgba(0,0,0,1)",
+                    color: "#FFFFFF",
+                    fontWeight: "500",
+                    boxShadow: "none",
                   }}
                 />
                 <Bar dataKey="clv" radius={[0, 0, 0, 0]}>
                   {data.clvData.map((_, idx) => (
                     <Cell
                       key={`clv-${idx}`}
-                      fill={idx === 0 ? "#00E676" : "#FFEA00"}
+                      fill={idx === 0 ? "#4ADE80" : "#9CA3AF"}
                     />
                   ))}
                 </Bar>
@@ -4497,8 +4411,8 @@ function PredictionsPage({
               className="p-0 relative overflow-hidden transition-transform duration-300 hover:-translate-y-1"
             >
               <div className="p-5 md:p-6">
-                <div className="overflow-hidden border-2 border-white/10 bg-[#0A0C10] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 bg-white/[0.03] px-3 py-2 text-[10px] uppercase font-black text-white/55 tracking-widest">
+                <div className="overflow-hidden border border-[#1E1E2E] bg-[#111116]">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#1E1E2E] bg-[#16161D] px-3 py-2 text-[10px] uppercase font-medium text-[#9CA3AF] tracking-widest">
                     <div className="flex min-w-0 flex-wrap items-center gap-2">
                       <span>
                         {row.fixture
@@ -4509,21 +4423,21 @@ function PredictionsPage({
                         {fixtureStatus.label}
                       </span>
                     </div>
-                    <span className="text-white/40">
+                    <span className="text-[#6B7280]">
                       {row.fixture?.stadium || "Venue TBC"}
                     </span>
                   </div>
                   <div className="p-3 md:p-4">
-                    <div className="mb-2 grid grid-cols-[minmax(0,1fr)_minmax(74px,auto)] items-center gap-2 border-b border-white/10 pb-2">
-                      <div className="text-[9px] md:text-[10px] font-black uppercase tracking-widest text-white/35">
+                    <div className="mb-2 grid grid-cols-[minmax(0,1fr)_minmax(74px,auto)] items-center gap-2 border-b border-[#1E1E2E] pb-2">
+                      <div className="text-[9px] md:text-[10px] font-medium uppercase tracking-widest text-[#6B7280]">
                         Teams
                       </div>
-                      <div className="text-right text-[9px] md:text-[10px] font-black uppercase tracking-widest text-white/45 whitespace-nowrap">
+                      <div className="text-right text-[9px] md:text-[10px] font-medium uppercase tracking-widest text-[#9CA3AF] whitespace-nowrap">
                         Proj score
                       </div>
                     </div>
                     <div className="flex flex-col gap-2">
-                      <div className="relative grid grid-cols-[minmax(0,1fr)_minmax(74px,auto)] items-center gap-2 overflow-hidden bg-[#111317] p-2.5">
+                      <div className="relative grid grid-cols-[minmax(0,1fr)_minmax(74px,auto)] items-center gap-2 overflow-hidden bg-[#111116] border border-[#1E1E2E] p-2.5">
                         <span
                           className="absolute left-0 top-0 h-full w-1"
                           style={{ backgroundColor: homeColors.secondary }}
@@ -4531,7 +4445,7 @@ function PredictionsPage({
                         <div className="flex min-w-0 items-center gap-2.5 pl-1">
                           <TeamLogo
                             teamName={row.homeTeam}
-                            className="w-9 h-9 rounded-sm shadow-[2px_2px_0_0_rgba(255,255,255,0.1)]"
+                            className="w-9 h-9 rounded-sm"
                           />
                           <span
                             className={`min-w-0 text-lg md:text-2xl font-black uppercase tracking-tight truncate ${
@@ -4544,7 +4458,7 @@ function PredictionsPage({
                           </span>
                         </div>
                         <div
-                          className={`border border-white/10 bg-white/[0.04] px-2 py-1.5 text-center text-2xl md:text-3xl font-black tabular-nums ${
+                          className={`border border-[#1E1E2E] bg-[#16161D] px-2 py-1.5 text-center text-2xl md:text-3xl font-black tabular-nums ${
                             hasPredictedWinner && !homeIsPredictedWinner
                                 ? "text-white/50"
                                 : "text-white"
@@ -4553,7 +4467,7 @@ function PredictionsPage({
                           {projectedHomeScore ?? "—"}
                         </div>
                       </div>
-                      <div className="relative grid grid-cols-[minmax(0,1fr)_minmax(74px,auto)] items-center gap-2 overflow-hidden bg-[#111317] p-2.5">
+                      <div className="relative grid grid-cols-[minmax(0,1fr)_minmax(74px,auto)] items-center gap-2 overflow-hidden bg-[#111116] border border-[#1E1E2E] p-2.5">
                         <span
                           className="absolute left-0 top-0 h-full w-1"
                           style={{ backgroundColor: awayColors.secondary }}
@@ -4561,7 +4475,7 @@ function PredictionsPage({
                         <div className="flex min-w-0 items-center gap-2.5 pl-1">
                           <TeamLogo
                             teamName={row.awayTeam}
-                            className="w-9 h-9 rounded-sm shadow-[2px_2px_0_0_rgba(255,255,255,0.1)]"
+                            className="w-9 h-9 rounded-sm"
                           />
                           <span
                             className={`min-w-0 text-lg md:text-2xl font-black uppercase tracking-tight truncate ${
@@ -4574,7 +4488,7 @@ function PredictionsPage({
                           </span>
                         </div>
                         <div
-                          className={`border border-white/10 bg-white/[0.04] px-2 py-1.5 text-center text-2xl md:text-3xl font-black tabular-nums ${
+                          className={`border border-[#1E1E2E] bg-[#16161D] px-2 py-1.5 text-center text-2xl md:text-3xl font-black tabular-nums ${
                             hasPredictedWinner && !awayIsPredictedWinner
                                 ? "text-white/50"
                                 : "text-white"
@@ -6157,12 +6071,12 @@ function AnalyticsPage({ data }: { data: DashboardData }) {
                     "Profit",
                   ]}
                   contentStyle={{
-                    background: "#FF2E63",
-                    border: "none",
+                    background: "#16161D",
+                    border: "1px solid #1E1E2E",
                     borderRadius: "0px",
                     color: "#fff",
-                    fontWeight: "900",
-                    boxShadow: "8px 8px 0px rgba(0,0,0,1)",
+                    fontWeight: "500",
+                    boxShadow: "none",
                   }}
                 />
                 <Bar dataKey="profit" radius={[0, 0, 0, 0]}>
@@ -6170,7 +6084,7 @@ function AnalyticsPage({ data }: { data: DashboardData }) {
                     <Cell
                       key={`team-${row.team}-${idx}`}
                       fill={
-                        row.profit >= 0 ? "#00E676" : "#FF2E63"
+                        row.profit >= 0 ? "#4ADE80" : "#F87171"
                       }
                     />
                   ))}
@@ -6190,12 +6104,12 @@ function AnalyticsPage({ data }: { data: DashboardData }) {
               <PieChart>
                 <Tooltip
                   contentStyle={{
-                    background: "#FFEA00",
-                    border: "none",
+                    background: "#16161D",
+                    border: "1px solid #1E1E2E",
                     borderRadius: "0px",
-                    color: "#000",
-                    fontWeight: "900",
-                    boxShadow: "8px 8px 0px rgba(0,0,0,1)",
+                    color: "#FFFFFF",
+                    fontWeight: "500",
+                    boxShadow: "none",
                   }}
                 />
                 <Pie
@@ -6209,7 +6123,7 @@ function AnalyticsPage({ data }: { data: DashboardData }) {
                     <Cell
                       key={`pie-cell-2-${index}`}
                       fill={
-                        ["#00E676", "#FF2E63", "#0047FF"][index]
+                        ["#4ADE80", "#F87171", "#6B7280"][index]
                       }
                     />
                   ))}
@@ -6383,13 +6297,13 @@ function AppDashboard({
   return (
     <>
       <div className="grid grid-cols-1 xl:grid-cols-[300px_minmax(0,1fr)] gap-8 pb-24 xl:pb-0">
-        <GlassCard className="hidden xl:block p-6 h-fit xl:sticky xl:top-6 border-l-4 border-l-[#FFEA00]">
-          <div className="flex items-center gap-4 pb-6 border-b-2 border-white/10 mb-6">
+        <GlassCard className="hidden xl:block p-6 h-fit xl:sticky xl:top-6">
+          <div className="flex items-center gap-4 pb-6 border-b border-[#1E1E2E] mb-6">
             <div>
-              <div className="text-4xl font-black tracking-tighter text-white uppercase">
+              <div className="text-4xl font-semibold tracking-tight text-white uppercase">
                 RightEdge
               </div>
-              <div className="text-xs text-[#FFEA00] font-black tracking-widest uppercase mt-2">
+              <div className="text-xs text-[#9CA3AF] font-medium tracking-widest uppercase mt-2">
                 NRL Predictions • 2026
               </div>
             </div>
@@ -6414,14 +6328,14 @@ function AppDashboard({
             ))}
           </div>
 
-          <div className="mt-10 bg-[#1E232B] border-2 border-white/10 shadow-[4px_4px_0_0_#111317] p-5">
+          <div className="mt-10 bg-[#16161D] border border-[#1E1E2E] p-5">
             <div className="flex items-center justify-between mb-4">
-              <div className="text-xs uppercase tracking-widest text-white/50 font-black">
+              <div className="text-xs uppercase tracking-widest text-[#9CA3AF] font-medium">
                 Live status
               </div>
               <button
                 onClick={() => loadData(true)}
-                className="text-[#FFEA00] hover:text-white transition-colors"
+                className="text-[#9CA3AF] hover:text-white transition-colors"
                 title="Refresh data"
               >
                 <RefreshCw
@@ -6429,7 +6343,7 @@ function AppDashboard({
                 />
               </button>
             </div>
-            <div className="inline-flex items-center gap-2 bg-[#00E676] px-3 py-1.5 text-black text-xs font-black uppercase tracking-widest">
+            <div className="inline-flex items-center gap-2 bg-[#16161D] border border-[#1E1E2E] px-3 py-1.5 text-white text-xs font-medium uppercase tracking-widest">
               <span className="w-2.5 h-2.5 bg-black" />
               Active
             </div>
@@ -6437,7 +6351,7 @@ function AppDashboard({
             </div>
             <button 
               onClick={handleManageSubscription}
-              className="mt-6 w-full flex items-center justify-center gap-2 bg-[#111317] border border-white/10 text-white/70 hover:text-white hover:border-white/30 py-3 text-xs font-black uppercase tracking-widest transition-colors"
+              className="mt-6 w-full flex items-center justify-center gap-2 re-secondary-cta border py-3 text-xs font-medium uppercase tracking-widest transition hover:opacity-80"
             >
               Manage Subscription
             </button>
@@ -6449,42 +6363,42 @@ function AppDashboard({
             <div className="flex items-center justify-between mb-2">
               <button
                 onClick={onExit}
-                className="flex items-center gap-2 text-white/50 text-[10px] font-black uppercase tracking-widest hover:text-[#FFEA00] transition-colors"
+                className="flex items-center gap-2 text-[#6B7280] text-[10px] font-medium uppercase tracking-widest hover:text-white transition-colors"
               >
                 <ChevronLeft className="w-4 h-4" /> Back to Home
               </button>
               <button
                 onClick={handleManageSubscription}
-                className="text-white/50 text-[10px] font-black uppercase tracking-widest hover:text-[#FFEA00] transition-colors"
+                className="text-[#6B7280] text-[10px] font-medium uppercase tracking-widest hover:text-white transition-colors"
               >
                 Manage Subscription
               </button>
             </div>
           </div>
-          <div className="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-4 md:gap-6 pb-4 md:pb-6 border-b-2 border-white/10">
+          <div className="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-4 md:gap-6 pb-4 md:pb-6 border-b border-[#1E1E2E]">
             <div className="flex justify-between items-start xl:block">
               <div>
-                <div className="text-[10px] md:text-xs uppercase tracking-widest text-[#FFEA00] font-black mb-1 md:mb-2">
+                <div className="text-[10px] md:text-xs uppercase tracking-widest text-[#9CA3AF] font-medium mb-1 md:mb-2">
                   {pageTitle.title}
                 </div>
-                <h1 className="text-[18px] md:text-4xl font-black tracking-tight text-white uppercase leading-none">
+                <h1 className="text-[18px] md:text-4xl font-semibold tracking-tight text-white uppercase leading-none">
                   {pageTitle.subtitle}
                 </h1>
               </div>
               <button
                 onClick={() => loadData(true)}
-                className="xl:hidden bg-[#1E232B] p-2 border-2 border-white/10 text-[#FFEA00] shadow-[2px_2px_0_0_#111317] shrink-0 ml-4 mt-1"
+                className="xl:hidden bg-[#16161D] p-2 border border-[#1E1E2E] text-white shrink-0 ml-4 mt-1"
               >
                 <RefreshCw
                   className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`}
                 />
               </button>
             </div>
-            <div className="flex flex-wrap items-center gap-2 md:gap-4 text-[10px] md:text-sm text-white font-black uppercase tracking-wider mt-2 xl:mt-0">
-              <span className="inline-flex items-center gap-2 bg-[#1E232B] px-3 md:px-4 py-1.5 md:py-2 border-2 border-[#00E676]/45 shadow-[2px_2px_0_0_#111317] md:shadow-[4px_4px_0_0_rgba(0,230,118,0.22)]">
+            <div className="flex flex-wrap items-center gap-2 md:gap-4 text-[10px] md:text-sm text-white font-medium uppercase tracking-wider mt-2 xl:mt-0">
+              <span className="inline-flex items-center gap-2 bg-[#16161D] px-3 md:px-4 py-1.5 md:py-2 border border-[#1E1E2E]">
                 <span className="relative flex h-2.5 w-2.5">
-                  <span className="absolute inline-flex h-full w-full animate-ping-pong rounded-full bg-[#00E676] opacity-70" />
-                  <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-[#00E676]" />
+                  <span className="absolute inline-flex h-full w-full animate-ping-pong rounded-full bg-[#4ADE80] opacity-70" />
+                  <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-[#4ADE80]" />
                 </span>
                 <span>{data?.currentRoundLabel || "Round 1"} Live</span>
               </span>
@@ -6494,11 +6408,11 @@ function AppDashboard({
           {loading ? (
             <div className="min-h-[400px] flex items-center justify-center">
               <div className="text-center">
-                <RefreshCw className="w-10 h-10 mx-auto mb-6 animate-spin text-[#FFEA00]" />
-                <div className="text-white font-black text-xl mb-2 uppercase tracking-tight">
+                <RefreshCw className="w-10 h-10 mx-auto mb-6 animate-spin text-white" />
+                <div className="text-white font-semibold text-xl mb-2 uppercase tracking-tight">
                   Loading live sheet data
                 </div>
-                <div className="text-white/50 text-sm font-bold uppercase tracking-wider">
+                <div className="text-[#9CA3AF] text-sm font-medium uppercase tracking-wider">
                   Pulling Match Predictions, Bet Log, Fixtures
                   and Performance Tracker
                 </div>
@@ -6506,16 +6420,16 @@ function AppDashboard({
             </div>
           ) : error ? (
             <div className="min-h-[400px] flex items-center justify-center">
-              <GlassCard className="p-10 max-w-[560px] w-full border-l-4 border-l-[#FF2E63]">
-                <div className="text-4xl font-black text-white mb-4 uppercase tracking-tighter">
+              <GlassCard className="p-10 max-w-[560px] w-full">
+                <div className="text-4xl font-semibold text-white mb-4 uppercase tracking-tight">
                   Couldn’t load live data
                 </div>
-                <div className="text-white/70 mb-8 whitespace-pre-line font-bold">
+                <div className="text-[#9CA3AF] mb-8 whitespace-pre-line font-normal">
                   {error}
                 </div>
                 <button
                   onClick={() => loadData()}
-                  className="inline-flex items-center gap-3 bg-[#FFEA00] text-black px-8 py-4 font-black hover:bg-[#FFD600] uppercase tracking-wide transition-colors"
+                  className="inline-flex items-center gap-3 re-primary-cta border px-8 py-4 font-medium hover:opacity-90 uppercase tracking-wide transition"
                 >
                   <RefreshCw className="w-5 h-5 stroke-[3px]" />
                   Retry
@@ -6562,19 +6476,19 @@ function AppDashboard({
         </div>
       </div>
 
-      <div className="xl:hidden fixed bottom-0 left-0 right-0 bg-[#111317] border-t-2 border-white/10 z-[100] px-1 pb-4 pt-2 flex justify-around items-center shadow-[0_-8px_20px_rgba(0,0,0,0.5)]">
+      <div className="xl:hidden fixed bottom-0 left-0 right-0 bg-[#0A0A0F] border-t border-[#1E1E2E] z-[100] px-1 pb-4 pt-2 flex justify-around items-center">
         {getAppPages(isAdmin).map((item) => (
           <button
             key={item.id}
             onClick={() => handlePageChange(item.id)}
             className={`flex flex-col items-center p-2 min-w-[50px] sm:min-w-[60px] transition-all ${
               page === item.id
-                ? "text-[#FFEA00] scale-110"
-                : "text-white/40 hover:text-white/80"
+                ? "text-white"
+                : "text-[#6B7280] hover:text-white"
             }`}
           >
             <div className="mb-1">{item.icon}</div>
-            <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider">
+            <span className="text-[9px] sm:text-[10px] font-medium uppercase tracking-wider">
               {item.label}
             </span>
           </button>
@@ -7281,17 +7195,11 @@ export default function App() {
     "inLanguage": "en-AU"
   })}</script>
 </Helmet>
-    <div className="min-h-screen bg-[#0B0D10] text-[#F5F3EE] relative overflow-hidden font-sans">
-      <div
-        className="absolute inset-0 opacity-[0.03] pointer-events-none"
-        style={{
-          backgroundImage:
-            'url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%27200%27 height=%27200%27 viewBox=%270 0 200 200%27%3E%3Cfilter id=%27n%27%3E%3CfeTurbulence type=%27fractalNoise%27 baseFrequency=%270.85%27 numOctaves=%272%27 stitchTiles=%27stitch%27/%3E%3C/filter%3E%3Crect width=%27200%27 height=%27200%27 filter=%27url(%23n)%27 opacity=%271%27/%3E%3C/svg%3E")',
-        }}
-      />
+    <div className="min-h-screen bg-[#0A0A0F] text-white relative overflow-hidden font-sans">
+      <div className="absolute inset-0 pointer-events-none" />
 
       <div
-        className={`max-w-[1600px] mx-auto relative z-10 flex flex-col gap-10 ${sitePage === "app" ? "px-3 py-4 sm:px-6 sm:py-6" : "px-6 py-6"}`}
+        className={`max-w-[1200px] mx-auto relative z-10 flex flex-col gap-10 ${sitePage === "app" ? "px-3 py-4 sm:px-6 sm:py-6" : "px-6 py-6"}`}
       >
         <div
           className={
