@@ -24,7 +24,6 @@ import {
   Printer,
   RefreshCw,
   ShieldAlert,
-  Sparkles,
   Target,
   Trophy,
   Wallet,
@@ -2993,17 +2992,12 @@ function PublicHero({
   return (
     <section className="relative overflow-hidden py-4 md:py-6">
       <div className="max-w-[800px]">
-        <div className="inline-flex items-center gap-2 bg-[#16161D] border border-[#1E1E2E] px-3 py-1.5 text-[10px] sm:text-xs font-medium text-[#9CA3AF] mb-4 uppercase tracking-wider">
-          <Sparkles className="w-3.5 h-3.5" />
-          NRL Match Intelligence
-        </div>
-
         <h1 className="text-3xl sm:text-4xl md:text-5xl font-semibold tracking-tight text-white leading-[1.08] mb-4">
-          Don&apos;t Go In Blind This NRL Round – Backed by Data, Not Guesswork.
+          NRL match intelligence.
         </h1>
         
         <p className="text-sm sm:text-base md:text-lg text-[#9CA3AF] leading-relaxed mb-6 font-normal max-w-[680px]">
-          See projected scores, model probabilities and match analysis for every NRL round.
+          Model probabilities, projected scores, and try scorer signals for every round.
         </p>
 
         <div className="flex flex-col sm:flex-row flex-wrap gap-3">
@@ -3534,8 +3528,8 @@ function FeaturedMatchPreview({
     row.bestBet?.replace("Sydney", "Roosters") || row.bestBet;
 
   return (
-    <div className="mt-8 mb-4">
-      <h2 className="text-3xl font-semibold text-white mb-6 px-2 uppercase tracking-tight">
+    <div className="mt-5 mb-4">
+      <h2 className="text-xl md:text-2xl font-semibold text-white mb-4 px-2 uppercase tracking-tight">
         Featured Match
       </h2>
       <HomeCard className="p-8 md:p-12 relative overflow-hidden">
@@ -3579,7 +3573,7 @@ function FeaturedMatchPreview({
                     {row.homeTeam}
                   </span>
                 </div>
-                <div className="text-4xl sm:text-5xl md:text-6xl font-semibold text-white tracking-tight leading-none relative z-10">
+                <div className="min-w-[82px] border border-[#1E1E2E] bg-[#16161D] px-3 py-2 text-center text-4xl sm:min-w-[96px] sm:text-5xl md:text-6xl font-semibold text-white tracking-tight leading-none relative z-10">
                   {Math.round(row.predictedHomeScore)}
                 </div>
               </div>
@@ -3594,7 +3588,7 @@ function FeaturedMatchPreview({
                     {row.awayTeam}
                   </span>
                 </div>
-                <div className="text-4xl sm:text-5xl md:text-6xl font-semibold text-white tracking-tight leading-none relative z-10">
+                <div className="min-w-[82px] border border-[#1E1E2E] bg-[#16161D] px-3 py-2 text-center text-4xl sm:min-w-[96px] sm:text-5xl md:text-6xl font-semibold text-white tracking-tight leading-none relative z-10">
                   {Math.round(row.predictedAwayScore)}
                 </div>
               </div>
