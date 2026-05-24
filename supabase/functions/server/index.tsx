@@ -363,13 +363,41 @@ function freeWelcomeHtml() {
 }
 
 
+const RESPONSIBLE_GAMBLING_TAGLINES = [
+  "Chances are you're about to lose.",
+  "Think. Is this a bet you really want to place?",
+  "What's gambling really costing you?",
+  "What are you prepared to lose today? Set a deposit limit.",
+  "Imagine what you could be buying instead.",
+  "What are you really gambling with?",
+];
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function getResponsibleGamblingTagline(date = new Date()) {
+  const startOfYear = new Date(date.getFullYear(), 0, 0);
+  const dayOfYear = Math.floor((date.getTime() - startOfYear.getTime()) / 86400000);
+  return RESPONSIBLE_GAMBLING_TAGLINES[
+    Math.abs(dayOfYear) % RESPONSIBLE_GAMBLING_TAGLINES.length
+  ];
+}
+
 function responsibleGamblingEmailFooterHtml() {
+  const tagline = escapeHtml(getResponsibleGamblingTagline().toUpperCase());
+
   return `
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:22px;background:#ffffff;border:2px solid #05070b;border-bottom:4px solid #0a4dff;">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:22px;background:#ffffff;border:1px solid #05070b;">
           <tr>
             <td style="padding:16px 18px;font-family:Arial,Helvetica,sans-serif;color:#05070b;">
-              <div style="font-family:Arial Black,Impact,Helvetica,sans-serif;font-size:16px;line-height:1.2;color:#05070b;font-weight:900;letter-spacing:-0.2px;text-transform:uppercase;">What&apos;s gambling really costing you?</div>
-              <div style="margin-top:8px;font-size:13px;line-height:1.6;color:#20242d;font-weight:700;">
+              <div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.3;color:#05070b;font-weight:700;text-transform:uppercase;">${tagline}</div>
+              <div style="margin-top:8px;font-size:13px;line-height:1.6;color:#05070b;font-weight:700;">
                 For free and confidential support call <a href="tel:1800858858" style="color:#05070b;text-decoration:underline;font-weight:900;">1800 858 858</a> or visit <a href="https://www.gamblinghelponline.org.au/" target="_blank" rel="noopener noreferrer" style="color:#05070b;text-decoration:underline;font-weight:900;">gamblinghelponline.org.au</a>.
               </div>
               <div style="margin-top:10px;font-size:11px;line-height:1.2;color:#05070b;font-weight:900;letter-spacing:1.5px;text-transform:uppercase;">18+ only</div>

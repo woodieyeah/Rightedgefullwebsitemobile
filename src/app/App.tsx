@@ -556,35 +556,65 @@ function SectionHeader({
   );
 }
 
+const RESPONSIBLE_GAMBLING_TAGLINES = [
+  "Chances are you're about to lose.",
+  "Think. Is this a bet you really want to place?",
+  "What's gambling really costing you?",
+  "What are you prepared to lose today? Set a deposit limit.",
+  "Imagine what you could be buying instead.",
+  "What are you really gambling with?",
+];
+
+function getResponsibleGamblingTagline(date = new Date()) {
+  const startOfYear = new Date(date.getFullYear(), 0, 0);
+  const dayOfYear = Math.floor(
+    (date.getTime() - startOfYear.getTime()) / 86400000,
+  );
+  return RESPONSIBLE_GAMBLING_TAGLINES[
+    Math.abs(dayOfYear) % RESPONSIBLE_GAMBLING_TAGLINES.length
+  ];
+}
+
 function ResponsibleGamblingNotice({
   compact = false,
 }: {
   compact?: boolean;
 }) {
+  const tagline = getResponsibleGamblingTagline();
+
   return (
-    <div className={`border border-[#1E1E2E] bg-[#111116] text-[#9CA3AF] ${compact ? "px-3 py-2" : "px-3 py-2 md:px-4"}`}>
-      <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-center text-[9px] md:text-[10px] font-medium uppercase tracking-widest leading-snug">
-        <span>What&apos;s gambling really costing you?</span>
-        <span className="text-[#6B7280]">·</span>
-        <span>Free confidential support:</span>
-        <span>call</span>
+    <div
+      className={`border border-black bg-white text-black ${
+        compact ? "px-3 py-2" : "px-3 py-2 md:px-4"
+      }`}
+      style={{
+        fontFamily: "Arial, Helvetica, sans-serif",
+        fontWeight: 700,
+      }}
+    >
+      <div className="grid items-center gap-2 text-center leading-snug md:grid-cols-2 md:gap-4">
+        <div className="text-[10px] uppercase tracking-normal md:text-xs">
+          {tagline}
+        </div>
+        <div className="text-[10px] normal-case tracking-normal md:text-xs">
+          For free and confidential support call{" "}
         <a
           href="tel:1800858858"
-          className="text-white underline underline-offset-2 hover:opacity-80 transition"
+            className="text-black underline underline-offset-2 transition hover:opacity-70"
         >
           1800 858 858
-        </a>
-        <span>or visit</span>
+          </a>{" "}
+          or visit{" "}
         <a
           href="https://www.gamblinghelponline.org.au/"
           target="_blank"
           rel="noopener noreferrer"
-          className="text-white underline underline-offset-2 hover:opacity-80 transition"
+            className="text-black underline underline-offset-2 transition hover:opacity-70"
         >
           gamblinghelponline.org.au
         </a>
-        <span className="text-[#6B7280]">·</span>
-        <span>18+ only</span>
+          . 18+ only.
+        </div>
       </div>
     </div>
   );
