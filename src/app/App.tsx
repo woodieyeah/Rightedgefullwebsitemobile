@@ -1676,6 +1676,7 @@ function ConfidenceBadge({
 }
 
 const EMAIL_ACCESS_KEY = "rightedge_email_access";
+const ADMIN_EMAILS = ["elliott@woodbry.com", "ewoodbry@gmail.com", "elliott@rightedge.com.au"];
 
 function hasEmailAccess(): boolean {
   try {
@@ -1835,7 +1836,11 @@ function BookmakerName({
 
 function isUserAdmin(): boolean {
   try {
-    return getUserEmail() === "elliott@woodbry.com";
+    const email = getUserEmail();
+    return (
+      localStorage.getItem("rightedge_admin_auth") === "true" ||
+      (!!email && ADMIN_EMAILS.includes(email))
+    );
   } catch {
     return false;
   }
@@ -1851,8 +1856,7 @@ function setEmailAccess(email: string) {
     // Permanently stamp this browser as internal if the email is ours.
     // This means all future sessions from this device are correctly excluded
     // from the Real Users view — even before email entry.
-    const INTERNAL_EMAILS = ['elliott@woodbry.com', 'ewoodbry@gmail.com'];
-    if (INTERNAL_EMAILS.includes(normalizedEmail)) {
+    if (ADMIN_EMAILS.includes(normalizedEmail)) {
       localStorage.setItem('rightedge_internal_visitor', 'true');
     }
   } catch {}
@@ -1906,8 +1910,7 @@ function setPaidAccess(email: string) {
     );
     localStorage.setItem('rightedge_subscriber', 'true');
 
-    const INTERNAL_EMAILS = ['elliott@woodbry.com', 'ewoodbry@gmail.com'];
-    if (INTERNAL_EMAILS.includes(normalizedEmail)) {
+    if (ADMIN_EMAILS.includes(normalizedEmail)) {
       localStorage.setItem('rightedge_internal_visitor', 'true');
     }
   } catch {}
@@ -1950,8 +1953,7 @@ function setFeaturedMatchAccess(email: string) {
     localStorage.setItem(FEATURED_ACCESS_KEY, 'true');
     localStorage.setItem('rightedge_featured_email', email);
     // Also mark as internal if admin email
-    const INTERNAL_EMAILS = ['elliott@woodbry.com', 'ewoodbry@gmail.com'];
-    if (INTERNAL_EMAILS.includes(email.trim().toLowerCase())) {
+    if (ADMIN_EMAILS.includes(email.trim().toLowerCase())) {
       localStorage.setItem('rightedge_internal_visitor', 'true');
     }
   } catch {}
@@ -2453,7 +2455,7 @@ function EmailGateModal({
   }
 
   // Admin bypass
-  const BYPASS_EMAILS = ["elliott@woodbry.com", "test@rightedge.com.au"];
+  const BYPASS_EMAILS = [...ADMIN_EMAILS, "test@rightedge.com.au"];
   if (BYPASS_EMAILS.includes(trimmed)) {
     setStoredFavoriteTeam(selectedTeam);
     setEmailAccess(trimmed);
@@ -7192,7 +7194,6 @@ export default function App() {
       // When detected, we also write rightedge_internal_visitor to localStorage
       // so that ALL future sessions from this browser are immediately internal —
       // even before any email is entered.
-      const INTERNAL_EMAILS = ['elliott@woodbry.com', 'ewoodbry@gmail.com'];
       let isInternal = false;
 
       // 0. This visitor_id was previously marked internal (persisted across sessions)
@@ -7212,7 +7213,7 @@ export default function App() {
           const parsed = JSON.parse(accessVal);
           if (parsed.email) {
             visitorEmail = parsed.email.toLowerCase();
-            if (INTERNAL_EMAILS.includes(visitorEmail)) isInternal = true;
+            if (ADMIN_EMAILS.includes(visitorEmail)) isInternal = true;
           }
         }
       } catch (e) {}
@@ -7222,7 +7223,7 @@ export default function App() {
         const userStr = localStorage.getItem('rightedge_user');
         if (userStr) {
           const user = JSON.parse(userStr);
-          if (user.email && INTERNAL_EMAILS.includes(user.email.toLowerCase())) isInternal = true;
+          if (user.email && ADMIN_EMAILS.includes(user.email.toLowerCase())) isInternal = true;
         }
       } catch (e) {}
 
