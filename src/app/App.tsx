@@ -24,6 +24,7 @@ import {
   Printer,
   RefreshCw,
   ShieldAlert,
+  Sparkles,
   Target,
   Trophy,
   Wallet,
@@ -2992,12 +2993,17 @@ function PublicHero({
   return (
     <section className="relative overflow-hidden py-4 md:py-6">
       <div className="max-w-[800px]">
+        <div className="inline-flex items-center gap-2 bg-[#16161D] border border-[#1E1E2E] px-3 py-1.5 text-[10px] sm:text-xs font-medium text-[#9CA3AF] mb-4 uppercase tracking-wider">
+          <Sparkles className="w-3.5 h-3.5" />
+          NRL Match Intelligence
+        </div>
+
         <h1 className="text-3xl sm:text-4xl md:text-5xl font-semibold tracking-tight text-white leading-[1.08] mb-4">
-          NRL match intelligence.
+          Don&apos;t Go In Blind This NRL Round – Backed by Data, Not Guesswork.
         </h1>
         
         <p className="text-sm sm:text-base md:text-lg text-[#9CA3AF] leading-relaxed mb-6 font-normal max-w-[680px]">
-          Model probabilities, projected scores, and try scorer signals for every round.
+          See projected scores, model probabilities and match analysis for every NRL round.
         </p>
 
         <div className="flex flex-col sm:flex-row flex-wrap gap-3">
