@@ -7156,7 +7156,9 @@ export default function App() {
         setShowEmailGate(false);
         setSitePage("app");
       } else {
-        setShowEmailGate(true);
+        setShowEmailGate(false);
+        setSitePage("home");
+        window.history.replaceState({}, document.title, window.location.pathname);
       }
     } else if (publicHashes.includes(hash)) {
       trackHashPageView(hash);
@@ -7242,11 +7244,12 @@ export default function App() {
   const handleEmailSuccess = () => {
     setShowEmailGate(false);
     setSitePage("app");
+    window.location.hash = "matches";
   };
 
   const handleSetPage = (page: string) => {
     if (page === "app") {
-      window.location.hash = "matches";
+      navigateToApp("nav_predictions");
     } else {
       window.location.hash = page;
     }
