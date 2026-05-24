@@ -2456,16 +2456,14 @@ function PublicNav({
           <button
             type="button"
             onClick={() => setPage("app")}
-            className={`text-sm font-medium transition hover:text-white ${
-              page === "app" ? "text-white" : "text-[#9CA3AF]"
-            }`}
+            className="inline-flex h-9 items-center justify-center rounded-full bg-white px-4 text-xs font-medium text-[#0A0A0F] transition hover:opacity-85 sm:px-5"
           >
             Predictions
           </button>
           <button
             type="button"
             onClick={onPremiumLogin}
-            className="inline-flex h-9 items-center justify-center gap-2 border border-[#1E1E2E] px-3.5 text-xs font-medium text-white transition hover:border-white/40 hover:bg-white hover:text-[#0A0A0F] sm:px-4"
+            className="inline-flex h-9 items-center justify-center gap-2 border border-[#1E1E2E] px-3 text-xs font-medium text-[#9CA3AF] transition hover:border-white/30 hover:text-white sm:px-3.5"
           >
             <Lock className="h-3.5 w-3.5" />
             Premium Login
