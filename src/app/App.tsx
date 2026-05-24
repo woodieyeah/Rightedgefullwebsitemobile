@@ -2984,11 +2984,11 @@ function PublicHero({ onGoApp }: { onGoApp: (source: string) => void }) {
     <section className="relative mt-8 overflow-hidden pt-12 pb-3 sm:mt-10 sm:pt-16 sm:pb-4 md:mt-12 md:pt-20 md:pb-5">
       <div className="max-w-[760px]">
         <h1 className="text-4xl sm:text-5xl md:text-6xl font-semibold tracking-tight text-white leading-[1.04] mb-6">
-          RightEdge simulates every matchup thousands of times to map out true probabilities.
+          The NRL Predictive Model.
         </h1>
         
         <p className="text-base sm:text-lg md:text-xl text-[#9CA3AF] leading-relaxed font-normal max-w-[680px]">
-          No media noise, no gut feelings—just clean data highlighting live market overlays.
+          RightEdge simulates every matchup thousands of times to map out true probabilities. No media noise, no gut feelings—just clean data highlighting live market overlays.
         </p>
         <p className="mt-5 max-w-[680px] text-base font-semibold leading-relaxed text-white sm:text-lg">
           All standard match simulations and score projections are 100% free.
