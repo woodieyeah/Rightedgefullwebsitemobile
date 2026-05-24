@@ -2456,7 +2456,7 @@ function PublicNav({
           <button
             type="button"
             onClick={() => setPage("app")}
-            className="inline-flex h-9 items-center justify-center rounded-full bg-white px-4 text-xs font-medium text-[#0A0A0F] transition hover:opacity-85 sm:px-5"
+            className="inline-flex h-9 items-center justify-center bg-white px-4 text-xs font-medium text-[#0A0A0F] transition hover:opacity-85 sm:px-5"
           >
             Predictions
           </button>
