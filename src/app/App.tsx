@@ -2999,7 +2999,7 @@ function PublicHero({
         </div>
 
         <h1 className="text-3xl sm:text-4xl md:text-5xl font-semibold tracking-tight text-white leading-[1.08] mb-4">
-          Don&apos;t The NRL model that gives you the edge – Backed by Data, Not Guesswork.
+          The NRL model that gives you the edge.
         </h1>
         
         <p className="text-sm sm:text-base md:text-lg text-[#9CA3AF] leading-relaxed mb-6 font-normal max-w-[680px]">
