@@ -7485,7 +7485,7 @@ export default function App() {
                 NRL. Premium plays are filtered to match the
                 model's strongest weekly reads.
               </p>
-              <p className="text-[#FF2E63]/80 mb-4">
+              <p className="mb-4 text-[#9CA3AF]">
                 Disclaimer: RightEdge is an independent
                 analytics tool and is not affiliated with,
                 endorsed by, or licensed by the National Rugby
