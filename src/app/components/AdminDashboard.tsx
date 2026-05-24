@@ -33,6 +33,98 @@ function escapeHtml(value: unknown) {
     .replace(/'/g, '&#39;');
 }
 
+const RESPONSIBLE_GAMBLING_EMAIL_TAGLINES = [
+  "Chances are you're about to lose.",
+  "Think. Is this a bet you really want to place?",
+  "What's gambling really costing you?",
+  "What are you prepared to lose today? Set a deposit limit.",
+  "Imagine what you could be buying instead.",
+  "What are you really gambling with?",
+];
+
+function getResponsibleGamblingEmailTagline() {
+  const now = new Date();
+  const startOfYear = new Date(now.getFullYear(), 0, 0);
+  const dayOfYear = Math.floor((now.getTime() - startOfYear.getTime()) / 86400000);
+  return RESPONSIBLE_GAMBLING_EMAIL_TAGLINES[
+    Math.abs(dayOfYear) % RESPONSIBLE_GAMBLING_EMAIL_TAGLINES.length
+  ];
+}
+
+function adminResponsibleGamblingEmailFooterHtml() {
+  const tagline = escapeHtml(getResponsibleGamblingEmailTagline().toUpperCase());
+  return `
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:22px;background:#ffffff;border:1px solid #05070b;">
+      <tr>
+        <td style="padding:16px 18px;font-family:Arial,Helvetica,sans-serif;color:#05070b;">
+          <div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.3;color:#05070b;font-weight:700;text-transform:uppercase;">${tagline}</div>
+          <div style="margin-top:8px;font-size:13px;line-height:1.6;color:#05070b;font-weight:700;">
+            For free and confidential support call <a href="tel:1800858858" style="color:#05070b;text-decoration:underline;font-weight:900;">1800 858 858</a> or visit <a href="https://www.gamblinghelponline.org.au/" target="_blank" rel="noopener noreferrer" style="color:#05070b;text-decoration:underline;font-weight:900;">gamblinghelponline.org.au</a>.
+          </div>
+          <div style="margin-top:10px;font-size:11px;line-height:1.2;color:#05070b;font-weight:900;letter-spacing:1.5px;text-transform:uppercase;">18+ only</div>
+        </td>
+      </tr>
+    </table>`;
+}
+
+function adminEmailHeaderHtml(label = '') {
+  return `
+    <div style="padding:22px 0 18px 0;border-bottom:1px solid #1E1E2E;">
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+        <tr>
+          <td align="left" style="vertical-align:middle;">
+            <div style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:22px;line-height:1.2;color:#ffffff;font-weight:600;letter-spacing:-0.02em;">RightEdge</div>
+          </td>
+          ${label ? `<td align="right" style="vertical-align:middle;"><span style="display:inline-block;border:1px solid #1E1E2E;color:#9CA3AF;font-family:Inter,Arial,Helvetica,sans-serif;font-size:10px;line-height:1;font-weight:500;letter-spacing:0.12em;text-transform:uppercase;padding:8px 10px;">${label}</span></td>` : ''}
+        </tr>
+      </table>
+    </div>`;
+}
+
+function adminEmailCtaHtml(href: string, label: string, variant: 'primary' | 'secondary' = 'primary') {
+  const isPrimary = variant === 'primary';
+  return `
+    <table role="presentation" cellspacing="0" cellpadding="0" style="margin-top:24px;">
+      <tr>
+        <td style="background:${isPrimary ? '#ffffff' : 'transparent'};border:1px solid ${isPrimary ? '#ffffff' : '#1E1E2E'};">
+          <a href="${href}" style="display:inline-block;padding:14px 18px;color:${isPrimary ? '#0A0A0F' : '#ffffff'};text-decoration:none;font-family:Inter,Arial,Helvetica,sans-serif;font-size:14px;line-height:1.2;font-weight:600;letter-spacing:-0.01em;">${label}</a>
+        </td>
+      </tr>
+    </table>`;
+}
+
+function adminMetricCardHtml(label: string, value: string, tone: 'default' | 'positive' | 'negative' = 'default') {
+  const color = tone === 'positive' ? '#4ADE80' : tone === 'negative' ? '#F87171' : '#ffffff';
+  return `
+    <td width="33.33%" style="padding:0 6px 12px 6px;vertical-align:top;">
+      <div style="background:#16161D;border:1px solid #1E1E2E;padding:18px 16px;">
+        <div style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:10px;line-height:1.2;color:#9CA3AF;font-weight:500;letter-spacing:0.12em;text-transform:uppercase;">${label}</div>
+        <div style="margin-top:10px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:22px;line-height:1.1;color:${color};font-weight:600;letter-spacing:-0.02em;">${value}</div>
+      </div>
+    </td>`;
+}
+
+function adminEmailShell(preheader: string, label: string, innerHtml: string) {
+  return `<!DOCTYPE html>
+<html dir="ltr" lang="en">
+  <head>
+    <meta content="width=device-width" name="viewport" />
+    <meta content="text/html; charset=UTF-8" http-equiv="Content-Type" />
+  </head>
+  <body style="margin:0;padding:0;background:#0A0A0F;">
+    <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">${preheader}</div>
+    <div style="background:#0A0A0F;padding:28px 14px;font-family:Inter,Arial,Helvetica,sans-serif;color:#ffffff;">
+      <div style="max-width:680px;margin:0 auto;">
+        ${adminEmailHeaderHtml(label)}
+        ${innerHtml}
+        ${adminResponsibleGamblingEmailFooterHtml()}
+        <div style="margin-top:22px;text-align:center;font-family:Inter,Arial,Helvetica,sans-serif;font-size:11px;line-height:1.5;color:#6B7280;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;">Backed by data, not guesswork.</div>
+      </div>
+    </div>
+  </body>
+</html>`;
+}
+
 function slugifyPayload(value: unknown) {
   return String(value ?? '')
     .toLowerCase()
@@ -307,45 +399,19 @@ export function AdminDashboard({ data, onNavigateAdStudio }: { data?: any, onNav
     const valuePlays = roundBets.filter((b: any) => b.overlay > 0).length;
     
     setSubject(`RightEdge: Round ${maxRound} Ledger Review 📊`);
-    setBody(`<div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background-color: #0B0E14; padding: 40px 20px; color: #ffffff;">
-  <div style="max-width: 600px; margin: 0 auto; background-color: #111317; border: 1px solid #1A1D24;">
-    
-    <!-- HEADER -->
-    <div style="text-align: center; padding: 30px; border-bottom: 1px solid #1A1D24;">
-      <h1 style="font-size: 28px; font-family: 'Arial Black', Impact, sans-serif; font-weight: 900; letter-spacing: -1px; margin: 0; text-transform: uppercase; color: #fff;">RIGHTEDGE</h1>
-      <div style="color: #00E676; font-size: 11px; font-weight: bold; letter-spacing: 2px; margin-top: 5px; text-transform: uppercase; font-family: monospace;">NRL Analytics & Value Betting</div>
-    </div>
-    
-    <!-- HERO/HOOK -->
-    <div style="padding: 30px;">
-      <h2 style="font-family: 'Arial Black', Impact, sans-serif; font-size: 22px; text-transform: uppercase; margin-top: 0; margin-bottom: 15px; color: #fff;">Round ${maxRound} Review 📊</h2>
-      <p style="color: #A1A1AA; font-size: 15px; line-height: 1.6; margin-bottom: 0;">
-        The round is over. Here is the fully transparent breakdown of how the model performed against the closing line in Round ${maxRound}.
-      </p>
-    </div>
-
-    <!-- FEATURED CARD -->
-    <div style="background-color: #1A1D24; padding: 30px; border-left: 4px solid #00E676;">
-      <h3 style="margin-top: 0; color: #fff; font-family: 'Arial Black', sans-serif; font-size: 16px; text-transform: uppercase; letter-spacing: 0.5px;">Performance Recap</h3>
-      <p style="color: #A1A1AA; font-size: 15px; line-height: 1.6; margin-bottom: 25px;">The model found significant closing line value in ${betsBeatingClv} of ${totalBets} matches, resulting in <strong style="color: #fff;">${profitStr} units of profit</strong>. ${betsBeatingClv}/${valuePlays} value plays beat the CLV.</p>
-      
-      <table width="100%" cellpadding="0" cellspacing="0">
-        <tr>
-          <td align="center">
-            <a href="https://www.rightedge.com.au/#results" style="display: block; background-color: #00E676; color: #000; padding: 16px 24px; text-decoration: none; font-weight: 900; font-size: 14px; font-family: 'Arial Black', sans-serif; text-transform: uppercase; letter-spacing: 1px;">VIEW FULL LEDGER ➔</a>
-          </td>
-        </tr>
-      </table>
-    </div>
-    
-    <!-- FOOTER -->
-    <div style="padding: 30px; text-align: center; border-top: 1px solid #1A1D24;">
-      <p style="margin: 0 0 10px 0; font-size: 12px; color: #64748B; font-family: monospace; text-transform: uppercase; letter-spacing: 1px;">No fluff. Just the edge.</p>
-      <p style="margin: 0; font-size: 10px; color: #475569; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;">&copy; RightEdge Analytics</p>
-    </div>
-
-  </div>
-</div>`);
+    setBody(adminEmailShell(
+      `Round ${maxRound} ledger review is ready.`,
+      'Ledger',
+      `
+        <div style="background:#111116;border:1px solid #1E1E2E;margin-top:24px;padding:28px 26px;">
+          <div style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:10px;line-height:1.2;color:#9CA3AF;font-weight:500;letter-spacing:0.12em;text-transform:uppercase;">Round ${maxRound} review</div>
+          <div style="margin-top:14px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:30px;line-height:1.08;color:#ffffff;font-weight:600;letter-spacing:-0.02em;">The round is complete.</div>
+          <div style="margin-top:18px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:15px;line-height:1.7;color:#9CA3AF;font-weight:400;">
+            The model found significant closing line value in ${betsBeatingClv} of ${totalBets} matches, resulting in <strong style="color:#ffffff;">${profitStr} units of profit</strong>. ${betsBeatingClv}/${valuePlays} value plays beat the CLV.
+          </div>
+          ${adminEmailCtaHtml('https://www.rightedge.com.au/#results', 'View Full Ledger ->')}
+        </div>`
+    ));
   };
 
   const generateLookaheadEmail = () => {
@@ -375,22 +441,21 @@ export function AdminDashboard({ data, onNavigateAdStudio }: { data?: any, onNav
     let previewHtml = '';
     upcomingMatches.forEach((p: any) => {
       const favProb = p.modelHomeOdds < p.modelAwayOdds ? (1/p.modelHomeOdds)*100 : (1/p.modelAwayOdds)*100;
-      const favTeam = p.modelHomeOdds < p.modelAwayOdds ? p.homeTeam : p.awayTeam;
       
       previewHtml += `
-      <div style="background-color: #1A1D24; padding: 15px 20px; border-left: 3px solid #0047FF; margin-bottom: 15px;">
+      <div style="background:#16161D;border:1px solid #1E1E2E;padding:16px 18px;margin-bottom:12px;">
         <table width="100%" cellpadding="0" cellspacing="0">
           <tr>
             <td width="70%">
-              <div style="font-family: 'Arial Black', Impact, sans-serif; font-size: 16px; color: #fff; text-transform: uppercase; margin-bottom: 4px;">${p.homeTeam} vs ${p.awayTeam}</div>
-              <div style="font-family: monospace; font-size: 11px; color: #A1A1AA; letter-spacing: 0.5px;">
-                PROJ: ${p.homeTeam} ${p.predictedHomeScore} - ${p.predictedAwayScore} ${p.awayTeam}
+              <div style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:15px;line-height:1.3;color:#ffffff;font-weight:600;letter-spacing:-0.01em;margin-bottom:5px;">${escapeHtml(p.homeTeam)} vs ${escapeHtml(p.awayTeam)}</div>
+              <div style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:11px;line-height:1.4;color:#9CA3AF;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;">
+                PROJ: ${escapeHtml(p.homeTeam)} ${escapeHtml(p.predictedHomeScore)} - ${escapeHtml(p.predictedAwayScore)} ${escapeHtml(p.awayTeam)}
               </div>
             </td>
             <td width="30%" align="right">
-               <div style="background-color: #111317; padding: 6px 10px; display: inline-block; text-align: left; border: 1px solid rgba(255,255,255,0.05);">
-                 <div style="font-family: monospace; font-size: 9px; color: #64748B; text-transform: uppercase; margin-bottom: 2px; font-weight: bold;">WIN PROB</div>
-                 <div style="font-family: 'Arial Black', sans-serif; font-size: 12px; color: #00E676;">${favProb.toFixed(1)}% ${favTeam.substring(0,3).toUpperCase()}</div>
+               <div style="background:#111116;border:1px solid #1E1E2E;padding:8px 10px;display:inline-block;text-align:left;">
+                 <div style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:9px;color:#9CA3AF;text-transform:uppercase;margin-bottom:3px;font-weight:500;letter-spacing:0.1em;">Model</div>
+                 <div style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:13px;color:#4ADE80;font-weight:600;">${favProb.toFixed(1)}%</div>
                </div>
             </td>
           </tr>
@@ -400,81 +465,37 @@ export function AdminDashboard({ data, onNavigateAdStudio }: { data?: any, onNav
     });
     
     setSubject(`RightEdge: Round ${maxRound} Lookahead 🎯`);
-    setBody(`<div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background-color: #0B0E14; padding: 40px 20px; color: #ffffff;">
-  <div style="max-width: 600px; margin: 0 auto; background-color: #111317; border: 1px solid #1A1D24;">
-    
-    <!-- HEADER -->
-    <div style="text-align: center; padding: 30px; border-bottom: 1px solid #1A1D24;">
-      <h1 style="font-size: 28px; font-family: 'Arial Black', Impact, sans-serif; font-weight: 900; letter-spacing: -1px; margin: 0; text-transform: uppercase; color: #fff;">RIGHTEDGE</h1>
-      <div style="color: #00E676; font-size: 11px; font-weight: bold; letter-spacing: 2px; margin-top: 5px; text-transform: uppercase; font-family: monospace;">NRL Analytics & Value Betting</div>
-    </div>
-    
-    <!-- HERO/HOOK -->
-    <div style="padding: 30px; padding-bottom: 10px;">
-      <h2 style="font-family: 'Arial Black', Impact, sans-serif; font-size: 22px; text-transform: uppercase; margin-top: 0; margin-bottom: 15px; color: #fff;">Round ${maxRound} Lookahead 🎯</h2>
-      <p style="color: #A1A1AA; font-size: 15px; line-height: 1.6; margin-bottom: 0;">
-        The model has crunched the numbers for this weekend's matchups. We've identified <strong style="color: #fff;">${valuePlaysCount} official plays</strong> across the slate based on strict mathematical edge.
-      </p>
-    </div>
+    setBody(adminEmailShell(
+      `Round ${maxRound} lookahead is ready.`,
+      'Lookahead',
+      `
+        <div style="background:#111116;border:1px solid #1E1E2E;margin-top:24px;padding:28px 26px;">
+          <div style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:10px;line-height:1.2;color:#9CA3AF;font-weight:500;letter-spacing:0.12em;text-transform:uppercase;">Round ${maxRound} lookahead</div>
+          <div style="margin-top:14px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:30px;line-height:1.08;color:#ffffff;font-weight:600;letter-spacing:-0.02em;">The next card is ready.</div>
+          <div style="margin-top:18px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:15px;line-height:1.7;color:#9CA3AF;font-weight:400;">
+            The model has identified <strong style="color:#ffffff;">${valuePlaysCount} official plays</strong> across the slate based on strict mathematical edge.
+          </div>
+          ${adminEmailCtaHtml('https://www.rightedge.com.au/#matches', 'View Free Round Predictions ->')}
+        </div>
 
-    <!-- PREDICTIONS PREVIEW LIST -->
-    <div style="padding: 20px 30px;">
-      <h3 style="color: #fff; font-family: 'Arial Black', sans-serif; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; margin-top: 0; margin-bottom: 15px; border-bottom: 1px solid #1A1D24; padding-bottom: 10px;">Predictions Preview</h3>
-      
-      ${previewHtml}
-      
-      <table width="100%" cellpadding="0" cellspacing="0" style="margin-top: 25px;">
-        <tr>
-          <td align="center">
-            <a href="https://www.rightedge.com.au/#matches" style="display: block; background-color: #111317; border: 2px solid #0047FF; color: #fff; padding: 14px 24px; text-decoration: none; font-weight: 900; font-size: 13px; font-family: 'Arial Black', sans-serif; text-transform: uppercase; letter-spacing: 1px;">VIEW ALL PROJECTIONS ➔</a>
-          </td>
-        </tr>
-      </table>
-    </div>
+        <div style="background:#111116;border:1px solid #1E1E2E;margin-top:16px;padding:22px 24px;">
+          <div style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:10px;line-height:1.2;color:#9CA3AF;font-weight:500;letter-spacing:0.12em;text-transform:uppercase;margin-bottom:14px;">Predictions preview</div>
+          ${previewHtml}
+        </div>
 
-    <!-- BEST BETS LINK -->
-    <div style="background-color: #1A1D24; padding: 30px; border-left: 4px solid #FF2E63; margin: 20px 30px 40px 30px;">
-      <div style="color: #FF2E63; font-size: 11px; font-family: 'Arial Black', sans-serif; font-weight: 900; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px;">🔥 ${valuePlaysCount} MAX-CONFIDENCE PLAYS</div>
-      <p style="color: #E2E8F0; font-size: 14px; line-height: 1.5; margin-top: 0; margin-bottom: 20px;">The model has locked in official plays for this round based on significant closing line value. Log in to see the exact edge, stakes, and targets.</p>
-      
-      <table width="100%" cellpadding="0" cellspacing="0">
-        <tr>
-          <td align="center">
-            <a href="https://www.rightedge.com.au/#best-bets" style="display: block; background-color: #00E676; color: #000; padding: 16px 24px; text-decoration: none; font-weight: 900; font-size: 14px; font-family: 'Arial Black', sans-serif; text-transform: uppercase; letter-spacing: 1px;">UNLOCK BEST BETS ➔</a>
-          </td>
-        </tr>
-      </table>
-    </div>
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:18px;margin-left:-6px;margin-right:-6px;">
+          <tr>
+            ${adminMetricCardHtml('Profit', `${profitStr}u`, totalProfit > 0 ? 'positive' : 'default')}
+            ${adminMetricCardHtml('ROI', roiStr, roi > 0 ? 'positive' : 'default')}
+            ${adminMetricCardHtml('Win Rate', `${winRate.toFixed(1)}%`)}
+          </tr>
+        </table>
 
-    <!-- PERFORMANCE SUMMARY -->
-    <div style="padding: 25px 30px; background-color: #0F1219; border-top: 1px solid #1A1D24;">
-      <h3 style="color: #64748B; font-family: 'Arial Black', sans-serif; font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; margin-top: 0; margin-bottom: 20px; text-align: center;">All-Time Model Performance</h3>
-      <table width="100%" cellpadding="0" cellspacing="0">
-        <tr>
-          <td width="33%" align="center">
-            <div style="color: #64748B; font-family: 'Arial Black', sans-serif; font-size: 9px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 5px;">PROFIT</div>
-            <div style="color: ${totalProfit > 0 ? '#00E676' : '#fff'}; font-family: 'Arial Black', Impact, sans-serif; font-size: 18px;">${profitStr}u</div>
-          </td>
-          <td width="33%" align="center" style="border-left: 1px solid #1A1D24; border-right: 1px solid #1A1D24;">
-            <div style="color: #64748B; font-family: 'Arial Black', sans-serif; font-size: 9px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 5px;">ROI</div>
-            <div style="color: ${roi > 0 ? '#00E676' : '#fff'}; font-family: 'Arial Black', Impact, sans-serif; font-size: 18px;">${roiStr}</div>
-          </td>
-          <td width="33%" align="center">
-            <div style="color: #64748B; font-family: 'Arial Black', sans-serif; font-size: 9px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 5px;">WIN RATE</div>
-            <div style="color: #fff; font-family: 'Arial Black', Impact, sans-serif; font-size: 18px;">${winRate.toFixed(1)}%</div>
-          </td>
-        </tr>
-      </table>
-    </div>
-
-    <!-- FOOTER -->
-    <div style="padding: 30px; text-align: center; border-top: 1px solid #1A1D24;">
-      <p style="margin: 0 0 10px 0; font-size: 12px; color: #64748B; font-family: monospace; text-transform: uppercase; letter-spacing: 1px;">No fluff. Just the edge.</p>
-      <p style="margin: 0; font-size: 10px; color: #475569; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;">&copy; RightEdge Analytics</p>
-    </div>
-
-  </div>
-</div>`);
+        <div style="background:#111116;border:1px solid #1E1E2E;margin-top:6px;padding:22px 24px;">
+          <div style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:13px;line-height:1.7;color:#9CA3AF;">Premium shows the filtered plays, try scorer signals and live market context.</div>
+          ${adminEmailCtaHtml('https://www.rightedge.com.au/#best-bets', 'View Premium Plays ->', 'secondary')}
+        </div>`
+    ));
   };
 
   const generateTeamPlayEmail = async () => {
@@ -586,219 +607,52 @@ export function AdminDashboard({ data, onNavigateAdStudio }: { data?: any, onNav
     );
     const scorerBlock = topScorer && selectedPlay !== tryScorerPlay
       ? `
-                                    <div
-                                      style="margin-top:14px;font-family:Arial,Helvetica,sans-serif;font-size:17px;line-height:1.7;color:#c3c9d6"
-                                    >
-                                      <p style="margin:0;padding:0">
-                                        Try scorer note: <strong style="color:#ffffff">${escapeHtml(topScorer.player)}</strong>
-                                        is showing at <strong style="color:#ffffff">${Number(topScorer.statsInsiderPct || 0).toFixed(1)}%</strong> model probability.
-                                        ${topScorerHasBetrOdds
-                                          ? `Betr is currently showing <strong style="color:#ffffff">${formatMoneyOdds(topScorer.bestOdds) || "a live market price"}</strong>.`
-                                          : `The anytime scorer market can be checked at Betr when they click through.`}
-                                      </p>
-                                    </div>`
+          <div style="background:#16161D;border:1px solid #1E1E2E;margin-top:16px;padding:18px 18px;">
+            <div style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:10px;line-height:1.2;color:#9CA3AF;font-weight:500;letter-spacing:0.12em;text-transform:uppercase;">Try scorer signal</div>
+            <div style="margin-top:8px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:#9CA3AF;">
+              <strong style="color:#ffffff;">${escapeHtml(topScorer.player)}</strong> is showing at <strong style="color:#ffffff;">${Number(topScorer.statsInsiderPct || 0).toFixed(1)}%</strong> model probability.
+              ${topScorerHasBetrOdds
+                ? `Betr is currently showing <strong style="color:#ffffff;">${formatMoneyOdds(topScorer.bestOdds) || "a live market price"}</strong>.`
+                : `The anytime scorer market can be checked at Betr when they click through.`}
+            </div>
+          </div>`
       : "";
 
     setSubject(`RightEdge: ${selectedTeam} premium play for ${roundLabel}`);
-    setBody(`<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
-<html dir="ltr" lang="en">
-  <head>
-    <meta content="width=device-width" name="viewport" />
-    <meta content="text/html; charset=UTF-8" http-equiv="Content-Type" />
-    <meta name="x-apple-disable-message-reformatting" />
-    <meta content="IE=edge" http-equiv="X-UA-Compatible" />
-    <meta content="telephone=no,address=no,email=no,date=no,url=no" name="format-detection" />
-  </head>
-  <body style="background-color:#ffffff;margin:0;padding:0">
-    <div style="display:none;overflow:hidden;line-height:1px;opacity:0;max-height:0;max-width:0" data-skip-in-text="true">
-      One ${safeTeam} premium play from this round's card.
-    </div>
+    setBody(adminEmailShell(
+      `One ${safeTeam} premium play from this round's card.`,
+      safeRound,
+      `
+        <div style="background:#111116;border:1px solid #1E1E2E;margin-top:24px;padding:28px 26px;">
+          <div style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:10px;line-height:1.2;color:#9CA3AF;font-weight:500;letter-spacing:0.12em;text-transform:uppercase;">Supporter premium play</div>
+          <div style="margin-top:14px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:30px;line-height:1.08;color:#ffffff;font-weight:600;letter-spacing:-0.02em;">${escapeHtml(primaryPlayLabel)}</div>
+          <div style="margin-top:8px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:22px;line-height:1.2;color:#ffffff;font-weight:600;letter-spacing:-0.02em;">${escapeHtml(primaryPriceLine)}</div>
+          <div style="margin-top:18px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:15px;line-height:1.7;color:#9CA3AF;font-weight:400;">
+            ${primarySourceCopy}
+            The model has this <strong style="color:#ffffff;">${escapeHtml(primaryPlayType)}</strong>
+            at <strong style="color:#ffffff;">${Number(primaryModelPct || 0).toFixed(1)}%</strong>,
+            ${primaryLivePriceCopy}
+          </div>
+          <div style="margin-top:14px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:15px;line-height:1.7;color:#9CA3AF;font-weight:400;">
+            ${safeKickoff} at ${safeVenue}. Projected score is ${safeScore}.
+            <strong style="color:#ffffff;">${escapeHtml(primaryDetail)}</strong>.
+          </div>
+          ${scorerBlock}
+          <table role="presentation" cellspacing="0" cellpadding="0" style="margin-top:24px;">
+            <tr>
+              <td style="background:#093AD3;border:1px solid #093AD3;">
+                <a href="${betrUrl}" rel="noopener noreferrer sponsored" target="_blank" style="display:inline-block;padding:14px 18px;color:#ffffff;text-decoration:none;font-family:Inter,Arial,Helvetica,sans-serif;font-size:14px;line-height:1.2;font-weight:600;letter-spacing:-0.01em;">View ${safeTeam} markets at Betr -></a>
+              </td>
+            </tr>
+          </table>
+          <div style="margin-top:10px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:11px;line-height:1.5;color:#6B7280;">Payload: ${escapeHtml(payload)}</div>
+        </div>
 
-    <table border="0" width="100%" cellpadding="0" cellspacing="0" role="presentation" align="center">
-      <tbody>
-        <tr>
-          <td style="background-color:#ffffff">
-            <table align="left" width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="max-width:600px;width:100%;color:#000000;background-color:#ffffff;padding:0;border-radius:0;border-color:#000000">
-              <tbody>
-                <tr style="width:100%">
-                  <td>
-                    <table width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="margin:0;padding:0;background-color:#05070b">
-                      <tbody>
-                        <tr>
-                          <td align="center" style="padding:24px 12px">
-                            <table width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="max-width:640px;background-color:#05070b">
-                              <tbody>
-                                <tr>
-                                  <td style="padding:24px 20px;border:2px solid #f5f7fb;border-bottom:4px solid #0a4dff;background-color:#0a0d14">
-                                    <table width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation">
-                                      <tbody>
-                                        <tr>
-                                          <td align="left">
-                                            <div style="font-family:Arial Black,Arial,Helvetica,sans-serif;font-size:34px;line-height:1;color:#ffffff;font-weight:900;text-transform:uppercase;letter-spacing:-1px">
-                                              <p style="margin:0;padding:0">RIGHTEDGE</p>
-                                            </div>
-                                            <div style="margin-top:8px;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.3;color:#00f0a8;font-weight:700;letter-spacing:1.8px;text-transform:uppercase">
-                                              <p style="margin:0;padding:0">NRL Analytics and Value Insights</p>
-                                            </div>
-                                          </td>
-                                          <td align="right">
-                                            <div style="padding:10px 12px;display:inline-block;background-color:#ffe600;color:#05070b;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.2;font-weight:900;letter-spacing:1px;text-transform:uppercase">
-                                              <p style="margin:0;padding:0">${safeRound} Live</p>
-                                            </div>
-                                          </td>
-                                        </tr>
-                                      </tbody>
-                                    </table>
-                                  </td>
-                                </tr>
-                              </tbody>
-                            </table>
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-
-                    <table width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="margin:0;padding:0;background-color:#05070b">
-                      <tbody>
-                        <tr>
-                          <td align="center" style="padding:0 12px">
-                            <table width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="max-width:640px">
-                              <tbody>
-                                <tr>
-                                  <td style="padding:30px 24px 28px 24px;background-color:#0a0d14;border-left:4px solid #00f0a8">
-                                    <div style="padding:8px 10px;display:inline-block;background-color:#00f0a8;color:#05070b;font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:1.2;font-weight:900;letter-spacing:1px;text-transform:uppercase">
-                                      <p style="margin:0;padding:0">Supporter Premium Play</p>
-                                    </div>
-                                    <div style="margin-top:18px;font-family:Arial Black,Arial,Helvetica,sans-serif;font-size:38px;line-height:0.98;color:#ffffff;font-weight:900;letter-spacing:-1px">
-                                      <p style="margin:0;padding:0">
-                                        ${escapeHtml(primaryPlayLabel)}.<br /><span style="color:#00f0a8">${escapeHtml(primaryPriceLine)}.</span>
-                                      </p>
-                                    </div>
-                                    <div style="margin-top:20px;font-family:Arial,Helvetica,sans-serif;font-size:17px;line-height:1.7;color:#c3c9d6">
-                                      <p style="margin:0;padding:0">
-                                        ${primarySourceCopy}
-                                        The model has this <strong style="color:#ffffff">${escapeHtml(primaryPlayType)}</strong>
-                                        at <strong style="color:#ffffff">${Number(primaryModelPct || 0).toFixed(1)}%</strong>,
-                                        ${primaryLivePriceCopy}
-                                      </p>
-                                    </div>
-                                    <div style="margin-top:14px;font-family:Arial,Helvetica,sans-serif;font-size:17px;line-height:1.7;color:#c3c9d6">
-                                      <p style="margin:0;padding:0">
-                                        ${safeKickoff} at ${safeVenue}. Projected score is ${safeScore}.
-                                        <strong style="color:#ffffff">${escapeHtml(primaryDetail)}</strong>.
-                                      </p>
-                                    </div>
-                                    ${scorerBlock}
-                                    <table border="0" cellpadding="0" cellspacing="0" role="presentation" style="margin-top:24px">
-                                      <tbody>
-                                        <tr>
-                                          <td style="background-color:#0a4dff">
-                                            <a href="${betrUrl}" rel="noopener noreferrer sponsored" style="color:#ffffff;text-decoration:none;display:inline-block;padding:18px 28px;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.2;font-weight:900;text-transform:uppercase;letter-spacing:0.5px" target="_blank">
-                                              View ${safeTeam} markets at Betr &rarr;
-                                            </a>
-                                          </td>
-                                        </tr>
-                                      </tbody>
-                                    </table>
-                                    <div style="margin-top:10px;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.5;color:#5a6478">
-                                      <p style="margin:0;padding:0">Payload: ${escapeHtml(payload)}</p>
-                                    </div>
-                                  </td>
-                                </tr>
-                              </tbody>
-                            </table>
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-
-                    <table width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="margin:0;padding:0;background-color:#05070b">
-                      <tbody>
-                        <tr>
-                          <td align="center" style="padding:0 12px">
-                            <table width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="max-width:640px">
-                              <tbody>
-                                <tr>
-                                  <td style="padding:24px 24px 8px 24px;background-color:#0a0d14">
-                                    <div style="font-family:Arial,Helvetica,sans-serif;font-size:17px;line-height:1.75;color:#c3c9d6">
-                                      <p style="margin:0;padding:0">Free shows you the model read. Premium shows you where to act.</p>
-                                    </div>
-                                    <div style="margin-top:14px;font-family:Arial,Helvetica,sans-serif;font-size:17px;line-height:1.75;color:#ffffff">
-                                      <p style="margin:0;padding:0">The full ${safeRound} card is live now.</p>
-                                    </div>
-                                  </td>
-                                </tr>
-                              </tbody>
-                            </table>
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-
-                    <table width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="margin:0;padding:0;background-color:#05070b">
-                      <tbody>
-                        <tr>
-                          <td align="center" style="padding:0 12px">
-                            <table width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="max-width:640px">
-                              <tbody>
-                                <tr>
-                                  <td style="padding:18px 24px 10px 24px;background-color:#0a0d14">
-                                    <table border="0" cellpadding="0" cellspacing="0" role="presentation">
-                                      <tbody>
-                                        <tr>
-                                          <td style="background-color:#ffe600">
-                                            <a href="https://www.rightedge.com.au/#best-bets" rel="noopener noreferrer nofollow" style="color:#05070b;text-decoration:none;display:inline-block;padding:18px 24px;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.2;font-weight:900;text-transform:uppercase;letter-spacing:0.3px" target="_blank">
-                                              Unlock Premium - $9/week &rarr;
-                                            </a>
-                                          </td>
-                                        </tr>
-                                      </tbody>
-                                    </table>
-                                    <div style="margin-top:12px;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.7;color:#97a1b3">
-                                      <p style="margin:0;padding:0">No lock-in. Cancel anytime. Instant access to the full round card.</p>
-                                    </div>
-                                  </td>
-                                </tr>
-                              </tbody>
-                            </table>
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-
-                    <table width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="margin:0;padding:0;background-color:#05070b">
-                      <tbody>
-                        <tr>
-                          <td align="center" style="padding:0 12px">
-                            <table width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="max-width:640px">
-                              <tbody>
-                                <tr>
-                                  <td style="padding:20px 24px 24px 24px;background-color:#0a0d14;border-top:1px solid #1b2230">
-                                    <div style="font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.7;color:#5a6478">
-                                      <p style="margin:0;padding:0">
-                                        RightEdge is an independent analytics platform. Model probabilities do not guarantee outcomes.
-                                        Gamble responsibly - if gambling is affecting you or someone you know, call <strong>1800 858 858</strong>
-                                        or visit <a href="https://www.gamblinghelponline.org.au" style="color:#5a6478">gamblinghelponline.org.au</a>. 18+ only.
-                                      </p>
-                                    </div>
-                                  </td>
-                                </tr>
-                              </tbody>
-                            </table>
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </td>
-        </tr>
-      </tbody>
-    </table>
-  </body>
-</html>`);
+        <div style="background:#111116;border:1px solid #1E1E2E;margin-top:16px;padding:22px 24px;">
+          <div style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:13px;line-height:1.7;color:#9CA3AF;">Free shows the model read. Premium shows where to act. The full ${safeRound} card is live now.</div>
+          ${adminEmailCtaHtml('https://www.rightedge.com.au/#best-bets', 'Unlock Premium - $9/week ->', 'secondary')}
+        </div>`
+    ));
   };
 
   const fetchData = async () => {

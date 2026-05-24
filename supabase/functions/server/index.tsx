@@ -276,90 +276,87 @@ async function syncResendLifecycle(email: string, stage: ResendLifecycleStage) {
   }
 }
 
-function freeWelcomeHtml() {
+function emailHeaderHtml(label = "") {
   return `
-  <div style="margin:0;padding:0;background:#05070b;">
-    <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">
-      Most punters bet teams. Sharp punters bet price.
-    </div>
-    <div style="background:#05070b;padding:28px 14px;font-family:Inter,Arial,Helvetica,sans-serif;color:#ffffff;">
-      <div style="max-width:680px;margin:0 auto;">
-        <div style="background:#0a0d14;border:2px solid #f5f7fb;box-shadow:6px 6px 0 #0a4dff;padding:22px 20px;">
+        <div style="padding:22px 0 18px 0;border-bottom:1px solid #1E1E2E;">
           <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
             <tr>
-              <td align="left">
-                <div style="font-family:Arial Black,Impact,Helvetica,sans-serif;font-size:30px;line-height:1;color:#ffffff;font-weight:900;letter-spacing:-1px;text-transform:uppercase;">RIGHTEDGE</div>
-                <div style="margin-top:8px;font-size:12px;line-height:1.2;color:#00f0a8;font-weight:700;letter-spacing:1.8px;text-transform:uppercase;">NRL Analytics and Value Insights</div>
+              <td align="left" style="vertical-align:middle;">
+                <div style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:22px;line-height:1.2;color:#ffffff;font-weight:600;letter-spacing:-0.02em;">RightEdge</div>
               </td>
-              <td align="right" style="vertical-align:top;">
-                <span style="display:inline-block;background:#ffe600;color:#05070b;font-size:12px;font-weight:900;letter-spacing:1px;text-transform:uppercase;padding:10px 14px;border:2px solid #ffe600;">Free Access Live</span>
-              </td>
+              ${label ? `<td align="right" style="vertical-align:middle;"><span style="display:inline-block;border:1px solid #1E1E2E;color:#9CA3AF;font-family:Inter,Arial,Helvetica,sans-serif;font-size:10px;line-height:1;font-weight:500;letter-spacing:0.12em;text-transform:uppercase;padding:8px 10px;">${label}</span></td>` : ""}
             </tr>
           </table>
-        </div>
+        </div>`;
+}
 
-        <div style="margin-top:24px;background:linear-gradient(90deg, rgba(255,51,133,0.16) 0%, rgba(5,7,11,0) 72%), #0a0d14;border-left:4px solid #ff2f7d;padding:30px 28px;">
-          <div style="display:inline-block;background:#ff2f7d;color:#ffffff;font-size:11px;font-weight:900;letter-spacing:1px;text-transform:uppercase;padding:8px 10px;">Value Betting Intelligence</div>
-          <div style="margin-top:18px;font-family:Arial Black,Impact,Helvetica,sans-serif;font-size:42px;line-height:0.98;color:#ffffff;font-weight:900;letter-spacing:-1.5px;text-transform:uppercase;">Most punters bet teams.<br/>Sharp punters bet price.</div>
-          <div style="margin-top:18px;max-width:560px;font-size:18px;line-height:1.65;color:#c9cfdb;">
-            Welcome to RightEdge. You already have the free model view for the round — but the real edge comes from knowing when the market price is wrong, not just who the model thinks wins.
-          </div>
-          <div style="margin-top:16px;max-width:560px;font-size:17px;line-height:1.7;color:#c9cfdb;">
-            Premium turns the model into action: Best Plays, Try Scorer probabilities & value, live bookmaker odds, edge % — the exact layer built to help you stop guessing and start making plays properly.
-          </div>
-
-          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:24px;">
+function emailCtaHtml(href: string, label: string, variant: "primary" | "secondary" = "primary") {
+  const isPrimary = variant === "primary";
+  return `
+          <table role="presentation" cellspacing="0" cellpadding="0" style="margin-top:24px;">
             <tr>
-              <td style="padding:0 0 12px 0;">
-                <table role="presentation" cellspacing="0" cellpadding="0">
-                  <tr>
-                    <td style="background:#ffe600;border:2px solid #ffe600;box-shadow:4px 4px 0 #0a4dff;">
-                      <a href="https://www.rightedge.com.au/#best-bets" style="display:inline-block;padding:16px 22px;color:#05070b;text-decoration:none;font-size:16px;font-weight:900;letter-spacing:0.3px;text-transform:uppercase;">Unlock Premium →</a>
-                    </td>
-                  </tr>
-                </table>
+              <td style="background:${isPrimary ? "#ffffff" : "transparent"};border:1px solid ${isPrimary ? "#ffffff" : "#1E1E2E"};">
+                <a href="${href}" style="display:inline-block;padding:14px 18px;color:${isPrimary ? "#0A0A0F" : "#ffffff"};text-decoration:none;font-family:Inter,Arial,Helvetica,sans-serif;font-size:14px;line-height:1.2;font-weight:600;letter-spacing:-0.01em;">${label}</a>
               </td>
             </tr>
-          </table>
+          </table>`;
+}
 
-          <div style="font-size:14px;line-height:1.7;color:#9aa7bd;">
-          <span style="color:#ffffff;font-weight:800;">$9/Week</span> — Limited Offer.
-          </div>
-        </div>
-
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:18px;">
-          <tr>
-            <td width="33.33%" style="padding-right:10px;padding-bottom:10px;vertical-align:top;">
-              <div style="background:#0a0d14;border-top:4px solid #0a4dff;padding:22px 18px;height:100%;">
-                <div style="font-size:13px;color:#0a4dff;font-weight:900;text-transform:uppercase;letter-spacing:0.7px;">01</div>
-                <div style="margin-top:10px;font-family:Arial Black,Impact,Helvetica,sans-serif;font-size:19px;line-height:1.1;color:#ffffff;text-transform:uppercase;">Model Probability</div>
-                <div style="margin-top:10px;font-size:14px;line-height:1.6;color:#c9cfdb;">Each matchup is assigned a model-based probability and converted into fair odds.</div>
+function metricCardHtml(label: string, value: string, tone: "default" | "positive" | "negative" = "default") {
+  const color = tone === "positive" ? "#4ADE80" : tone === "negative" ? "#F87171" : "#ffffff";
+  return `
+            <td width="33.33%" style="padding:0 6px 12px 6px;vertical-align:top;">
+              <div style="background:#16161D;border:1px solid #1E1E2E;padding:18px 16px;">
+                <div style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:10px;line-height:1.2;color:#9CA3AF;font-weight:500;letter-spacing:0.12em;text-transform:uppercase;">${label}</div>
+                <div style="margin-top:10px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:22px;line-height:1.1;color:${color};font-weight:600;letter-spacing:-0.02em;">${value}</div>
               </div>
-            </td>
-            <td width="33.33%" style="padding:0 5px 10px 5px;vertical-align:top;">
-              <div style="background:#0a0d14;border-top:4px solid #ffe600;padding:22px 18px;height:100%;">
-                <div style="font-size:13px;color:#ffe600;font-weight:900;text-transform:uppercase;letter-spacing:0.7px;">02</div>
-                <div style="margin-top:10px;font-family:Arial Black,Impact,Helvetica,sans-serif;font-size:19px;line-height:1.1;color:#ffffff;text-transform:uppercase;">Market Comparison</div>
-                <div style="margin-top:10px;font-size:14px;line-height:1.6;color:#c9cfdb;">Market prices are pulled alongside model odds so edges can be evaluated in real time.</div>
-              </div>
-            </td>
-            <td width="33.33%" style="padding-left:10px;padding-bottom:10px;vertical-align:top;">
-              <div style="background:#0a0d14;border-top:4px solid #ff2f7d;padding:22px 18px;height:100%;">
-                <div style="font-size:13px;color:#ff2f7d;font-weight:900;text-transform:uppercase;letter-spacing:0.7px;">03</div>
-                <div style="margin-top:10px;font-family:Arial Black,Impact,Helvetica,sans-serif;font-size:19px;line-height:1.1;color:#ffffff;text-transform:uppercase;">Value Detection</div>
-                <div style="margin-top:10px;font-size:14px;line-height:1.6;color:#c9cfdb;">Premium shows you what to play so you get the edge on the bookies.</div>
-              </div>
-            </td>
-          </tr>
-        </table>
+            </td>`;
+}
 
-
+function rightEdgeEmailShell(preheader: string, label: string, innerHtml: string) {
+  return `
+  <div style="margin:0;padding:0;background:#0A0A0F;">
+    <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">${preheader}</div>
+    <div style="background:#0A0A0F;padding:28px 14px;font-family:Inter,Arial,Helvetica,sans-serif;color:#ffffff;">
+      <div style="max-width:680px;margin:0 auto;">
+        ${emailHeaderHtml(label)}
+        ${innerHtml}
         ${responsibleGamblingEmailFooterHtml()}
-
-        <div style="margin-top:24px;text-align:center;font-size:12px;color:#6f7f99;font-weight:700;letter-spacing:2px;text-transform:uppercase;">Backed by data, not guesswork.</div>
+        <div style="margin-top:22px;text-align:center;font-family:Inter,Arial,Helvetica,sans-serif;font-size:11px;line-height:1.5;color:#6B7280;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;">Backed by data, not guesswork.</div>
       </div>
     </div>
   </div>`;
+}
+
+function freeWelcomeHtml() {
+  return rightEdgeEmailShell(
+    "Your free RightEdge round predictions are live.",
+    "Free Access",
+    `
+        <div style="background:#111116;border:1px solid #1E1E2E;margin-top:24px;padding:28px 26px;">
+          <div style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:10px;line-height:1.2;color:#9CA3AF;font-weight:500;letter-spacing:0.12em;text-transform:uppercase;">Round predictions unlocked</div>
+          <div style="margin-top:14px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:34px;line-height:1.05;color:#ffffff;font-weight:600;letter-spacing:-0.02em;">The free model view is live.</div>
+          <div style="margin-top:18px;max-width:560px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:16px;line-height:1.6;color:#9CA3AF;font-weight:400;">
+            You now have the standard match simulations and score projections for the current round. The free view shows the model read; Premium shows the filtered plays and try scorer signals when the market price is wrong.
+          </div>
+          ${emailCtaHtml("https://www.rightedge.com.au/#matches", "View Free Round Predictions ->")}
+        </div>
+
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:18px;margin-left:-6px;margin-right:-6px;">
+          <tr>
+            ${metricCardHtml("01 / Data", "Simulations")}
+            ${metricCardHtml("02 / Market", "Fair Odds")}
+            ${metricCardHtml("03 / Signal", "Value")}
+          </tr>
+        </table>
+
+        <div style="background:#111116;border:1px solid #1E1E2E;margin-top:6px;padding:22px 24px;">
+          <div style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:13px;line-height:1.7;color:#9CA3AF;">
+            Premium remains optional. It adds the action layer: model plays, try scorer value, live market context and edge filtering.
+          </div>
+          ${emailCtaHtml("https://www.rightedge.com.au/#best-bets", "View Premium Access ->", "secondary")}
+        </div>`
+  );
 }
 
 
@@ -408,85 +405,33 @@ function responsibleGamblingEmailFooterHtml() {
 
 
 function premiumWelcomeHtml() {
-  return `
-  <div style="margin:0;padding:0;background:#05070b;">
-    <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">
-      Premium is live — best bets, try scorer value and live odds are now unlocked.
-    </div>
-    <div style="background:#05070b;padding:32px 16px;font-family:Inter,Arial,Helvetica,sans-serif;color:#ffffff;">
-      <div style="max-width:680px;margin:0 auto;">
-        <div style="background:#0a0d14;border:2px solid #f5f7fb;box-shadow:6px 6px 0 #0a4dff;padding:22px 20px;">
-          <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
-            <tr>
-              <td align="left">
-                <div style="font-family:Arial Black,Impact,Helvetica,sans-serif;font-size:30px;line-height:1;color:#ffffff;font-weight:900;letter-spacing:-1px;text-transform:uppercase;">RIGHTEDGE</div>
-                <div style="margin-top:8px;font-size:12px;line-height:1.2;color:#00f0a8;font-weight:700;letter-spacing:1.8px;text-transform:uppercase;">NRL Analytics and Value Insights</div>
-              </td>
-              <td align="right" style="vertical-align:top;">
-                <span style="display:inline-block;background:#ffe600;color:#05070b;font-size:12px;font-weight:900;letter-spacing:1px;text-transform:uppercase;padding:10px 14px;border:2px solid #ffe600;">Premium</span>
-              </td>
-            </tr>
-          </table>
-        </div>
-
-        <div style="margin-top:26px;background:linear-gradient(90deg, rgba(10,77,255,0.18) 0%, rgba(5,7,11,0) 74%), #0a0d14;border-left:4px solid #0a4dff;padding:28px 28px 30px 28px;">
-          <div style="display:inline-block;background:#16d977;color:#05100a;font-size:11px;font-weight:900;letter-spacing:1px;text-transform:uppercase;padding:8px 10px;">Premium Active</div>
-          <div style="margin-top:18px;font-family:Arial Black,Impact,Helvetica,sans-serif;font-size:44px;line-height:0.98;color:#ffffff;font-weight:900;letter-spacing:-1.5px;text-transform:uppercase;">Premium is live.</div>
-          <div style="margin-top:18px;max-width:560px;font-size:18px;line-height:1.6;color:#c9cfdb;">
-            You now have access to the full RightEdge action layer — the actual bets, live market pricing and the edge the model has identified.
+  return rightEdgeEmailShell(
+    "Premium is live: best bets, try scorer value and live odds are now unlocked.",
+    "Premium",
+    `
+        <div style="background:#111116;border:1px solid #1E1E2E;margin-top:24px;padding:28px 26px;">
+          <div style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:10px;line-height:1.2;color:#9CA3AF;font-weight:500;letter-spacing:0.12em;text-transform:uppercase;">Premium active</div>
+          <div style="margin-top:14px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:34px;line-height:1.05;color:#ffffff;font-weight:600;letter-spacing:-0.02em;">Your action layer is live.</div>
+          <div style="margin-top:18px;max-width:560px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:16px;line-height:1.6;color:#9CA3AF;font-weight:400;">
+            You now have access to the filtered RightEdge card: model plays, try scorer value, live market context and the edge the model has identified.
           </div>
-
-          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:24px;">
-            <tr>
-              <td width="25%" style="padding-right:8px;padding-bottom:10px;">
-                <div style="background:#0f1714;border-top:4px solid #16d977;padding:18px 14px;">
-                  <div style="font-size:11px;color:#16d977;font-weight:900;text-transform:uppercase;letter-spacing:1px;">Best Bets</div>
-                </div>
-              </td>
-              <td width="25%" style="padding:0 6px 10px 6px;">
-                <div style="background:#0a0d14;border-top:4px solid #ff2f7d;padding:18px 14px;">
-                  <div style="font-size:11px;color:#ff2f7d;font-weight:900;text-transform:uppercase;letter-spacing:1px;">Try Scorers</div>
-                </div>
-              </td>
-              <td width="25%" style="padding:0 6px 10px 6px;">
-                <div style="background:#0a0d14;border-top:4px solid #ffe600;padding:18px 14px;">
-                  <div style="font-size:11px;color:#ffe600;font-weight:900;text-transform:uppercase;letter-spacing:1px;">Live Odds</div>
-                </div>
-              </td>
-              <td width="25%" style="padding-left:8px;padding-bottom:10px;">
-                <div style="background:#0a0d14;border-top:4px solid #0a4dff;padding:18px 14px;">
-                  <div style="font-size:11px;color:#0a4dff;font-weight:900;text-transform:uppercase;letter-spacing:1px;">Edge %</div>
-                </div>
-              </td>
-            </tr>
-          </table>
-
-          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:14px;">
-            <tr>
-              <td style="padding:0;">
-                <table role="presentation" cellspacing="0" cellpadding="0">
-                  <tr>
-                    <td style="background:#0a4dff;border:2px solid #0a4dff;box-shadow:4px 4px 0 #ff2f7d;">
-                      <a href="https://www.rightedge.com.au/#best-bets" style="display:inline-block;padding:16px 22px;color:#ffffff;text-decoration:none;font-size:16px;font-weight:900;letter-spacing:0.3px;text-transform:uppercase;">View Best Bets →</a>
-                    </td>
-                  </tr>
-                </table>
-              </td>
-            </tr>
-          </table>
+          ${emailCtaHtml("https://www.rightedge.com.au/#best-bets", "View Best Bets ->")}
         </div>
 
-        <div style="margin-top:18px;background:#11151f;padding:18px 22px;border-left:4px solid #ffe600;">
-          <div style="font-size:12px;color:#ffe600;font-weight:900;letter-spacing:1.2px;text-transform:uppercase;">How premium works</div>
-          <div style="margin-top:8px;font-size:15px;line-height:1.7;color:#d4dae5;">Use the Premium Login button anytime. Enter your subscriber email and RightEdge will take you straight to the full premium card — no code needed.</div>
-        </div>
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:18px;margin-left:-6px;margin-right:-6px;">
+          <tr>
+            ${metricCardHtml("Best Bets", "Unlocked", "positive")}
+            ${metricCardHtml("Try Scorers", "Unlocked", "positive")}
+            ${metricCardHtml("Live Odds", "Betr")}
+          </tr>
+        </table>
 
-        ${responsibleGamblingEmailFooterHtml()}
-
-        <div style="margin-top:24px;text-align:center;font-size:12px;color:#6f7f99;font-weight:700;letter-spacing:2px;text-transform:uppercase;">Backed by data, not guesswork.</div>
-      </div>
-    </div>
-  </div>`;
+        <div style="background:#111116;border:1px solid #1E1E2E;margin-top:6px;padding:22px 24px;">
+          <div style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:13px;line-height:1.7;color:#9CA3AF;">
+            Use Premium Login anytime. Enter your subscriber email and RightEdge will take you straight to the full premium card.
+          </div>
+        </div>`
+  );
 }
 
 async function sendWelcomeEmail(type: "free" | "premium", email: string) {
@@ -868,33 +813,18 @@ function buildNurtureEmail(stepId: LeadNurtureStepId, ctx: Awaited<ReturnType<ty
 
   return {
     subject: selected.subject,
-    html: `
-  <div style="margin:0;padding:0;background:#05070b;">
-    <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">${selected.subject}</div>
-    <div style="background:#05070b;padding:30px 14px;font-family:Inter,Arial,Helvetica,sans-serif;color:#ffffff;">
-      <div style="max-width:680px;margin:0 auto;">
-        <div style="background:#0a0d14;border:2px solid #f5f7fb;box-shadow:6px 6px 0 #0a4dff;padding:22px 20px;">
-          <div style="font-family:Arial Black,Impact,Helvetica,sans-serif;font-size:30px;line-height:1;color:#ffffff;font-weight:900;letter-spacing:-1px;text-transform:uppercase;">RIGHTEDGE</div>
-          <div style="margin-top:8px;font-size:12px;line-height:1.2;color:#00f0a8;font-weight:700;letter-spacing:1.8px;text-transform:uppercase;">NRL Analytics and Value Insights</div>
-        </div>
-        <div style="margin-top:24px;background:#0a0d14;border-left:4px solid #ff2f7d;padding:28px 26px;">
-          <div style="display:inline-block;background:#ff2f7d;color:#ffffff;font-size:11px;font-weight:900;letter-spacing:1px;text-transform:uppercase;padding:8px 10px;">${selected.eyebrow}</div>
-          <div style="margin-top:18px;font-family:Arial Black,Impact,Helvetica,sans-serif;font-size:34px;line-height:1.02;color:#ffffff;font-weight:900;letter-spacing:-1px;text-transform:uppercase;">${selected.headline}</div>
-          <div style="margin-top:18px;font-size:16px;line-height:1.65;color:#c9cfdb;">${selected.body}</div>
-          <table role="presentation" cellspacing="0" cellpadding="0" style="margin-top:24px;">
-            <tr>
-              <td style="background:#ffe600;border:2px solid #ffe600;box-shadow:4px 4px 0 #0a4dff;">
-                <a href="${selected.href}" style="display:inline-block;padding:16px 22px;color:#05070b;text-decoration:none;font-size:15px;font-weight:900;letter-spacing:0.3px;text-transform:uppercase;">${selected.cta} →</a>
-              </td>
-            </tr>
-          </table>
-          ${selected.secondaryCta && selected.secondaryHref ? `<div style="margin-top:18px;font-size:13px;line-height:1.4;font-weight:900;letter-spacing:1px;text-transform:uppercase;"><a href="${selected.secondaryHref}" style="color:#ffe600;text-decoration:none;">${selected.secondaryCta} →</a></div>` : ""}
-        </div>
-        ${responsibleGamblingEmailFooterHtml()}
-        <div style="margin-top:24px;text-align:center;font-size:12px;color:#6f7f99;font-weight:700;letter-spacing:2px;text-transform:uppercase;">Backed by data, not guesswork.</div>
-      </div>
-    </div>
-  </div>`,
+    html: rightEdgeEmailShell(
+      selected.subject,
+      selected.eyebrow,
+      `
+        <div style="background:#111116;border:1px solid #1E1E2E;margin-top:24px;padding:28px 26px;">
+          <div style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:10px;line-height:1.2;color:#9CA3AF;font-weight:500;letter-spacing:0.12em;text-transform:uppercase;">${selected.eyebrow}</div>
+          <div style="margin-top:14px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:30px;line-height:1.08;color:#ffffff;font-weight:600;letter-spacing:-0.02em;">${selected.headline}</div>
+          <div style="margin-top:18px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:15px;line-height:1.7;color:#9CA3AF;font-weight:400;">${selected.body}</div>
+          ${emailCtaHtml(selected.href, `${selected.cta} ->`)}
+          ${selected.secondaryCta && selected.secondaryHref ? `<div style="margin-top:16px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:13px;line-height:1.4;font-weight:600;"><a href="${selected.secondaryHref}" style="color:#ffffff;text-decoration:none;">${selected.secondaryCta} -></a></div>` : ""}
+        </div>`
+    ),
   };
 }
 
@@ -3134,59 +3064,24 @@ if (typeof Deno.cron === "function") {
     const resend = new Resend(resendApiKey);
 
     const subject = "RightEdge: Thursday Lookahead Plays 🎯";
-    const htmlContent = `
-      <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background-color: #0B0E14; padding: 40px 20px; color: #ffffff;">
-        <div style="max-width: 600px; margin: 0 auto; background-color: #111317; border: 1px solid #1A1D24;">
-          
-          <div style="text-align: center; padding: 30px; border-bottom: 1px solid #1A1D24;">
-            <h1 style="font-size: 28px; font-family: 'Arial Black', Impact, sans-serif; font-weight: 900; letter-spacing: -1px; margin: 0; text-transform: uppercase; color: #fff;">RIGHTEDGE</h1>
-            <div style="color: #00E676; font-size: 11px; font-weight: bold; letter-spacing: 2px; margin-top: 5px; text-transform: uppercase; font-family: monospace;">NRL Analytics & Value Betting</div>
+    const htmlContent = rightEdgeEmailShell(
+      subject,
+      "Lookahead",
+      `
+        <div style="background:#111116;border:1px solid #1E1E2E;margin-top:24px;padding:28px 26px;">
+          <div style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:10px;line-height:1.2;color:#9CA3AF;font-weight:500;letter-spacing:0.12em;text-transform:uppercase;">Round lookahead</div>
+          <div style="margin-top:14px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:30px;line-height:1.08;color:#ffffff;font-weight:600;letter-spacing:-0.02em;">The next round card is ready.</div>
+          <div style="margin-top:18px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:15px;line-height:1.7;color:#9CA3AF;font-weight:400;">
+            Check the dashboard for live projected scores, true win probabilities and market edge percentages for every matchup this round.
           </div>
-          
-          <div style="padding: 30px; padding-bottom: 10px;">
-            <h2 style="font-family: 'Arial Black', Impact, sans-serif; font-size: 22px; text-transform: uppercase; margin-top: 0; margin-bottom: 15px; color: #fff;">Round Lookahead 🎯</h2>
-            <p style="color: #A1A1AA; font-size: 15px; line-height: 1.6; margin-bottom: 0;">
-              The model has crunched the numbers for this weekend's matchups. We've identified new <strong style="color: #fff;">official plays</strong> across the slate based on strict mathematical edge.
-            </p>
-          </div>
-
-          <!-- PREDICTIONS PREVIEW LINK -->
-          <div style="padding: 20px 30px;">
-            <h3 style="color: #fff; font-family: 'Arial Black', sans-serif; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; margin-top: 0; margin-bottom: 15px; border-bottom: 1px solid #1A1D24; padding-bottom: 10px;">Predictions Preview</h3>
-            
-            <p style="color: #E2E8F0; font-size: 14px; line-height: 1.5; margin-bottom: 25px;">Check the dashboard for live projected scores, true win probabilities, and market edge percentages for every matchup this round.</p>
-            
-            <table width="100%" cellpadding="0" cellspacing="0">
-              <tr>
-                <td align="center">
-                  <a href="https://www.rightedge.com.au/#matches" style="display: block; background-color: #111317; border: 2px solid #0047FF; color: #fff; padding: 14px 24px; text-decoration: none; font-weight: 900; font-size: 13px; font-family: 'Arial Black', sans-serif; text-transform: uppercase; letter-spacing: 1px;">VIEW ALL PROJECTIONS ➔</a>
-                </td>
-              </tr>
-            </table>
-          </div>
-
-          <!-- BEST BETS LINK -->
-          <div style="background-color: #1A1D24; padding: 30px; border-left: 4px solid #FF2E63; margin: 20px 30px 40px 30px;">
-            <div style="color: #FF2E63; font-size: 11px; font-family: 'Arial Black', sans-serif; font-weight: 900; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px;">🔥 MAX-CONFIDENCE PLAYS</div>
-            <p style="color: #E2E8F0; font-size: 14px; line-height: 1.5; margin-top: 0; margin-bottom: 20px;">The model has locked in official plays for this round based on significant closing line value. Log in to see the exact edge, stakes, and targets.</p>
-            
-            <table width="100%" cellpadding="0" cellspacing="0">
-              <tr>
-                <td align="center">
-                  <a href="https://www.rightedge.com.au/#best-bets" style="display: block; background-color: #00E676; color: #000; padding: 16px 24px; text-decoration: none; font-weight: 900; font-size: 14px; font-family: 'Arial Black', sans-serif; text-transform: uppercase; letter-spacing: 1px;">UNLOCK BEST BETS ➔</a>
-                </td>
-              </tr>
-            </table>
-          </div>
-
-          <!-- FOOTER -->
-          <div style="padding: 30px; text-align: center; border-top: 1px solid #1A1D24;">
-            <p style="margin: 0 0 10px 0; font-size: 12px; color: #64748B; font-family: monospace; text-transform: uppercase; letter-spacing: 1px;">Backed by Data, Not Guesswork.</p>
-</div>
-
+          ${emailCtaHtml("https://www.rightedge.com.au/#matches", "View Free Round Predictions ->")}
         </div>
-      </div>
-    `;
+        <div style="background:#111116;border:1px solid #1E1E2E;margin-top:16px;padding:22px 24px;">
+          <div style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:10px;line-height:1.2;color:#9CA3AF;font-weight:500;letter-spacing:0.12em;text-transform:uppercase;">Premium card</div>
+          <div style="margin-top:10px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:14px;line-height:1.7;color:#9CA3AF;">Log in to see the filtered plays, try scorer signals and live market context.</div>
+          ${emailCtaHtml("https://www.rightedge.com.au/#best-bets", "View Premium Plays ->", "secondary")}
+        </div>`
+    );
 
     // Resend batch sending (max 100 per batch)
     const BATCH_SIZE = 100;
@@ -3256,42 +3151,19 @@ Deno.cron("Sunday Ledger Review", "0 8 * * 0", async () => {
     const resend = new Resend(resendApiKey);
 
     const subject = "RightEdge: Sunday Ledger Review 📊";
-    const htmlContent = `
-      <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background-color: #0B0E14; padding: 40px 20px; color: #ffffff;">
-        <div style="max-width: 600px; margin: 0 auto; background-color: #111317; border: 1px solid #1A1D24;">
-          
-          <div style="text-align: center; padding: 30px; border-bottom: 1px solid #1A1D24;">
-            <h1 style="font-size: 28px; font-family: 'Arial Black', Impact, sans-serif; font-weight: 900; letter-spacing: -1px; margin: 0; text-transform: uppercase; color: #fff;">RIGHTEDGE</h1>
-            <div style="color: #00E676; font-size: 11px; font-weight: bold; letter-spacing: 2px; margin-top: 5px; text-transform: uppercase; font-family: monospace;">NRL Analytics & Value Betting</div>
+    const htmlContent = rightEdgeEmailShell(
+      subject,
+      "Ledger",
+      `
+        <div style="background:#111116;border:1px solid #1E1E2E;margin-top:24px;padding:28px 26px;">
+          <div style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:10px;line-height:1.2;color:#9CA3AF;font-weight:500;letter-spacing:0.12em;text-transform:uppercase;">Ledger review</div>
+          <div style="margin-top:14px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:30px;line-height:1.08;color:#ffffff;font-weight:600;letter-spacing:-0.02em;">The round is complete.</div>
+          <div style="margin-top:18px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:15px;line-height:1.7;color:#9CA3AF;font-weight:400;">
+            Review how the model performed against the closing line, with detailed historical ledger and ROI tracking.
           </div>
-          
-          <div style="padding: 30px;">
-            <h2 style="font-family: 'Arial Black', Impact, sans-serif; font-size: 22px; text-transform: uppercase; margin-top: 0; margin-bottom: 15px; color: #fff;">Ledger Review 📊</h2>
-            <p style="color: #A1A1AA; font-size: 15px; line-height: 1.6; margin-bottom: 0;">
-              The round is over. Here is the fully transparent breakdown of how the model performed against the closing line.
-            </p>
-          </div>
-
-          <div style="background-color: #1A1D24; padding: 30px; border-left: 4px solid #00E676;">
-            <h3 style="margin-top: 0; color: #fff; font-family: 'Arial Black', sans-serif; font-size: 16px; text-transform: uppercase; letter-spacing: 0.5px;">Performance Recap</h3>
-            <p style="color: #A1A1AA; font-size: 15px; line-height: 1.6; margin-bottom: 25px;">Check the Performance tab on the dashboard for detailed historical ledgers and ROI tracking.</p>
-            
-            <table width="100%" cellpadding="0" cellspacing="0">
-              <tr>
-                <td align="center">
-                  <a href="https://www.rightedge.com.au/#performance" style="display: block; background-color: #00E676; color: #000; padding: 16px 24px; text-decoration: none; font-weight: 900; font-size: 14px; font-family: 'Arial Black', sans-serif; text-transform: uppercase; letter-spacing: 1px;">VIEW FULL LEDGER ➔</a>
-                </td>
-              </tr>
-            </table>
-          </div>
-
-          <div style="padding: 30px; text-align: center; border-top: 1px solid #1A1D24;">
-            <p style="margin: 0 0 10px 0; font-size: 12px; color: #64748B; font-family: monospace; text-transform: uppercase; letter-spacing: 1px;">Backed by Data, Not Guesswork.</p>
-</div>
-
-        </div>
-      </div>
-    `;
+          ${emailCtaHtml("https://www.rightedge.com.au/#performance", "View Full Ledger ->")}
+        </div>`
+    );
 
     // Resend batch sending (max 100 per batch)
     const BATCH_SIZE = 100;
