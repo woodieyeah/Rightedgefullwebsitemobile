@@ -5012,6 +5012,7 @@ function buildPremiumMarketPlays(
   data: DashboardData,
   marketMap: SgmMarketMap,
   now = Date.now(),
+  includeStarted = false,
 ) {
   const settledMatchKeys = new Set(
     data.betLog
@@ -5021,8 +5022,8 @@ function buildPremiumMarketPlays(
 
   return [...data.predictions]
     .sort(sortPredictionsByFixture)
-    .filter((row) => !settledMatchKeys.has(buildMatchLabelKey(row.match)))
-    .filter((row) => !hasPredictionKickedOff(row, now))
+    .filter((row) => includeStarted || !settledMatchKeys.has(buildMatchLabelKey(row.match)))
+    .filter((row) => includeStarted || !hasPredictionKickedOff(row, now))
     .map((row) => getBestPremiumMarketPlayForMatch(row, marketMap))
     .filter(Boolean) as PremiumMarketPlay[];
 }
@@ -5121,9 +5122,11 @@ function PremiumMarketPlayCard({ play }: { play: PremiumMarketPlay }) {
 function BestBetsPage({
   data,
   onRequestAccess,
+  isAdmin = false,
 }: {
   data: DashboardData;
   onRequestAccess: (targetHash?: string) => void;
+  isAdmin?: boolean;
 }) {
   const [marketMap, setMarketMap] = useState<SgmMarketMap>({});
   const [isLoadingMarkets, setIsLoadingMarkets] = useState(true);
@@ -5152,8 +5155,8 @@ function BestBetsPage({
   }, []);
 
   const matchReads = useMemo(
-    () => buildPremiumMarketPlays(data, marketMap, now).slice(0, 8),
-    [data, marketMap, now],
+    () => buildPremiumMarketPlays(data, marketMap, now, isAdmin).slice(0, isAdmin ? 50 : 8),
+    [data, marketMap, now, isAdmin],
   );
 
   const latestTryScorerRound = Math.max(
@@ -5180,7 +5183,7 @@ function BestBetsPage({
     .flatMap((players) => {
       const keys = getMatchBestBetKeys(players);
       return players
-        .filter((row) => !isTryScorerMatchLive(row))
+        .filter((row) => isAdmin || !isTryScorerMatchLive(row))
         .filter((row) => keys.has(getTryScorerKey(row)))
         .map((row) => ({
           row,
@@ -5199,9 +5202,9 @@ function BestBetsPage({
       }
       return b.row.statsInsiderPct - a.row.statsInsiderPct;
     })
-    .slice(0, 8);
+    .slice(0, isAdmin ? 50 : 8);
 
-  if (!hasPaidAccess()) {
+  if (!hasPaidAccess() && !isAdmin) {
     return (
       <div className="flex flex-col gap-6 md:gap-8">
         <GlassCard className="p-8 md:p-12 text-center !border-[#FF2E63] !shadow-[8px_8px_0_0_#FF2E63] relative overflow-hidden">
@@ -5353,9 +5356,11 @@ function BestBetsPage({
 function TryScorersPage({
   data,
   onRequestAccess,
+  isAdmin = false,
 }: {
   data: DashboardData;
   onRequestAccess: (targetHash?: string) => void;
+  isAdmin?: boolean;
 }) {
   const now = useMinuteNow();
   const availableRounds = useMemo(
@@ -5405,7 +5410,7 @@ function TryScorersPage({
       : data.tryScorers.filter((row) => row.round === selectedRound);
 
   const valuePlays = roundFilteredRows
-    .filter((row) => !hasPredictionKickedOff(predictionByMatch.get(buildMatchLabelKey(row.match)), now))
+    .filter((row) => isAdmin || !hasPredictionKickedOff(predictionByMatch.get(buildMatchLabelKey(row.match)), now))
     .filter((row) => getTryScorerSignal(row) || isTryScorerBestBetCandidate(row));
   const roundLabel =
     selectedRound === "all" ? "All rounds" : `Round ${selectedRound}`;
@@ -5418,7 +5423,7 @@ function TryScorersPage({
 
   const matchCount = Object.keys(matchGroups).length;
 
-  if (!hasPaidAccess()) {
+  if (!hasPaidAccess() && !isAdmin) {
     return (
       <div className="flex flex-col gap-6 md:gap-8">
         <GlassCard className="p-8 md:p-12 text-center !border-[#FF2E63] !shadow-[8px_8px_0_0_#FF2E63] relative overflow-hidden">
@@ -6799,6 +6804,7 @@ function AppDashboard({
                 <BestBetsPage
                   data={data}
                   onRequestAccess={onRequestAccess}
+                  isAdmin={isAdmin}
                 />
               )}
               {page === "matches" && (
@@ -6811,6 +6817,7 @@ function AppDashboard({
                 <TryScorersPage
                   data={data}
                   onRequestAccess={onRequestAccess}
+                  isAdmin={isAdmin}
                 />
               )}
               {page === "admin" && (
@@ -7312,8 +7319,8 @@ export default function App() {
     setSitePage("app");
     window.location.hash = targetHash;
     setShowEmailGate(false);
-    if (hasPaidAccess()) {
-      setPaidAccessState(true);
+    if (hasPaidAccess() || isUserAdmin()) {
+      setPaidAccessState(hasPaidAccess());
       setShowPaymentGate(false);
       return;
     }
@@ -7341,8 +7348,8 @@ export default function App() {
       setSitePage("app");
       setShowEmailGate(false);
 
-      if (hasPaidAccess()) {
-        setPaidAccessState(true);
+      if (hasPaidAccess() || isUserAdmin()) {
+        setPaidAccessState(hasPaidAccess());
         setShowPaymentGate(false);
       } else {
         setPaidAccessState(false);
