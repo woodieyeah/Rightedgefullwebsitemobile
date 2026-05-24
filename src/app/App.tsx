@@ -3535,9 +3535,6 @@ function FeaturedMatchPreview({
 
   return (
     <div className="mt-5 mb-4">
-      <h2 className="text-xl md:text-2xl font-semibold text-white mb-4 px-2 uppercase tracking-tight">
-        Featured Match
-      </h2>
       <HomeCard className="p-8 md:p-12 relative overflow-hidden">
         <div className="absolute inset-0 bg-[#111116]" />
         <div className="relative z-10 flex flex-col md:flex-row md:items-start justify-between gap-10">
@@ -3550,7 +3547,7 @@ function FeaturedMatchPreview({
                 </span>
               ) : (
                 <span className="inline-flex items-center bg-[#16161D] border border-[#1E1E2E] px-3 py-1.5 text-sm font-medium text-white uppercase tracking-wider">
-                  Match Preview
+                  Featured Match
                 </span>
               )}
               <span className="text-sm font-medium text-[#9CA3AF] uppercase tracking-widest">
