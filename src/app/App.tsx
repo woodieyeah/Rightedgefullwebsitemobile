@@ -3077,6 +3077,79 @@ function PublicHero({
   );
 }
 
+function TryScorerTicker({ data }: { data: DashboardData | null }) {
+  const plays = useMemo(() => {
+    if (!data?.tryScorers.length) return [];
+
+    const currentRoundNumber = toRoundNumber(data.currentRoundLabel);
+    const availableRounds = Array.from(
+      new Set(
+        data.tryScorers
+          .map((row) => row.round)
+          .filter((round) => Number.isFinite(round) && round > 0),
+      ),
+    ).sort((a, b) => b - a);
+    const latestRound = availableRounds[0] || 0;
+    const tickerRound = data.tryScorers.some((row) => row.round === currentRoundNumber)
+      ? currentRoundNumber
+      : latestRound;
+
+    return data.tryScorers
+      .filter((row) => row.round === tickerRound)
+      .filter((row) => getTryScorerSignal(row) || isTryScorerBestBetCandidate(row))
+      .filter((row) => row.statsInsiderPct > 0 && row.marketImpliedPct > 0 && row.bestOdds > 1)
+      .sort(
+        (a, b) =>
+          (getTryScorerSignal(b)?.sortRank || 0) - (getTryScorerSignal(a)?.sortRank || 0) ||
+          b.statsInsiderPct - a.statsInsiderPct ||
+          b.bestOdds - a.bestOdds,
+      );
+  }, [data]);
+
+  if (!plays.length) return null;
+
+  const renderPlay = (row: TryScorerRow, index: number, copy: string) => (
+    <React.Fragment key={`${copy}-${getTryScorerKey(row)}-${index}`}>
+      <span className="inline-flex items-center gap-2 whitespace-nowrap">
+        <span className="text-[13px] font-medium text-white uppercase tracking-[0.02em]">
+          {row.player}
+        </span>
+        <span className="text-[13px] font-medium text-[#9CA3AF]">
+          · MODEL <span className="text-[#4ADE80]">{formatPercent(row.statsInsiderPct, 0)}</span>
+        </span>
+        <span className="text-[13px] font-medium text-[#9CA3AF]">
+          · MARKET {formatPercent(row.marketImpliedPct, 0)}
+        </span>
+        <span className="text-[13px] font-medium text-[#9CA3AF]">
+          · ${row.bestOdds.toFixed(2)}
+        </span>
+      </span>
+      <span className="mx-5 text-[#6B7280]">•</span>
+    </React.Fragment>
+  );
+
+  return (
+    <div className="relative h-[44px] overflow-hidden border-y border-[#1E1E2E] bg-[#16161D]">
+      <div
+        className="pointer-events-none absolute inset-y-0 left-0 z-10 w-16"
+        style={{ background: "linear-gradient(90deg, #16161D 0%, rgba(22,22,29,0) 100%)" }}
+      />
+      <div
+        className="pointer-events-none absolute inset-y-0 right-0 z-10 w-16"
+        style={{ background: "linear-gradient(270deg, #16161D 0%, rgba(22,22,29,0) 100%)" }}
+      />
+      <div className="try-scorer-ticker-track flex h-full w-max items-center">
+        <div className="flex h-full shrink-0 items-center pr-10">
+          {plays.map((row, index) => renderPlay(row, index, "a"))}
+        </div>
+        <div className="flex h-full shrink-0 items-center pr-10" aria-hidden="true">
+          {plays.map((row, index) => renderPlay(row, index, "b"))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ReadMore({ children }: { children: React.ReactNode }) {
   const [expanded, setExpanded] = useState(false);
   return (
@@ -3726,6 +3799,7 @@ function HomePage({
 
   return (
     <div className="flex flex-col gap-6 sm:gap-8">
+      <TryScorerTicker data={data} />
       <PublicHero
         data={data}
         onGoApp={onGoApp}

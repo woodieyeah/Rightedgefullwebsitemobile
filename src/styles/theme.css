@@ -279,6 +279,31 @@
     opacity: 0.9;
   }
 
+  #root .try-scorer-ticker-track {
+    animation: rightedge-ticker-scroll 34s linear infinite;
+  }
+
+  #root .try-scorer-ticker-track:hover {
+    animation-play-state: paused;
+  }
+
+  @keyframes rightedge-ticker-scroll {
+    from {
+      transform: translateX(0);
+    }
+
+    to {
+      transform: translateX(-50%);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    #root .try-scorer-ticker-track {
+      animation-duration: 0.001ms;
+      animation-iteration-count: 1;
+    }
+  }
+
   /**
   * Default typography styles for HTML elements (h1-h4, p, label, button, input).
   * These are in @layer base, so Tailwind utility classes (like text-sm, text-lg) automatically override them.
