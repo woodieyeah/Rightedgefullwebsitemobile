@@ -1070,7 +1070,7 @@ app.post("/register-free-access", async (c) => {
     if (!email || !email.includes('@')) {
       return c.json({ error: 'Invalid email' }, 400);
     }
-    if (!favoriteTeam || !NRL_TEAMS.has(favoriteTeam)) {
+    if (favoriteTeam && !NRL_TEAMS.has(favoriteTeam)) {
       return c.json({ error: 'Select a valid NRL team' }, 400);
     }
 
@@ -1092,7 +1092,7 @@ app.post("/register-free-access", async (c) => {
       ...existingRecord,
       email,
       source,
-      favoriteTeam,
+      favoriteTeam: favoriteTeam || String(existingRecord.favoriteTeam || ""),
       registeredAt: existingRecord.registeredAt || now,
       updatedAt: now,
     }));

@@ -2218,7 +2218,6 @@ function EmailGateModal({
 }) {
   const [step, setStep] = useState<"email" | "otp">("email");
   const [email, setEmail] = useState("");
-  const [favoriteTeam, setFavoriteTeam] = useState(() => getStoredFavoriteTeam());
   const [otp, setOtp] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
@@ -2229,20 +2228,14 @@ function EmailGateModal({
   const handleSubmit = async (e: React.FormEvent) => {
   e.preventDefault();
   const trimmed = email.trim().toLowerCase();
-  const selectedTeam = favoriteTeam.trim();
   if (!trimmed || !trimmed.includes("@") || !trimmed.includes(".")) {
     setErrorMsg("Enter a valid email address.");
-    return;
-  }
-  if (!selectedTeam) {
-    setErrorMsg("Select your team.");
     return;
   }
 
   // Admin bypass
   const BYPASS_EMAILS = [...ADMIN_EMAILS, "test@rightedge.com.au"];
   if (BYPASS_EMAILS.includes(trimmed)) {
-    setStoredFavoriteTeam(selectedTeam);
     setEmailAccess(trimmed);
     window.dispatchEvent(new Event('adminAuthChanged'));
     onSuccess();
@@ -2261,7 +2254,6 @@ function EmailGateModal({
       body: JSON.stringify({
         email: trimmed,
         source: "mailing_list",
-        favoriteTeam: selectedTeam,
       }),
     });
     if (!saveRes.ok) {
@@ -2270,11 +2262,9 @@ function EmailGateModal({
       setSubmitting(false);
       return;
     }
-    setStoredFavoriteTeam(selectedTeam);
     setEmailAccess(trimmed);
     (window as any).trackAnalyticsEvent?.("mailing_list_signup", {
       email: trimmed,
-      favorite_team: selectedTeam,
     });
     onSuccess();
   } catch (err) {
@@ -2303,16 +2293,16 @@ function EmailGateModal({
           </div>
           <div>
             <h3 className="text-xl font-semibold text-white uppercase tracking-tight">
-              UNLOCK INSTANT ACCESS
+              ACCESS LIVE ROUND DATA
             </h3>
             <p className="text-[10px] font-medium text-[#9CA3AF] uppercase tracking-widest">
-              FREE — NO CREDIT CARD NEEDED
+              100% FREE — NO CREDIT CARD REQUIRED
             </p>
           </div>
         </div>
 
         <p className="text-sm text-[#9CA3AF] font-normal leading-relaxed mb-6">
-          Enter your email to access model predictions, projected scores and Betr market links instantly. Free, no credit card needed.
+          Enter your email to instantly unlock all model simulations, projected scores, and value overlays for the current round.
         </p>
 
         <form
@@ -2335,26 +2325,6 @@ function EmailGateModal({
                   disabled={submitting}
                   className="w-full bg-[#0A0A0F] border border-[#1E1E2E] text-white font-normal text-base pl-12 pr-4 py-4 placeholder:text-[#6B7280] focus:outline-none focus:border-white/40 transition-colors disabled:opacity-50"
                 />
-              </div>
-              <div className="relative">
-                <select
-                  value={favoriteTeam}
-                  onChange={(e) => {
-                    setFavoriteTeam(e.target.value);
-                    setErrorMsg("");
-                  }}
-                  disabled={submitting}
-                  className="w-full appearance-none bg-[#0A0A0F] border border-[#1E1E2E] text-white font-normal text-base px-4 py-4 focus:outline-none focus:border-white/40 transition-colors disabled:opacity-50"
-                >
-                  <option value="" className="text-black">
-                    Select your team
-                  </option>
-                  {NRL_TEAMS.map((team) => (
-                    <option key={team} value={team} className="text-black">
-                      {team}
-                    </option>
-                  ))}
-                </select>
               </div>
             </>
           ) : (
@@ -2416,17 +2386,6 @@ function EmailGateModal({
           )}
         </form>
 
-        {step === "email" && (
-          <div className="mt-6 text-center">
-            <p className="text-[10px] font-medium text-[#6B7280] uppercase tracking-widest">
-              INSTANT ACCESS. NO WAITING.
-            </p>
-          </div>
-        )}
-
-        <p className="text-[10px] text-[#6B7280] font-medium uppercase tracking-wider mt-4 text-center">
-          FREE FOREVER. UNSUBSCRIBE ANYTIME.
-        </p>
       </div>
     </div>
   );
