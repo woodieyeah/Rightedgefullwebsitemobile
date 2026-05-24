@@ -2983,7 +2983,7 @@ function HomeCard({
 
 function PublicHero() {
   return (
-    <section className="relative overflow-hidden pt-12 pb-3 sm:pt-16 sm:pb-4 md:pt-20 md:pb-5">
+    <section className="relative mt-8 overflow-hidden pt-12 pb-3 sm:mt-10 sm:pt-16 sm:pb-4 md:mt-12 md:pt-20 md:pb-5">
       <div className="max-w-[760px]">
         <div className="inline-flex items-center gap-2 bg-[#16161D] border border-[#1E1E2E] px-3 py-1.5 text-[10px] sm:text-xs font-medium text-[#9CA3AF] mb-6 uppercase tracking-wider">
           <Sparkles className="w-3.5 h-3.5" />
@@ -3631,41 +3631,13 @@ function FeaturedMatchPreview({
         </div>
       </HomeCard>
       <button
-        onClick={() => onGoApp("featured_see_all_predictions")}
-        className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-white transition hover:opacity-75"
+        onClick={() => onGoApp("featured_full_round_predictions")}
+        className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-full border border-white/90 bg-white px-5 py-3 text-sm font-medium text-[#0A0A0F] transition hover:opacity-85 sm:w-auto sm:px-6"
       >
-        See all predictions
+        View full round predictions
         <ArrowRight className="h-4 w-4" />
       </button>
     </div>
-  );
-}
-
-function HomeConversionCta({
-  onRequestPremium,
-}: {
-  onRequestPremium: (source: string) => void;
-}) {
-  return (
-    <HomeCard className="mb-4 mt-4 rounded-2xl p-5 sm:p-6 md:p-7">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <div className="text-base font-semibold tracking-tight text-white sm:text-lg">
-            Want the full round card?
-          </div>
-          <p className="mt-1 max-w-[560px] text-sm leading-relaxed text-[#9CA3AF]">
-            Premium plays and try scorer signals, updated with the live market.
-          </p>
-        </div>
-        <button
-          onClick={() => onRequestPremium("homepage_conversion_strip")}
-          className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-medium text-[#0A0A0F] transition hover:opacity-85"
-        >
-          <Lock className="h-4 w-4" />
-          Unlock premium
-        </button>
-      </div>
-    </HomeCard>
   );
 }
 
@@ -3736,11 +3708,9 @@ function HomeMethodology({ onGoApp }: { onGoApp: (source: string) => void }) {
 function HomePage({
   data,
   onGoApp,
-  onRequestPremium,
 }: {
   data: DashboardData | null;
   onGoApp: (source: string) => void;
-  onRequestPremium: (source: string) => void;
 }) {
   const featured = getFeaturedPrediction(
     data?.predictions || [],
@@ -3756,7 +3726,6 @@ function HomePage({
           onGoApp={onGoApp}
         />
       </div>
-      <HomeConversionCta onRequestPremium={onRequestPremium} />
       <HomeMethodology onGoApp={onGoApp} />
     </div>
   );
@@ -7237,7 +7206,6 @@ export default function App() {
           <HomePage
             data={data}
             onGoApp={navigateToApp}
-            onRequestPremium={requestPremiumAccess}
           />
         )}
 
