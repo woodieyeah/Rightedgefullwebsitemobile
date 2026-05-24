@@ -2441,83 +2441,35 @@ function PublicNav({
   setPage: (value: string) => void;
   onPremiumLogin: () => void;
 }) {
-  const primaryItems = [
-    { id: "home", label: "Home" },
-    { id: "app", label: "Predictions" },
-  ];
-  const secondaryItems = [
-    { id: "methodology", label: "Methodology" },
-    { id: "articles", label: "Articles" },
-  ];
-
   return (
-    <div className="px-4 py-3 sm:px-6 sm:py-5 sticky top-2 sm:top-6 z-40 bg-[#111116] border border-[#1E1E2E]">
-      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3 sm:gap-6">
-        <div>
-          <div className="text-2xl sm:text-4xl font-semibold tracking-tight text-white uppercase">
-            RightEdge
-          </div>
-          <div className="text-[9px] sm:text-xs text-[#9CA3AF] font-medium tracking-widest uppercase mt-1">
-            NRL analytics and value insights
-          </div>
-        </div>
+    <div className="fixed left-0 right-0 top-0 z-50 border-b border-[#1E1E2E] bg-[#0A0A0F]/95 backdrop-blur-sm">
+      <div className="mx-auto flex h-14 max-w-[1200px] items-center justify-between px-6 sm:h-16">
+        <button
+          type="button"
+          onClick={() => setPage("home")}
+          className="text-[17px] font-semibold tracking-tight text-white transition hover:opacity-80 sm:text-[18px]"
+        >
+          RightEdge
+        </button>
 
-        <div className="flex flex-col items-start lg:items-end gap-2 sm:gap-3 overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] pb-1 w-full lg:w-auto">
-          <div className="flex gap-2 sm:gap-3 w-full sm:w-auto">
-            {primaryItems.map((item) => {
-              const active = page === item.id;
-              const isPredictions = item.id === "app";
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => setPage(item.id)}
-                  className={`${item.id === "home" ? "hidden sm:inline-flex" : "inline-flex flex-1 sm:flex-none"} shrink-0 items-center justify-center px-3 py-2 sm:px-5 sm:py-2.5 text-[11px] sm:text-sm font-medium uppercase tracking-wider transition ${
-                    active && isPredictions
-                      ? "bg-white text-[#0A0A0F] border border-white"
-                      : active
-                        ? "bg-white text-[#0A0A0F] border border-white"
-                        : isPredictions
-                          ? "bg-transparent text-white border border-[#1E1E2E] hover:bg-white hover:text-[#0A0A0F]"
-                          : "bg-transparent text-white border border-[#1E1E2E] hover:bg-white hover:text-[#0A0A0F]"
-                  }`}
-                >
-                  {item.label}
-                </button>
-              );
-            })}
-            <button
-              onClick={onPremiumLogin}
-              className="shrink-0 inline-flex flex-1 sm:flex-none items-center justify-center gap-2 px-3 py-2 sm:px-5 sm:py-2.5 text-[11px] sm:text-sm font-medium uppercase tracking-wider transition re-secondary-cta border hover:opacity-80"
-            >
-              Premium Login
-              <Lock className="w-4 h-4 stroke-[2px]" />
-            </button>
-          </div>
-          <div className="hidden sm:flex gap-2 sm:gap-3">
-            {secondaryItems.map((item) => {
-              const active = page === item.id;
-              const isExternal = item.id === "articles";
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => {
-                    if (isExternal) {
-                      window.location.href = "https://articles.rightedge.com.au";
-                    } else {
-                      setPage(item.id);
-                    }
-                  }}
-                  className={`shrink-0 px-4 py-2 sm:px-5 sm:py-2.5 text-xs sm:text-sm font-medium uppercase tracking-wider transition ${
-                    active
-                      ? "bg-white text-[#0A0A0F] border border-white"
-                      : "bg-transparent text-white hover:bg-white hover:text-[#0A0A0F] border border-[#1E1E2E]"
-                  }`}
-                >
-                  {item.label}
-                </button>
-              );
-            })}
-          </div>
+        <div className="flex items-center gap-3 sm:gap-5">
+          <button
+            type="button"
+            onClick={() => setPage("app")}
+            className={`text-sm font-medium transition hover:text-white ${
+              page === "app" ? "text-white" : "text-[#9CA3AF]"
+            }`}
+          >
+            Predictions
+          </button>
+          <button
+            type="button"
+            onClick={onPremiumLogin}
+            className="inline-flex h-9 items-center justify-center gap-2 border border-[#1E1E2E] px-3.5 text-xs font-medium text-white transition hover:border-white/40 hover:bg-white hover:text-[#0A0A0F] sm:px-4"
+          >
+            <Lock className="h-3.5 w-3.5" />
+            Premium Login
+          </button>
         </div>
       </div>
     </div>
@@ -3039,9 +2991,8 @@ function PublicHero({
   onRequestPremium: (source: string) => void;
 }) {
   return (
-    <HomeCard className="p-6 md:p-8 relative overflow-hidden">
-      <div className="absolute inset-0 bg-[#111116]" />
-      <div className="relative z-10 max-w-[800px]">
+    <section className="relative overflow-hidden py-4 md:py-6">
+      <div className="max-w-[800px]">
         <div className="inline-flex items-center gap-2 bg-[#16161D] border border-[#1E1E2E] px-3 py-1.5 text-[10px] sm:text-xs font-medium text-[#9CA3AF] mb-4 uppercase tracking-wider">
           <Sparkles className="w-3.5 h-3.5" />
           NRL Match Intelligence
@@ -3073,7 +3024,7 @@ function PublicHero({
           </button>
         </div>
       </div>
-    </HomeCard>
+    </section>
   );
 }
 
@@ -7273,7 +7224,7 @@ export default function App() {
       <div className="absolute inset-0 pointer-events-none" />
 
       <div
-        className={`max-w-[1200px] mx-auto relative z-10 flex flex-col ${sitePage === "app" ? "gap-10 px-3 py-4 sm:px-6 sm:py-6" : "gap-4 sm:gap-5 px-6 py-6"}`}
+        className={`max-w-[1200px] mx-auto relative z-10 flex flex-col ${sitePage === "app" ? "gap-10 px-3 py-4 sm:px-6 sm:py-6" : "gap-3 sm:gap-4 px-6 pb-6 pt-[72px] sm:pt-[80px]"}`}
       >
         <div
           className={
