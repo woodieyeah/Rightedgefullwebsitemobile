@@ -2985,11 +2985,6 @@ function PublicHero() {
   return (
     <section className="relative mt-8 overflow-hidden pt-12 pb-3 sm:mt-10 sm:pt-16 sm:pb-4 md:mt-12 md:pt-20 md:pb-5">
       <div className="max-w-[760px]">
-        <div className="inline-flex items-center gap-2 bg-[#16161D] border border-[#1E1E2E] px-3 py-1.5 text-[10px] sm:text-xs font-medium text-[#9CA3AF] mb-6 uppercase tracking-wider">
-          <Sparkles className="w-3.5 h-3.5" />
-          NRL Match Intelligence
-        </div>
-
         <h1 className="text-4xl sm:text-5xl md:text-6xl font-semibold tracking-tight text-white leading-[1.04] mb-6">
           The NRL model that gives you the edge.
         </h1>
