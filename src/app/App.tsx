@@ -2979,17 +2979,27 @@ function HomeCard({
   );
 }
 
-function PublicHero() {
+function PublicHero({ onGoApp }: { onGoApp: (source: string) => void }) {
   return (
     <section className="relative mt-8 overflow-hidden pt-12 pb-3 sm:mt-10 sm:pt-16 sm:pb-4 md:mt-12 md:pt-20 md:pb-5">
       <div className="max-w-[760px]">
         <h1 className="text-4xl sm:text-5xl md:text-6xl font-semibold tracking-tight text-white leading-[1.04] mb-6">
-          The NRL predictive model.
+          RightEdge simulates every matchup thousands of times to map out true probabilities.
         </h1>
         
-        <p className="text-base sm:text-lg md:text-xl text-[#9CA3AF] leading-relaxed font-normal max-w-[640px]">
-          RightEdge simulates every matchup thousands of times to map out true probabilities. No media noise, no gut feelings—just clean data highlighting live market overlays.
+        <p className="text-base sm:text-lg md:text-xl text-[#9CA3AF] leading-relaxed font-normal max-w-[680px]">
+          No media noise, no gut feelings—just clean data highlighting live market overlays.
         </p>
+        <p className="mt-5 max-w-[680px] text-base font-semibold leading-relaxed text-white sm:text-lg">
+          All standard match simulations and score projections are 100% free.
+        </p>
+        <button
+          onClick={() => onGoApp("hero_free_round_predictions")}
+          className="mt-7 inline-flex w-full items-center justify-center gap-2 border border-white/90 bg-white px-5 py-3 text-sm font-medium text-[#0A0A0F] transition hover:opacity-85 sm:w-auto sm:px-6"
+        >
+          View Free Round Predictions
+          <ArrowRight className="h-4 w-4" />
+        </button>
       </div>
     </section>
   );
@@ -3468,10 +3478,8 @@ function FreeBetrMarketsPanel({
 
 function FeaturedMatchPreview({
   row,
-  onGoApp,
 }: {
   row: PredictionRow | null;
-  onGoApp: (source: string) => void;
 }) {
   if (!row) return null;
 
@@ -3623,15 +3631,6 @@ function FeaturedMatchPreview({
           </div>
         </div>
       </HomeCard>
-      <div className="mt-4 flex justify-end">
-        <button
-          onClick={() => onGoApp("featured_full_round_predictions")}
-          className="inline-flex w-full items-center justify-center gap-2 border border-white/90 bg-white px-5 py-3 text-sm font-medium text-[#0A0A0F] transition hover:opacity-85 sm:w-1/2 sm:px-6"
-        >
-          View full round predictions
-          <ArrowRight className="h-4 w-4" />
-        </button>
-      </div>
     </div>
   );
 }
@@ -3885,11 +3884,10 @@ function HomePage({
   return (
     <div className="flex flex-col">
       <TryScorerTicker data={data} />
-      <PublicHero />
+      <PublicHero onGoApp={onGoApp} />
       <div id="featured-match-section">
         <FeaturedMatchPreview
           row={featured}
-          onGoApp={onGoApp}
         />
       </div>
       <HomeMethodology />
