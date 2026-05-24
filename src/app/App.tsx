@@ -3522,7 +3522,7 @@ function FeaturedMatchPreview({
       <div className="relative grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 border-t border-[#1E1E2E] px-4 py-5 first:border-t-0 sm:px-6 sm:py-6">
         <span
           aria-hidden="true"
-          className="absolute left-0 top-4 h-[calc(100%-32px)] w-0.5 rounded-full opacity-80"
+          className="absolute left-0 top-4 h-[calc(100%-32px)] w-0.5 opacity-80"
           style={{ backgroundColor: colors.primary }}
         />
         <div className="flex min-w-0 items-center gap-4">
@@ -3539,7 +3539,7 @@ function FeaturedMatchPreview({
           </span>
         </div>
         <div
-          className={`min-w-[68px] rounded-xl border border-[#1E1E2E] bg-[#16161D] px-4 py-2 text-center text-3xl font-semibold leading-none tracking-tight sm:min-w-[80px] sm:text-4xl ${
+          className={`min-w-[68px] border border-[#1E1E2E] bg-[#16161D] px-4 py-2 text-center text-3xl font-semibold leading-none tracking-tight sm:min-w-[80px] sm:text-4xl ${
             isWinner ? "text-white" : "text-[#9CA3AF]"
           }`}
         >
@@ -3551,7 +3551,7 @@ function FeaturedMatchPreview({
 
   return (
     <div className="mb-5">
-      <HomeCard className="rounded-2xl p-5 sm:p-6 md:p-8">
+      <HomeCard className="p-5 sm:p-6 md:p-8">
         <div className="flex flex-col gap-5">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div className="text-xs font-medium uppercase tracking-[0.14em] text-[#9CA3AF]">
@@ -3562,7 +3562,7 @@ function FeaturedMatchPreview({
             </div>
           </div>
 
-          <div className="overflow-hidden rounded-2xl border border-[#1E1E2E] bg-[#0A0A0F]/40">
+          <div className="overflow-hidden border border-[#1E1E2E] bg-[#0A0A0F]/40">
             <ScoreRow
               team={row.homeTeam}
               score={homeScore}
@@ -3576,7 +3576,7 @@ function FeaturedMatchPreview({
           </div>
 
           {isOfficialPlay && (
-            <div className="rounded-xl border border-[#1E1E2E] bg-[#16161D] p-4 sm:p-5">
+            <div className="border border-[#1E1E2E] bg-[#16161D] p-4 sm:p-5">
               <div className="mb-2 flex items-center gap-2 text-[10px] font-medium uppercase tracking-[0.14em] text-[#9CA3AF]">
                 <Lock className="h-3.5 w-3.5" />
                 Premium model play
@@ -3588,7 +3588,7 @@ function FeaturedMatchPreview({
           )}
 
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-            <div className="rounded-xl border border-[#1E1E2E] bg-[#16161D] p-4">
+            <div className="border border-[#1E1E2E] bg-[#16161D] p-4">
               <div className="mb-2 text-[10px] font-medium uppercase tracking-[0.14em] text-[#9CA3AF]">
                 Win prob
               </div>
@@ -3596,7 +3596,7 @@ function FeaturedMatchPreview({
                 {formatPercent(featuredWinPct, 2)}
               </div>
             </div>
-            <div className="rounded-xl border border-[#1E1E2E] bg-[#16161D] p-4">
+            <div className="border border-[#1E1E2E] bg-[#16161D] p-4">
               <div className="mb-2 text-[10px] font-medium uppercase tracking-[0.14em] text-[#9CA3AF]">
                 Model odds
               </div>
@@ -3604,7 +3604,7 @@ function FeaturedMatchPreview({
                 {selectedModel ? selectedModel.toFixed(2) : "—"}
               </div>
             </div>
-            <div className="rounded-xl border border-[#1E1E2E] bg-[#16161D] p-4">
+            <div className="border border-[#1E1E2E] bg-[#16161D] p-4">
               <div className="mb-2 text-[10px] font-medium uppercase tracking-[0.14em] text-[#9CA3AF]">
                 Market odds
               </div>
@@ -3612,7 +3612,7 @@ function FeaturedMatchPreview({
                 {selectedOdds ? selectedOdds.toFixed(2) : "—"}
               </div>
             </div>
-            <div className="rounded-xl border border-[#1E1E2E] bg-[#16161D] p-4">
+            <div className="border border-[#1E1E2E] bg-[#16161D] p-4">
               <div className="mb-2 text-[10px] font-medium uppercase tracking-[0.14em] text-[#9CA3AF]">
                 Model edge
               </div>
@@ -3623,13 +3623,15 @@ function FeaturedMatchPreview({
           </div>
         </div>
       </HomeCard>
-      <button
-        onClick={() => onGoApp("featured_full_round_predictions")}
-        className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-full border border-white/90 bg-white px-5 py-3 text-sm font-medium text-[#0A0A0F] transition hover:opacity-85 sm:w-auto sm:px-6"
-      >
-        View full round predictions
-        <ArrowRight className="h-4 w-4" />
-      </button>
+      <div className="mt-4 flex justify-end">
+        <button
+          onClick={() => onGoApp("featured_full_round_predictions")}
+          className="inline-flex w-full items-center justify-center gap-2 border border-white/90 bg-white px-5 py-3 text-sm font-medium text-[#0A0A0F] transition hover:opacity-85 sm:w-1/2 sm:px-6"
+        >
+          View full round predictions
+          <ArrowRight className="h-4 w-4" />
+        </button>
+      </div>
     </div>
   );
 }
