@@ -3816,54 +3816,55 @@ function PremiumPlayTeaserModule() {
 function MethodologyModuleCard({
   number,
   title,
+  body,
   children,
 }: {
   number: string;
   title: string;
+  body: string;
   children: React.ReactNode;
 }) {
   return (
     <HomeCard className="p-5 sm:p-6">
-      <div className="mb-5 flex items-center justify-between">
-        <div className="text-sm font-medium text-white uppercase tracking-widest">
-          {number}
-        </div>
-        <h3 className="text-sm font-semibold text-white uppercase tracking-[0.08em]">
-          {title}
-        </h3>
-      </div>
+      <h3 className="mb-3 text-sm font-semibold text-white uppercase tracking-[0.08em]">
+        {number} / {title}
+      </h3>
+      <p className="mb-5 text-sm leading-relaxed text-[#9CA3AF]">
+        {body}
+      </p>
       {children}
     </HomeCard>
   );
 }
 
-function HomeMethodology({ onGoApp }: { onGoApp: (source: string) => void }) {
+function HomeMethodology() {
   return (
     <div className="mt-8 mb-4" id="how-it-works">
-      <div className="flex flex-col md:flex-row md:items-end justify-between mb-6 gap-4 px-2">
-        <div>
-          <h2 className="text-3xl font-semibold text-white uppercase tracking-tight">
-            How it works
-          </h2>
-          <div className="text-[#9CA3AF] font-medium uppercase tracking-widest text-xs mt-1">
-            How the model works
-          </div>
-        </div>
-        <button
-          onClick={() => onGoApp('methodology_view_predictions')}
-          className="text-sm font-medium text-white hover:opacity-80 uppercase tracking-widest transition flex items-center gap-2"
-        >
-          View Predictions <ArrowRight className="w-4 h-4" />
-        </button>
+      <div className="mb-6 px-2">
+        <h2 className="text-3xl font-semibold text-white uppercase tracking-tight">
+          How it works
+        </h2>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <MethodologyModuleCard number="01" title="Model Probability">
+        <MethodologyModuleCard
+          number="01"
+          title="Data Simulation"
+          body="We execute 10,000 algorithmic simulations per match—processing deep player metrics and historical data to establish true, un-biased win probabilities."
+        >
           <ProbabilityPathModule />
         </MethodologyModuleCard>
-        <MethodologyModuleCard number="02" title="Market Comparison">
+        <MethodologyModuleCard
+          number="02"
+          title="Value Detection"
+          body="The system automatically converts those probabilities into fair odds, instantly filtering the market to isolate bookmaker pricing inefficiencies."
+        >
           <MarketComparisonModule />
         </MethodologyModuleCard>
-        <MethodologyModuleCard number="03" title="Model Plays">
+        <MethodologyModuleCard
+          number="03"
+          title="Executing The Edge"
+          body="When a market inefficiency crosses our strict value threshold, the system flags it as an active Premium Play. No gut feelings, just pure mathematical edge."
+        >
           <PremiumPlayTeaserModule />
         </MethodologyModuleCard>
       </div>
@@ -3892,7 +3893,7 @@ function HomePage({
           onGoApp={onGoApp}
         />
       </div>
-      <HomeMethodology onGoApp={onGoApp} />
+      <HomeMethodology />
     </div>
   );
 }
