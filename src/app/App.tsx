@@ -3749,8 +3749,7 @@ function MarketComparisonModule() {
         </div>
       </div>
 
-      <div className="absolute bottom-5 left-5 right-5 flex items-center justify-between text-[10px] font-medium uppercase tracking-[0.14em] text-[#6B7280]">
-        <span>No edge</span>
+      <div className="absolute bottom-5 left-5 right-5 flex items-center justify-end text-[10px] font-medium uppercase tracking-[0.14em] text-[#6B7280]">
         <span className="text-[#4ADE80]">Price gap lights up</span>
       </div>
     </div>
