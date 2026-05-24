@@ -47,7 +47,6 @@ import {
   Sunrise,
   Tornado,
   Crown,
-  Unlock,
   ChevronLeft,
   ChevronDown,
   Mail,
@@ -1956,9 +1955,7 @@ function setPaidAccess(email: string) {
   } catch {}
 }
 
-// ── Free Featured Match Email Gate ───────────────────────────────────────────
-// No payment required — just collects email and unlocks the featured match.
-const FEATURED_ACCESS_KEY = 'rightedge_featured_access';
+// ── Free Email Gate Helpers ──────────────────────────────────────────────────
 const FAVORITE_TEAM_KEY = 'rightedge_favorite_team';
 const NRL_TEAMS = [
   'Brisbane Broncos',
@@ -1980,25 +1977,6 @@ const NRL_TEAMS = [
   'Wests Tigers',
 ] as const;
 
-function hasFeaturedMatchAccess(): boolean {
-  try {
-    return localStorage.getItem(FEATURED_ACCESS_KEY) === 'true';
-  } catch {
-    return false;
-  }
-}
-
-function setFeaturedMatchAccess(email: string) {
-  try {
-    localStorage.setItem(FEATURED_ACCESS_KEY, 'true');
-    localStorage.setItem('rightedge_featured_email', email);
-    // Also mark as internal if admin email
-    if (ADMIN_EMAILS.includes(email.trim().toLowerCase())) {
-      localStorage.setItem('rightedge_internal_visitor', 'true');
-    }
-  } catch {}
-}
-
 function getStoredFavoriteTeam(): string {
   try {
     return localStorage.getItem(FAVORITE_TEAM_KEY) || '';
@@ -2011,223 +1989,6 @@ function setStoredFavoriteTeam(team: string) {
   try {
     localStorage.setItem(FAVORITE_TEAM_KEY, team);
   } catch {}
-}
-
-function FeaturedMatchEmailGate({
-  open,
-  onClose,
-  onSuccess,
-  onPremiumSuccess,
-}: {
-  open: boolean;
-  onClose: () => void;
-  onSuccess: () => void;
-  onPremiumSuccess: () => void;
-}) {
-  const [email, setEmail] = useState('');
-  const [favoriteTeam, setFavoriteTeam] = useState(() => getStoredFavoriteTeam());
-  const [submitting, setSubmitting] = useState(false);
-  const [errorMsg, setErrorMsg] = useState('');
-  const [done, setDone] = useState(false);
-
-  if (!open) return null;
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const trimmed = email.trim().toLowerCase();
-    const selectedTeam = favoriteTeam.trim();
-    if (!trimmed || !trimmed.includes('@') || !trimmed.includes('.')) {
-      setErrorMsg('Enter a valid email address.');
-      return;
-    }
-    if (!selectedTeam) {
-      setErrorMsg('Select your team.');
-      return;
-    }
-
-    setSubmitting(true);
-    setErrorMsg('');
-
-    try {
-      const verifyRes = await fetch(`/api/verify-email`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${publicAnonKey}`,
-        },
-        body: JSON.stringify({ email: trimmed }),
-      });
-
-      const verifyData = await verifyRes.json().catch(() => ({}));
-      const isPremiumSubscriber = Boolean(
-        verifyData.instantAccess ||
-        verifyData.activeSubscriber ||
-        verifyData.active_subscriber ||
-        verifyData.subscribed ||
-        verifyData.active
-      );
-
-      if (verifyRes.ok && isPremiumSubscriber) {
-        const verifiedEmail = (verifyData.email || trimmed).trim().toLowerCase();
-        setStoredFavoriteTeam(selectedTeam);
-        setEmailAccess(verifiedEmail);
-        setPaidAccess(verifiedEmail);
-        setFeaturedMatchAccess(verifiedEmail);
-        (window as any).trackAnalyticsEvent?.('premium_access_from_free_gate', { email: verifiedEmail });
-        onPremiumSuccess();
-        return;
-      }
-
-      // Save email server-side first — only unlock the match if the save confirms.
-      const saveRes = await fetch(
-        `/api/register-free-access`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${publicAnonKey}`,
-          },
-          body: JSON.stringify({
-            email: trimmed,
-            source: 'featured_match_free',
-            favoriteTeam: selectedTeam,
-          }),
-        }
-      );
-
-      if (!saveRes.ok) {
-        const errData = await saveRes.json().catch(() => ({}));
-        setErrorMsg((errData as any).error || 'Failed to save your email. Please try again.');
-        setSubmitting(false);
-        return;
-      }
-
-      // Server confirmed — now unlock locally and track
-      setStoredFavoriteTeam(selectedTeam);
-      setFeaturedMatchAccess(trimmed);
-      (window as any).trackAnalyticsEvent?.('featured_match_unlocked', {
-        email: trimmed,
-        favorite_team: selectedTeam,
-      });
-      setDone(true);
-
-      // Short pause so user sees success state, then close
-      setTimeout(() => {
-        onSuccess();
-      }, 900);
-    } catch (err: any) {
-      setErrorMsg('Network error. Please check your connection and try again.');
-      setSubmitting(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-      <div
-        className="absolute inset-0 bg-black/80 backdrop-blur-sm"
-        onClick={onClose}
-      />
-      <div className="relative w-full max-w-md bg-[#111317] border-4 border-[#0047FF] shadow-[8px_8px_0_0_#0047FF] p-8 sm:p-10">
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 text-white/40 hover:text-white transition-colors"
-        >
-          <X className="w-5 h-5" />
-        </button>
-
-        {done ? (
-          <div className="flex flex-col items-center text-center py-4">
-            <div className="bg-[#00E676] p-3 mb-4">
-              <Unlock className="w-8 h-8 text-black stroke-[3px]" />
-            </div>
-            <h3 className="text-2xl font-black text-white uppercase tracking-tight mb-2">
-              Match Unlocked!
-            </h3>
-            <p className="text-sm text-white/60">
-              Enjoy the projected scores, win probability, and model analysis.
-            </p>
-          </div>
-        ) : (
-          <>
-            <div className="flex items-center gap-3 mb-5">
-              <div className="bg-[#0047FF] p-2.5">
-                <Unlock className="w-6 h-6 text-white stroke-[3px]" />
-              </div>
-              <div>
-                <h3 className="text-xl font-black text-white uppercase tracking-tight">
-                  Unlock Featured Match
-                </h3>
-                <p className="text-[10px] font-bold text-[#00E676] uppercase tracking-widest">
-                  Free — No credit card needed
-                </p>
-              </div>
-            </div>
-
-            <p className="text-sm text-white/70 font-bold leading-relaxed mb-6">
-              Enter your email and choose your team to unlock the free preview. Premium members go straight to the full round card.
-            </p>
-
-            <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-              <div className="relative">
-                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/30" />
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => { setEmail(e.target.value); setErrorMsg(''); }}
-                  placeholder="your@email.com"
-                  autoFocus
-                  disabled={submitting}
-                  className="w-full bg-[#0B0D10] border-2 border-white/10 text-white font-bold text-base pl-12 pr-4 py-4 placeholder:text-white/20 focus:outline-none focus:border-[#0047FF] transition-colors disabled:opacity-50"
-                />
-              </div>
-
-              <div className="relative">
-                <select
-                  value={favoriteTeam}
-                  onChange={(e) => { setFavoriteTeam(e.target.value); setErrorMsg(''); }}
-                  disabled={submitting}
-                  className="w-full appearance-none bg-[#0B0D10] border-2 border-white/10 text-white font-bold text-base px-4 py-4 focus:outline-none focus:border-[#0047FF] transition-colors disabled:opacity-50"
-                >
-                  <option value="" className="text-black">
-                    Select your team
-                  </option>
-                  {NRL_TEAMS.map((team) => (
-                    <option key={team} value={team} className="text-black">
-                      {team}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {errorMsg && (
-                <p className="text-[#FF2E63] text-xs font-bold uppercase tracking-wider">
-                  {errorMsg}
-                </p>
-              )}
-
-              <button
-                type="submit"
-                disabled={submitting}
-                className="w-full bg-[#0047FF] text-white py-4 text-base font-black uppercase tracking-wider hover:bg-[#003BCC] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-              >
-                {submitting ? (
-                  <RefreshCw className="w-5 h-5 animate-spin" />
-                ) : (
-                  <>
-                    Unlock Now — It's Free
-                    <ArrowRight className="w-5 h-5 stroke-[3px]" />
-                  </>
-                )}
-              </button>
-              <p className="text-[10px] text-white/30 text-center font-mono">
-                Instant access now. Free forever. Unsubscribe anytime.
-              </p>
-            </form>
-          </>
-        )}
-      </div>
-    </div>
-  );
 }
 
 function PaymentGateModal({
@@ -3288,12 +3049,10 @@ function HomeCard({
 function PublicHero({
   data,
   onGoApp,
-  onUnlockFeatured,
   onRequestPremium,
 }: {
   data: DashboardData | null;
   onGoApp: (source: string) => void;
-  onUnlockFeatured: () => void;
   onRequestPremium: (source: string) => void;
 }) {
   return (
@@ -3319,7 +3078,7 @@ function PublicHero({
         <div className="flex flex-col sm:flex-row flex-wrap gap-3">
           <button
             onClick={() => onRequestPremium('hero_unlock_premium_picks')}
-            className="order-1 sm:order-2 inline-flex w-full sm:w-auto items-center justify-center gap-2 bg-[#FF2E63] sm:bg-[#0047FF] px-6 py-3 text-base font-black text-white hover:bg-[#E62959] sm:hover:bg-[#003BCC] transition-colors uppercase tracking-wide shadow-[3px_3px_0_0_#0047FF] sm:shadow-none"
+            className="order-1 sm:order-2 hidden sm:inline-flex w-full sm:w-auto items-center justify-center gap-2 bg-[#0047FF] px-6 py-3 text-base font-black text-white hover:bg-[#003BCC] transition-colors uppercase tracking-wide"
           >
             Unlock Premium Picks
             <Crown className="w-4 h-4 stroke-[3px]" />
@@ -3327,7 +3086,7 @@ function PublicHero({
 
           <button
             onClick={() => onGoApp('hero_unlock_best_bets')}
-            className="order-2 sm:order-1 inline-flex w-full sm:w-auto items-center justify-center gap-2 bg-[#1E232B] sm:bg-[#FFEA00] text-white sm:text-black border-2 border-[#FFEA00]/70 sm:border-0 px-8 py-3 text-base font-black hover:border-[#FFEA00] sm:hover:bg-[#FFD600] transition-colors uppercase tracking-wide sm:shadow-[4px_4px_0_0_#FF2E63]"
+            className="order-1 inline-flex w-full sm:w-auto items-center justify-center gap-2 bg-[#FFEA00] text-black px-8 py-3 text-base font-black hover:bg-[#FFD600] transition-colors uppercase tracking-wide shadow-[4px_4px_0_0_#FF2E63]"
           >
             View Free Match Predictions
             <ArrowRight className="w-4 h-4 stroke-[3px]" />
@@ -3797,25 +3556,12 @@ function FreeBetrMarketsPanel({
   );
 }
 
-function BlurredText({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="inline-flex items-center justify-center relative group px-1 mx-0.5">
-      <span className="filter blur-[6px] opacity-70 select-none pointer-events-none">{children}</span>
-      <Lock className="w-4 h-4 text-white/50 absolute z-10" />
-    </span>
-  );
-}
-
 function FeaturedMatchPreview({
   row,
   onGoApp,
-  hasFeaturedAccess,
-  onUnlockFeatured,
 }: {
   row: PredictionRow | null;
   onGoApp: (source: string) => void;
-  hasFeaturedAccess: boolean;
-  onUnlockFeatured: () => void;
 }) {
   if (!row) return null;
 
@@ -3875,32 +3621,10 @@ function FeaturedMatchPreview({
               </span>
             </div>
 
-            {/* Score card — click to unlock if not yet accessed */}
+            {/* Score card */}
             <div 
-              className={`flex flex-col mb-8 max-w-3xl border-4 bg-black/40 relative shadow-[8px_8px_0_0_rgba(255,255,255,0.05)] transition-all ${
-                hasFeaturedAccess
-                  ? 'border-[#00E676]/40 cursor-default'
-                  : 'border-white/10 cursor-pointer group hover:border-[#0047FF]/50'
-              }`}
-              onClick={() => { if (!hasFeaturedAccess) onUnlockFeatured(); }}
+              className="flex flex-col mb-8 max-w-3xl border-4 border-[#00E676]/40 bg-black/40 relative shadow-[8px_8px_0_0_rgba(255,255,255,0.05)]"
             >
-              {!hasFeaturedAccess && (
-                <>
-                  <div className="absolute inset-0 bg-black/20 group-hover:bg-transparent transition-colors z-20 pointer-events-none" />
-                  <div className="absolute inset-0 z-30 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                    <div className="bg-[#FFEA00] text-black px-6 py-3 font-black uppercase tracking-widest text-sm flex items-center gap-2">
-                      <Mail className="w-4 h-4" />
-                      Enter Email to Unlock
-                    </div>
-                  </div>
-                </>
-              )}
-              {hasFeaturedAccess && (
-                <div className="absolute -top-3 -left-3 bg-[#00E676] text-black text-[10px] font-black uppercase tracking-widest px-3 py-1.5 z-30 flex items-center gap-1">
-                  <Unlock className="w-3 h-3" /> Unlocked
-                </div>
-              )}
-
               <div className="absolute -top-3 -right-3 bg-[#0047FF] text-white text-[10px] sm:text-xs font-black uppercase tracking-widest px-4 py-2 shadow-[4px_4px_0_0_#111317] z-30">
                 Projected Score
               </div>
@@ -3917,10 +3641,7 @@ function FeaturedMatchPreview({
                   </span>
                 </div>
                 <div className="text-4xl sm:text-5xl md:text-6xl font-black text-[#0047FF] tracking-tighter leading-none relative z-10">
-                  {hasFeaturedAccess
-                    ? Math.round(row.predictedHomeScore)
-                    : <BlurredText>{Math.round(row.predictedHomeScore)}</BlurredText>
-                  }
+                  {Math.round(row.predictedHomeScore)}
                 </div>
               </div>
 
@@ -3936,10 +3657,7 @@ function FeaturedMatchPreview({
                   </span>
                 </div>
                 <div className="text-4xl sm:text-5xl md:text-6xl font-black text-[#0047FF] tracking-tighter leading-none relative z-10">
-                  {hasFeaturedAccess
-                    ? Math.round(row.predictedAwayScore)
-                    : <BlurredText>{Math.round(row.predictedAwayScore)}</BlurredText>
-                  }
+                  {Math.round(row.predictedAwayScore)}
                 </div>
               </div>
             </div>
@@ -3951,7 +3669,7 @@ function FeaturedMatchPreview({
                   Model Play
                 </span>
                 <span className="text-3xl md:text-4xl font-black text-white uppercase tracking-tight">
-                  {hasFeaturedAccess ? displayBestBet : <BlurredText>{displayBestBet}</BlurredText>}
+                  {displayBestBet}
                 </span>
               </div>
             )}
@@ -3963,7 +3681,7 @@ function FeaturedMatchPreview({
                   Win Prob
                 </div>
                 <div className="text-xl sm:text-2xl font-black text-[#00E676]">
-                  {hasFeaturedAccess ? formatPercent(featuredWinPct, 2) : <BlurredText>{formatPercent(featuredWinPct, 2)}</BlurredText>}
+                  {formatPercent(featuredWinPct, 2)}
                 </div>
               </div>
               <div>
@@ -3971,7 +3689,7 @@ function FeaturedMatchPreview({
                   Model Odds
                 </div>
                 <div className="text-xl sm:text-2xl font-black text-white">
-                  {hasFeaturedAccess ? (selectedModel ? selectedModel.toFixed(2) : "—") : <BlurredText>{selectedModel ? selectedModel.toFixed(2) : "—"}</BlurredText>}
+                  {selectedModel ? selectedModel.toFixed(2) : "—"}
                 </div>
               </div>
               <div>
@@ -3979,7 +3697,7 @@ function FeaturedMatchPreview({
                   Market Odds
                 </div>
                 <div className="text-xl sm:text-2xl font-black text-white">
-                  {hasFeaturedAccess ? (selectedOdds ? selectedOdds.toFixed(2) : "—") : <BlurredText>{selectedOdds ? selectedOdds.toFixed(2) : "—"}</BlurredText>}
+                  {selectedOdds ? selectedOdds.toFixed(2) : "—"}
                 </div>
               </div>
               <div>
@@ -3992,27 +3710,14 @@ function FeaturedMatchPreview({
               </div>
             </div>
 
-            {/* Unlock CTA — shown only when not yet accessed */}
-            {!hasFeaturedAccess && (
-              <div className="mt-8">
-                <button
-                  onClick={onUnlockFeatured}
-                  className="inline-flex items-center gap-2 bg-[#FFEA00] text-black px-8 py-4 text-base font-black hover:bg-[#FFD600] transition-colors uppercase tracking-wide shadow-[4px_4px_0_0_#FF2E63]"
-                >
-                  <Mail className="w-5 h-5" />
-                  Unlock Match — Free
-                </button>
-                <p className="text-xs text-white/40 mt-2 font-mono">No credit card required. Just your email.</p>
-              </div>
-            )}
           </div>
 
           <div className="w-full md:w-auto flex flex-col items-end gap-4 mt-4 md:mt-0">
             <button
               onClick={() => onGoApp('featured_view_predictions')}
-              className="w-full md:w-auto inline-flex items-center justify-center gap-2 bg-[#0047FF] text-white px-8 py-4 text-lg font-black hover:bg-[#003BCC] transition-colors uppercase tracking-wide"
+              className="w-full md:w-auto inline-flex items-center justify-center gap-2 bg-[#FFEA00] text-black px-8 py-4 text-lg font-black hover:bg-[#FFD600] transition-colors uppercase tracking-wide shadow-[4px_4px_0_0_#FF2E63]"
             >
-              View Predictions
+              View All Predictions
               <ArrowRight className="w-5 h-5 stroke-[3px]" />
             </button>
             <AffiliateMarketButton
@@ -4095,14 +3800,10 @@ function HomeMethodology({ onGoApp }: { onGoApp: (source: string) => void }) {
 function HomePage({
   data,
   onGoApp,
-  hasFeaturedAccess,
-  onUnlockFeatured,
   onRequestPremium,
 }: {
   data: DashboardData | null;
   onGoApp: (source: string) => void;
-  hasFeaturedAccess: boolean;
-  onUnlockFeatured: () => void;
   onRequestPremium: (source: string) => void;
 }) {
   const featured = getFeaturedPrediction(
@@ -4114,15 +3815,12 @@ function HomePage({
       <PublicHero
         data={data}
         onGoApp={onGoApp}
-        onUnlockFeatured={onUnlockFeatured}
         onRequestPremium={onRequestPremium}
       />
       <div id="featured-match-section">
         <FeaturedMatchPreview
           row={featured}
           onGoApp={onGoApp}
-          hasFeaturedAccess={hasFeaturedAccess}
-          onUnlockFeatured={onUnlockFeatured}
         />
       </div>
       <HomeMethodology onGoApp={onGoApp} />
@@ -7168,10 +6866,8 @@ export default function App() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [showEmailGate, setShowEmailGate] = useState(false);
-  const [showFeaturedGate, setShowFeaturedGate] = useState(false);
   const [showPaymentGate, setShowPaymentGate] = useState(false);
   const [paidAccessState, setPaidAccessState] = useState(() => hasPaidAccess());
-  const [featuredAccess, setFeaturedAccess] = useState(() => hasFeaturedMatchAccess());
   const [isAdmin, setIsAdmin] = useState(() => isUserAdmin());
 
   // Setup Analytics Tracking (meta tags now handled by <Helmet> — rendered synchronously)
@@ -7613,12 +7309,7 @@ export default function App() {
           <HomePage
             data={data}
             onGoApp={navigateToApp}
-            hasFeaturedAccess={featuredAccess}
             onRequestPremium={requestPremiumAccess}
-            onUnlockFeatured={() => {
-              document.getElementById('featured-match-section')?.scrollIntoView({ behavior: 'smooth' });
-              setTimeout(() => setShowFeaturedGate(true), 300);
-            }}
           />
         )}
 
@@ -7679,23 +7370,6 @@ export default function App() {
             setShowEmailGate(false);
           }}
           onSuccess={handleEmailSuccess}
-        />
-
-        <FeaturedMatchEmailGate
-          open={showFeaturedGate}
-          onClose={() => setShowFeaturedGate(false)}
-          onSuccess={() => {
-            setFeaturedAccess(true);
-            setShowFeaturedGate(false);
-          }}
-          onPremiumSuccess={() => {
-            setFeaturedAccess(true);
-            setPaidAccessState(hasPaidAccess());
-            setShowEmailGate(false);
-            setShowFeaturedGate(false);
-            setSitePage("app");
-            window.location.hash = "best-bets";
-          }}
         />
 
         <PaymentGateModal
