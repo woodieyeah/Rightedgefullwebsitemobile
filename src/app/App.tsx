@@ -3039,19 +3039,19 @@ function PublicHero({
   onRequestPremium: (source: string) => void;
 }) {
   return (
-    <HomeCard className="p-7 md:p-10 relative overflow-hidden">
+    <HomeCard className="p-6 md:p-8 relative overflow-hidden">
       <div className="absolute inset-0 bg-[#111116]" />
       <div className="relative z-10 max-w-[800px]">
-        <div className="inline-flex items-center gap-2 bg-[#16161D] border border-[#1E1E2E] px-3 py-1.5 text-[10px] sm:text-xs font-medium text-[#9CA3AF] mb-5 uppercase tracking-wider">
+        <div className="inline-flex items-center gap-2 bg-[#16161D] border border-[#1E1E2E] px-3 py-1.5 text-[10px] sm:text-xs font-medium text-[#9CA3AF] mb-4 uppercase tracking-wider">
           <Sparkles className="w-3.5 h-3.5" />
           NRL Match Intelligence
         </div>
 
-        <h1 className="text-3xl sm:text-4xl md:text-5xl font-semibold tracking-tight text-white leading-[1.08] mb-5">
+        <h1 className="text-3xl sm:text-4xl md:text-5xl font-semibold tracking-tight text-white leading-[1.08] mb-4">
           Don&apos;t Go In Blind This NRL Round – Backed by Data, Not Guesswork.
         </h1>
         
-        <p className="text-sm sm:text-base md:text-lg text-[#9CA3AF] leading-relaxed mb-8 font-normal max-w-[680px]">
+        <p className="text-sm sm:text-base md:text-lg text-[#9CA3AF] leading-relaxed mb-6 font-normal max-w-[680px]">
           See projected scores, model probabilities and match analysis for every NRL round.
         </p>
 
@@ -3798,14 +3798,14 @@ function HomePage({
   );
 
   return (
-    <div className="flex flex-col gap-6 sm:gap-8">
+    <div className="flex flex-col gap-3 sm:gap-4">
       <TryScorerTicker data={data} />
       <PublicHero
         data={data}
         onGoApp={onGoApp}
         onRequestPremium={onRequestPremium}
       />
-      <div id="featured-match-section">
+      <div id="featured-match-section" className="mt-1 sm:mt-2">
         <FeaturedMatchPreview
           row={featured}
           onGoApp={onGoApp}
@@ -7273,7 +7273,7 @@ export default function App() {
       <div className="absolute inset-0 pointer-events-none" />
 
       <div
-        className={`max-w-[1200px] mx-auto relative z-10 flex flex-col gap-10 ${sitePage === "app" ? "px-3 py-4 sm:px-6 sm:py-6" : "px-6 py-6"}`}
+        className={`max-w-[1200px] mx-auto relative z-10 flex flex-col ${sitePage === "app" ? "gap-10 px-3 py-4 sm:px-6 sm:py-6" : "gap-4 sm:gap-5 px-6 py-6"}`}
       >
         <div
           className={
