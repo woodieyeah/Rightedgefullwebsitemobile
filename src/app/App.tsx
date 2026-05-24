@@ -3841,30 +3841,8 @@ function FeaturedMatchPreview({
       ? getRowSideWinPct(row)
       : getPredictedWinnerWinPct(row);
 
-  const margin = Math.abs(
-    (row.predictedHomeScore || 0) -
-      (row.predictedAwayScore || 0),
-  );
-
   const displayBestBet =
     row.bestBet?.replace("Sydney", "Roosters") || row.bestBet;
-  const displayPredictedWinner =
-    row.predictedWinner?.replace("Sydney", "Roosters") ||
-    row.predictedWinner;
-
-  const Blur = ({ children }: { children: React.ReactNode }) =>
-    hasFeaturedAccess ? <span>{children}</span> : <BlurredText>{children}</BlurredText>;
-
-  const takeaway =
-    isOfficialPlay ? (
-      <>
-        The model has <Blur>{displayBestBet}</Blur> winning by <Blur>{margin} points</Blur> with a <Blur>{formatPercent(featuredWinPct, 1)}</Blur> true win probability. The price still clears our premium filter, so this matchup qualifies as an official model-aligned play.
-      </>
-    ) : (
-      <>
-        The model projects <Blur>{displayPredictedWinner}</Blur> to win by <Blur>{margin} points</Blur> with a <Blur>{formatPercent(featuredWinPct, 1)}</Blur> true win probability. It is still a strong match projection, but it does not currently meet the full premium filter for an official H2H play.
-      </>
-    );
 
   return (
     <div className="mt-8 mb-4">
@@ -3977,13 +3955,6 @@ function FeaturedMatchPreview({
                 </span>
               </div>
             )}
-
-            <div className="text-base sm:text-lg md:text-xl font-medium text-white/80 leading-relaxed max-w-3xl mb-8 sm:mb-10 bg-white/5 p-6 border-l-4 border-[#FFEA00]">
-              <span className="font-black text-[#FFEA00] uppercase tracking-wider block sm:inline sm:mr-3 mb-2 sm:mb-0">
-                Model says:
-              </span>
-              {takeaway}
-            </div>
 
             {/* Stats row — blurred until email entered */}
             <div className="flex flex-wrap items-center gap-6 sm:gap-10 pt-8 border-t border-white/[0.08]">
