@@ -287,6 +287,32 @@
     animation-play-state: paused;
   }
 
+  #root .rightedge-probability-path {
+    stroke-dasharray: 420;
+    stroke-dashoffset: 420;
+    animation: rightedge-path-flow 3.8s ease-in-out infinite;
+  }
+
+  #root .rightedge-probability-dot {
+    animation: rightedge-dot-pulse 2.6s ease-in-out infinite;
+    transform-origin: center;
+  }
+
+  #root .rightedge-bell-bar {
+    animation: rightedge-bell-rise 2.8s ease-in-out infinite;
+    opacity: 0.16;
+  }
+
+  #root .rightedge-overlay-gap {
+    animation: rightedge-overlay-glow 2.8s ease-in-out infinite;
+    box-shadow: 0 0 18px rgba(74, 222, 128, 0.45);
+  }
+
+  #root .rightedge-premium-blur {
+    filter: blur(5px);
+    opacity: 0.58;
+  }
+
   @keyframes rightedge-ticker-scroll {
     from {
       transform: translateX(0);
@@ -297,8 +323,81 @@
     }
   }
 
+  @keyframes rightedge-path-flow {
+    0% {
+      stroke-dashoffset: 420;
+      opacity: 0.12;
+    }
+
+    42% {
+      stroke-dashoffset: 0;
+      opacity: 0.82;
+    }
+
+    78% {
+      stroke-dashoffset: 0;
+      opacity: 0.42;
+    }
+
+    100% {
+      stroke-dashoffset: -420;
+      opacity: 0.08;
+    }
+  }
+
+  @keyframes rightedge-dot-pulse {
+    0%,
+    100% {
+      opacity: 0.35;
+      transform: scale(0.9);
+    }
+
+    45% {
+      opacity: 1;
+      transform: scale(1.2);
+    }
+  }
+
+  @keyframes rightedge-bell-rise {
+    0%,
+    100% {
+      opacity: 0.14;
+      transform: scaleY(0.72);
+      transform-origin: bottom;
+    }
+
+    48% {
+      opacity: 0.82;
+      transform: scaleY(1);
+      transform-origin: bottom;
+    }
+  }
+
+  @keyframes rightedge-overlay-glow {
+    0%,
+    100% {
+      opacity: 0.38;
+      transform: translateY(-50%) scaleX(0.58);
+      transform-origin: left center;
+    }
+
+    48% {
+      opacity: 1;
+      transform: translateY(-50%) scaleX(1);
+      transform-origin: left center;
+    }
+  }
+
   @media (prefers-reduced-motion: reduce) {
     #root .try-scorer-ticker-track {
+      animation-duration: 0.001ms;
+      animation-iteration-count: 1;
+    }
+
+    #root .rightedge-probability-path,
+    #root .rightedge-probability-dot,
+    #root .rightedge-bell-bar,
+    #root .rightedge-overlay-gap {
       animation-duration: 0.001ms;
       animation-iteration-count: 1;
     }

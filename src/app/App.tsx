@@ -3636,6 +3636,207 @@ function FeaturedMatchPreview({
   );
 }
 
+function ProbabilityPathModule() {
+  return (
+    <div className="relative h-56 overflow-hidden border border-[#1E1E2E] bg-[#0A0A0F] p-5">
+      <div className="absolute inset-x-5 top-5 flex items-center justify-between text-[10px] font-medium uppercase tracking-[0.14em] text-[#6B7280]">
+        <span>Kickoff</span>
+        <span>Simulated paths</span>
+        <span>Final range</span>
+      </div>
+      <svg
+        className="absolute inset-x-4 top-14 h-28 w-[calc(100%-32px)]"
+        viewBox="0 0 320 120"
+        role="img"
+        aria-label="Simulation paths converging into a projected score distribution"
+      >
+        <defs>
+          <linearGradient id="probability-path-gradient" x1="0" x2="1" y1="0" y2="0">
+            <stop offset="0%" stopColor="#6B7280" stopOpacity="0.2" />
+            <stop offset="65%" stopColor="#9CA3AF" stopOpacity="0.7" />
+            <stop offset="100%" stopColor="#4ADE80" stopOpacity="0.9" />
+          </linearGradient>
+        </defs>
+        {[
+          "M12 60 C70 12 115 18 162 46 C205 72 244 76 305 51",
+          "M12 60 C74 32 100 78 160 62 C210 48 242 30 305 51",
+          "M12 60 C62 92 114 96 164 72 C208 52 250 59 305 51",
+          "M12 60 C58 44 96 18 152 28 C210 38 250 44 305 51",
+          "M12 60 C84 72 116 38 164 52 C210 66 246 70 305 51",
+          "M12 60 C70 108 124 86 164 86 C218 86 250 62 305 51",
+        ].map((path, index) => (
+          <path
+            key={path}
+            d={path}
+            className="rightedge-probability-path"
+            style={{ animationDelay: `${index * 0.18}s` }}
+            fill="none"
+            stroke="url(#probability-path-gradient)"
+            strokeLinecap="square"
+            strokeWidth="1.4"
+          />
+        ))}
+        <line x1="304" x2="304" y1="18" y2="98" stroke="#1E1E2E" strokeWidth="1" />
+        {[32, 41, 49, 58, 70, 84].map((y, index) => (
+          <circle
+            key={y}
+            className="rightedge-probability-dot"
+            style={{ animationDelay: `${index * 0.16}s` }}
+            cx="304"
+            cy={y}
+            r={index === 2 ? 4.5 : 2.5}
+            fill={index === 2 ? "#4ADE80" : "#9CA3AF"}
+            opacity={index === 2 ? 1 : 0.5}
+          />
+        ))}
+      </svg>
+      <div className="absolute inset-x-5 bottom-5">
+        <div className="mb-3 flex h-20 items-end justify-center gap-1.5">
+          {[18, 34, 55, 76, 96, 78, 52, 31, 16].map((height, index) => (
+            <div
+              key={`${height}-${index}`}
+              className="rightedge-bell-bar w-full max-w-[18px] bg-white"
+              style={{ height: `${height}%`, animationDelay: `${index * 0.08}s` }}
+            />
+          ))}
+        </div>
+        <div className="flex items-center justify-between border-t border-[#1E1E2E] pt-3">
+          <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-[#9CA3AF]">
+            Projected score
+          </span>
+          <span className="text-lg font-semibold text-white">24 - 21</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MarketComparisonModule() {
+  return (
+    <div className="relative h-56 border border-[#1E1E2E] bg-[#0A0A0F] p-5">
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <div className="text-[10px] font-medium uppercase tracking-[0.14em] text-[#9CA3AF]">
+            Price comparison
+          </div>
+          <div className="mt-1 text-sm text-[#6B7280]">Market vs true price</div>
+        </div>
+        <div className="border border-[#1E1E2E] bg-[#16161D] px-3 py-2 text-right">
+          <div className="text-[9px] font-medium uppercase tracking-[0.14em] text-[#6B7280]">
+            Overlay
+          </div>
+          <div className="text-lg font-semibold text-[#4ADE80]">+8.9%</div>
+        </div>
+      </div>
+
+      <div className="relative mt-8 h-16">
+        <div className="absolute left-0 right-0 top-1/2 h-px bg-[#1E1E2E]" />
+        <div className="absolute left-[22%] top-1/2 h-8 w-px -translate-y-1/2 bg-[#6B7280]" />
+        <div className="absolute left-[64%] top-1/2 h-8 w-px -translate-y-1/2 bg-[#4ADE80]" />
+        <div className="rightedge-overlay-gap absolute left-[22%] right-[36%] top-1/2 h-1 -translate-y-1/2 bg-[#4ADE80]" />
+
+        <div className="absolute left-[22%] top-0 -translate-x-1/2 border border-[#1E1E2E] bg-[#16161D] px-3 py-2">
+          <div className="text-[9px] font-medium uppercase tracking-[0.14em] text-[#9CA3AF]">
+            Bookmaker
+          </div>
+          <div className="text-xl font-semibold text-white">$1.80</div>
+        </div>
+        <div className="absolute left-[64%] bottom-0 -translate-x-1/2 border border-[#4ADE80]/60 bg-[#111116] px-3 py-2 shadow-[0_0_22px_rgba(74,222,128,0.14)]">
+          <div className="text-[9px] font-medium uppercase tracking-[0.14em] text-[#4ADE80]">
+            RightEdge
+          </div>
+          <div className="text-xl font-semibold text-white">$1.55</div>
+        </div>
+      </div>
+
+      <div className="absolute bottom-5 left-5 right-5 flex items-center justify-between text-[10px] font-medium uppercase tracking-[0.14em] text-[#6B7280]">
+        <span>No edge</span>
+        <span className="text-[#4ADE80]">Price gap lights up</span>
+      </div>
+    </div>
+  );
+}
+
+function PremiumPlayTeaserModule() {
+  return (
+    <div className="relative h-56 overflow-hidden border border-[#1E1E2E] bg-[#0A0A0F] p-5">
+      <div className="absolute right-4 top-4 z-20 flex items-center gap-2 border border-[#1E1E2E] bg-[#111116] px-2.5 py-1.5">
+        <Lock className="h-3.5 w-3.5 text-white" />
+        <span className="text-[9px] font-medium uppercase tracking-[0.14em] text-[#9CA3AF]">
+          Premium
+        </span>
+      </div>
+
+      <div className="rightedge-premium-blur pointer-events-none select-none">
+        <div className="mb-4 text-[10px] font-medium uppercase tracking-[0.14em] text-[#9CA3AF]">
+          Official model play
+        </div>
+        <div className="grid grid-cols-[1fr_auto] gap-4 border border-[#1E1E2E] bg-[#111116] p-4">
+          <div>
+            <div className="text-2xl font-semibold uppercase tracking-tight text-white">
+              Bulldogs -3.5
+            </div>
+            <div className="mt-2 text-xs font-medium uppercase tracking-[0.14em] text-[#9CA3AF]">
+              Line · Model 58%
+            </div>
+          </div>
+          <div className="text-right">
+            <div className="text-[10px] font-medium uppercase tracking-[0.14em] text-[#6B7280]">
+              Market
+            </div>
+            <div className="text-2xl font-semibold text-white">$1.95</div>
+          </div>
+        </div>
+        <div className="mt-3 grid grid-cols-3 gap-3">
+          {["Edge +7.2%", "Stake 1.4u", "CLV target"].map((item) => (
+            <div key={item} className="border border-[#1E1E2E] bg-[#16161D] p-3 text-[10px] font-medium uppercase tracking-[0.14em] text-[#9CA3AF]">
+              {item}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#0A0A0F]/35">
+        <div className="flex flex-col items-center gap-3 text-center">
+          <div className="flex h-12 w-12 items-center justify-center border border-white bg-white text-[#0A0A0F]">
+            <Lock className="h-5 w-5" />
+          </div>
+          <div className="text-sm font-semibold uppercase tracking-[0.12em] text-white">
+            Premium play locked
+          </div>
+          <div className="max-w-[220px] text-xs leading-relaxed text-[#9CA3AF]">
+            See the exact plays, prices and staking signals.
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MethodologyModuleCard({
+  number,
+  title,
+  children,
+}: {
+  number: string;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <HomeCard className="p-5 sm:p-6">
+      <div className="mb-5 flex items-center justify-between">
+        <div className="text-sm font-medium text-white uppercase tracking-widest">
+          {number}
+        </div>
+        <h3 className="text-sm font-semibold text-white uppercase tracking-[0.08em]">
+          {title}
+        </h3>
+      </div>
+      {children}
+    </HomeCard>
+  );
+}
+
 function HomeMethodology({ onGoApp }: { onGoApp: (source: string) => void }) {
   return (
     <div className="mt-8 mb-4" id="how-it-works">
@@ -3656,45 +3857,15 @@ function HomeMethodology({ onGoApp }: { onGoApp: (source: string) => void }) {
         </button>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <HomeCard className="p-8">
-          <div className="text-sm font-medium text-white mb-4 uppercase tracking-widest">
-            01
-          </div>
-          <h3 className="text-xl font-semibold text-white uppercase mb-2">
-            Model Probability
-          </h3>
-          <p className="text-[#9CA3AF] font-normal text-sm leading-relaxed">
-            We simulate every NRL matchup thousands of times
-            using advanced team ratings, player values, and
-            historical data to generate true win probabilities.
-          </p>
-        </HomeCard>
-        <HomeCard className="p-8">
-          <div className="text-sm font-medium text-white mb-4 uppercase tracking-widest">
-            02
-          </div>
-          <h3 className="text-xl font-semibold text-white uppercase mb-2">
-            Market Comparison
-          </h3>
-          <p className="text-[#9CA3AF] font-normal text-sm leading-relaxed">
-            Our true probabilities are converted into fair odds
-            and continuously compared against live bookmaker
-            pricing to identify mathematical overlays.
-          </p>
-        </HomeCard>
-        <HomeCard className="p-8">
-          <div className="text-sm font-medium text-white mb-4 uppercase tracking-widest">
-            03
-          </div>
-          <h3 className="text-xl font-semibold text-white uppercase mb-2">
-            Model Plays
-          </h3>
-          <p className="text-[#9CA3AF] font-normal text-sm leading-relaxed">
-            When the model identifies a meaningful gap
-            between its probability and the market price,
-            it becomes a model play.
-          </p>
-        </HomeCard>
+        <MethodologyModuleCard number="01" title="Model Probability">
+          <ProbabilityPathModule />
+        </MethodologyModuleCard>
+        <MethodologyModuleCard number="02" title="Market Comparison">
+          <MarketComparisonModule />
+        </MethodologyModuleCard>
+        <MethodologyModuleCard number="03" title="Model Plays">
+          <PremiumPlayTeaserModule />
+        </MethodologyModuleCard>
       </div>
     </div>
   );
