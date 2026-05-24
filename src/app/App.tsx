@@ -2991,25 +2991,25 @@ function PublicHero({
   onRequestPremium: (source: string) => void;
 }) {
   return (
-    <section className="relative overflow-hidden py-4 md:py-6">
-      <div className="max-w-[800px]">
-        <div className="inline-flex items-center gap-2 bg-[#16161D] border border-[#1E1E2E] px-3 py-1.5 text-[10px] sm:text-xs font-medium text-[#9CA3AF] mb-4 uppercase tracking-wider">
+    <section className="relative overflow-hidden pt-14 pb-10 sm:pt-20 sm:pb-14 md:pt-24 md:pb-16">
+      <div className="max-w-[760px]">
+        <div className="inline-flex items-center gap-2 bg-[#16161D] border border-[#1E1E2E] px-3 py-1.5 text-[10px] sm:text-xs font-medium text-[#9CA3AF] mb-6 uppercase tracking-wider">
           <Sparkles className="w-3.5 h-3.5" />
           NRL Match Intelligence
         </div>
 
-        <h1 className="text-3xl sm:text-4xl md:text-5xl font-semibold tracking-tight text-white leading-[1.08] mb-4">
+        <h1 className="text-4xl sm:text-5xl md:text-6xl font-semibold tracking-tight text-white leading-[1.04] mb-6">
           The NRL model that gives you the edge.
         </h1>
         
-        <p className="text-sm sm:text-base md:text-lg text-[#9CA3AF] leading-relaxed mb-6 font-normal max-w-[680px]">
+        <p className="text-base sm:text-lg md:text-xl text-[#9CA3AF] leading-relaxed mb-9 font-normal max-w-[640px]">
           See projected scores, model probabilities and match analysis for every NRL round.
         </p>
 
         <div className="flex flex-col sm:flex-row flex-wrap gap-3">
           <button
             onClick={() => onRequestPremium('hero_unlock_premium_picks')}
-            className="order-1 sm:order-2 hidden sm:inline-flex w-full sm:w-auto items-center justify-center gap-2 re-secondary-cta border px-6 py-3 text-base font-medium text-white hover:opacity-80 transition uppercase tracking-wide"
+            className="order-1 sm:order-2 hidden sm:inline-flex w-full sm:w-auto items-center justify-center gap-2 re-secondary-cta border border-[#1E1E2E] rounded-full px-6 py-3 text-base font-medium text-white hover:opacity-80 transition"
           >
             <Lock className="w-4 h-4 stroke-[2px]" />
             Unlock Premium Picks
@@ -3017,7 +3017,7 @@ function PublicHero({
 
           <button
             onClick={() => onGoApp('hero_unlock_best_bets')}
-            className="order-1 inline-flex w-full sm:w-auto items-center justify-center gap-2 re-primary-cta border px-8 py-3 text-base font-medium hover:opacity-90 transition uppercase tracking-wide"
+            className="order-1 inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-full border border-white/90 bg-white px-6 py-3.5 text-[15px] font-medium text-[#0A0A0F] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.35)] transition hover:opacity-90 sm:px-7"
           >
             View Free Match Predictions
             <ArrowRight className="w-4 h-4 stroke-[2px]" />
