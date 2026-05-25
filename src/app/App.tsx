@@ -4490,7 +4490,7 @@ function PredictionsPage({
     <div className="flex flex-col gap-6 md:gap-8">
       <ResponsibleGamblingNotice />
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6 md:gap-8">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 md:gap-8">
         {rows.map((row, i) => {
           const projectedHomeScore = row.predictedHomeScore
             ? Math.round(row.predictedHomeScore)
