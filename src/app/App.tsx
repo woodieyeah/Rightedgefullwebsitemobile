@@ -4993,7 +4993,7 @@ function BestBetsPage({
         ) : matchReads.length === 0 ? (
           <GlassCard className="p-4 md:p-8 text-center border-l-4 border-l-white/20">
             <div className="text-white/50 font-bold uppercase tracking-widest text-[10px] md:text-base">
-              No match reads available right now.
+              MODELLING IN PROGRESS - PREDICTIONS AVAILABLE EVERY WEDNESDAY
             </div>
           </GlassCard>
         ) : (
