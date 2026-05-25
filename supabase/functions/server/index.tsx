@@ -2833,11 +2833,30 @@ async function syncStripeSubscriptionStatus(stripe: Stripe, subscription: any, s
   return result;
 }
 
-async function syncStripeInvoiceSubscription(stripe: Stripe, invoice: any, source: string) {
-  const subscriptionId =
+function getSubscriptionIdFromInvoice(invoice: any) {
+  const directSubscription =
     typeof invoice?.subscription === "string"
       ? invoice.subscription
       : invoice?.subscription?.id || "";
+
+  if (directSubscription) return directSubscription;
+
+  const parentSubscription =
+    typeof invoice?.parent?.subscription_details?.subscription === "string"
+      ? invoice.parent.subscription_details.subscription
+      : invoice?.parent?.subscription_details?.subscription?.id || "";
+
+  if (parentSubscription) return parentSubscription;
+
+  const lineSubscription = invoice?.lines?.data
+    ?.map((line: any) => line?.parent?.subscription_item_details?.subscription)
+    ?.find(Boolean);
+
+  return typeof lineSubscription === "string" ? lineSubscription : lineSubscription?.id || "";
+}
+
+async function syncStripeInvoiceSubscription(stripe: Stripe, invoice: any, source: string) {
+  const subscriptionId = getSubscriptionIdFromInvoice(invoice);
 
   if (!subscriptionId) {
     console.warn("[Stripe Webhook] Invoice event skipped: no subscription id.");
