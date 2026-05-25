@@ -5103,7 +5103,6 @@ function TryScorersPage({
   onRequestAccess: (targetHash?: string) => void;
   isAdmin?: boolean;
 }) {
-  const now = useMinuteNow();
   const availableRounds = useMemo(
     () =>
       Array.from(
@@ -5134,24 +5133,12 @@ function TryScorersPage({
     });
   }, [availableRoundKey, latestRound]);
 
-  const predictionByMatch = useMemo(
-    () =>
-      new Map(
-        data.predictions.map((prediction) => [
-          buildMatchLabelKey(prediction.match),
-          prediction,
-        ]),
-      ),
-    [data.predictions],
-  );
-
   const roundFilteredRows =
     selectedRound === "all"
       ? data.tryScorers
       : data.tryScorers.filter((row) => row.round === selectedRound);
 
   const valuePlays = roundFilteredRows
-    .filter((row) => isAdmin || !hasPredictionKickedOff(predictionByMatch.get(buildMatchLabelKey(row.match)), now))
     .filter((row) => getTryScorerSignal(row) || isTryScorerBestBetCandidate(row));
   const roundLabel =
     selectedRound === "all" ? "All rounds" : `Round ${selectedRound}`;
@@ -5167,24 +5154,23 @@ function TryScorersPage({
   if (!hasPaidAccess() && !isAdmin) {
     return (
       <div className="flex flex-col gap-6 md:gap-8">
-        <GlassCard className="p-8 md:p-12 text-center !border-[#FF2E63] !shadow-[8px_8px_0_0_#FF2E63] relative overflow-hidden">
-          <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(255,46,99,0.08),transparent_55%)]" />
+        <GlassCard className="p-8 md:p-12 text-center relative overflow-hidden">
           <div className="relative z-10 flex flex-col items-center max-w-xl mx-auto">
-            <div className="bg-[#FF2E63] p-4 mb-6 shadow-[4px_4px_0_0_#0047FF]">
-              <Lock className="w-10 h-10 text-white stroke-[3px]" />
+            <div className="border border-[#1E1E2E] bg-[#16161D] p-4 mb-6">
+              <Lock className="w-10 h-10 text-white stroke-[2px]" />
             </div>
-            <h2 className="text-3xl md:text-5xl font-black text-white uppercase tracking-tight mb-3">
+            <h2 className="text-3xl md:text-5xl font-semibold text-white uppercase tracking-tight mb-3">
               Premium Content
             </h2>
-            <p className="text-sm md:text-base text-white/70 font-bold leading-relaxed mb-8">
+            <p className="text-sm md:text-base text-[#9CA3AF] leading-relaxed mb-8">
               Try Scorer plays are included with RightEdge Premium. Unlock the full round to see model plays, Try Scorer signals and live prices.
             </p>
             <button
               onClick={() => onRequestAccess("try-scorers")}
-              className="inline-flex items-center justify-center gap-3 bg-[#FF2E63] text-white px-8 py-4 text-base font-black uppercase tracking-wider hover:bg-[#E62959] transition-colors shadow-[4px_4px_0_0_#0047FF]"
+              className="inline-flex items-center justify-center gap-3 re-primary-cta border px-8 py-4 text-base font-medium uppercase tracking-wider transition hover:opacity-90"
             >
               Unlock Premium Plays — $9/week
-              <ArrowRight className="w-5 h-5 stroke-[3px]" />
+              <ArrowRight className="w-5 h-5 stroke-[2px]" />
             </button>
           </div>
         </GlassCard>
