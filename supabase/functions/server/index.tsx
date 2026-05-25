@@ -11,6 +11,220 @@ const PREMATCH_ODDS_LOCK_PREFIX = "prematch_odds_lock";
 const BLUEBET_API_BASE_URL = "https://affiliate-api.bluebet.com.au";
 const BLUEBET_AFFILIATE_USER_AGENT =
   Deno.env.get("BLUEBET_AFFILIATE_USER_AGENT") || "rightedge.com.au";
+const AUTH_SESSION_COOKIE = "rightedge_session";
+const AUTH_SESSION_MAX_AGE_SECONDS = 7_776_000;
+
+type AuthSessionTier = "free" | "premium";
+type StoredAuthSession = {
+  token: string;
+  email: string;
+  tier: AuthSessionTier;
+  createdAt: string;
+  expiresAt: string;
+};
+
+const PREMIUM_ACTIVE_STRIPE_STATUSES = new Set(["active", "trialing"]);
+
+function buildAuthSessionKey(token: string) {
+  return `auth_session:${token}`;
+}
+
+function parseKvValue<T = any>(value: any): T | null {
+  if (!value) return null;
+  if (typeof value === "string") {
+    try {
+      return JSON.parse(value) as T;
+    } catch {
+      return null;
+    }
+  }
+  return value as T;
+}
+
+function getStripeClient() {
+  const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
+  if (!stripeKey) throw new Error("STRIPE_SECRET_KEY not configured");
+  return new Stripe(stripeKey, { apiVersion: "2023-10-16" });
+}
+
+function normalizeStripeSubscriptionStatus(status: unknown) {
+  return String(status || "").trim().toLowerCase();
+}
+
+function isPremiumStripeStatus(status: unknown) {
+  return PREMIUM_ACTIVE_STRIPE_STATUSES.has(normalizeStripeSubscriptionStatus(status));
+}
+
+async function getSubscriberByEmail(email: string) {
+  const normalizedEmail = email.trim().toLowerCase();
+  return parseKvValue<any>(await kv.get(`subscriber:${normalizedEmail}`));
+}
+
+async function getSubscriberByStripeIds(opts: { subscriptionId?: string; customerId?: string }) {
+  const subscriptionId = String(opts.subscriptionId || "").trim();
+  const customerId = String(opts.customerId || "").trim();
+  if (!subscriptionId && !customerId) return null;
+
+  const subscribers = await kv.getByPrefix("subscriber:") || [];
+  for (const entry of subscribers) {
+    const record = parseKvValue<any>(entry);
+    if (!record?.email) continue;
+    if (subscriptionId && record.stripeSubscriptionId === subscriptionId) return record;
+    if (customerId && record.stripeCustomerId === customerId) return record;
+  }
+
+  return null;
+}
+
+async function isPremiumSubscriberActive(email: string) {
+  const subscriber = await getSubscriberByEmail(email);
+  if (!subscriber) return false;
+
+  const status = normalizeStripeSubscriptionStatus(subscriber.stripeSubscriptionStatus);
+  if (!status) return true;
+
+  return isPremiumStripeStatus(status);
+}
+
+function createAuthSessionToken() {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function parseCookieHeader(cookieHeader?: string | null) {
+  if (!cookieHeader) return {};
+
+  return cookieHeader.split(";").reduce<Record<string, string>>((acc, part) => {
+    const [rawName, ...rawValue] = part.trim().split("=");
+    if (!rawName) return acc;
+    acc[rawName] = decodeURIComponent(rawValue.join("=") || "");
+    return acc;
+  }, {});
+}
+
+function shouldUseSecureCookie(requestUrl: string, host?: string | null, forwardedProto?: string | null) {
+  if ((forwardedProto || "").toLowerCase() === "https") return true;
+
+  const url = new URL(requestUrl);
+  if (url.protocol === "https:") return true;
+
+  const hostname = (host || url.hostname || "").split(":")[0].toLowerCase();
+  return !["localhost", "127.0.0.1", "::1"].includes(hostname);
+}
+
+function serializeCookie(name: string, value: string, options: {
+  maxAge?: number;
+  path?: string;
+  httpOnly?: boolean;
+  secure?: boolean;
+  sameSite?: "Lax" | "Strict" | "None";
+}) {
+  const parts = [`${name}=${encodeURIComponent(value)}`];
+
+  if (typeof options.maxAge === "number") parts.push(`Max-Age=${options.maxAge}`);
+  if (options.path) parts.push(`Path=${options.path}`);
+  if (options.httpOnly) parts.push("HttpOnly");
+  if (options.secure) parts.push("Secure");
+  if (options.sameSite) parts.push(`SameSite=${options.sameSite}`);
+
+  return parts.join("; ");
+}
+
+async function createAuthSession(email: string, tier: AuthSessionTier) {
+  const token = createAuthSessionToken();
+  const createdAt = new Date();
+  const expiresAt = new Date(createdAt.getTime() + AUTH_SESSION_MAX_AGE_SECONDS * 1000);
+
+  const session: StoredAuthSession = {
+    token,
+    email: email.trim().toLowerCase(),
+    tier,
+    createdAt: createdAt.toISOString(),
+    expiresAt: expiresAt.toISOString(),
+  };
+
+  await kv.set(buildAuthSessionKey(token), JSON.stringify(session));
+  return session;
+}
+
+function writeAuthSessionCookie(c: any, token: string) {
+  const secure = shouldUseSecureCookie(
+    c.req.url,
+    c.req.header("host"),
+    c.req.header("x-forwarded-proto"),
+  );
+
+  c.header(
+    "Set-Cookie",
+    serializeCookie(AUTH_SESSION_COOKIE, token, {
+      maxAge: AUTH_SESSION_MAX_AGE_SECONDS,
+      path: "/",
+      httpOnly: true,
+      secure,
+      sameSite: "Lax",
+    }),
+  );
+}
+
+function clearAuthSessionCookie(c: any) {
+  const secure = shouldUseSecureCookie(
+    c.req.url,
+    c.req.header("host"),
+    c.req.header("x-forwarded-proto"),
+  );
+
+  c.header(
+    "Set-Cookie",
+    serializeCookie(AUTH_SESSION_COOKIE, "", {
+      maxAge: 0,
+      path: "/",
+      httpOnly: true,
+      secure,
+      sameSite: "Lax",
+    }),
+  );
+}
+
+async function getAuthSessionFromRequest(c: any): Promise<StoredAuthSession | null> {
+  try {
+    const cookies = parseCookieHeader(c.req.header("cookie"));
+    const token = cookies[AUTH_SESSION_COOKIE];
+    if (!token) return null;
+
+    const stored = await kv.get(buildAuthSessionKey(token));
+    if (!stored) return null;
+
+    const session: StoredAuthSession =
+      typeof stored === "string" ? JSON.parse(stored) : stored;
+
+    if (!session?.email || !session?.tier || !session?.expiresAt) {
+      await kv.del(buildAuthSessionKey(token));
+      clearAuthSessionCookie(c);
+      return null;
+    }
+
+    if (Date.now() >= new Date(session.expiresAt).getTime()) {
+      await kv.del(buildAuthSessionKey(token));
+      clearAuthSessionCookie(c);
+      return null;
+    }
+
+    return session;
+  } catch (error) {
+    console.error("[auth/session] Failed to read session:", error);
+    return null;
+  }
+}
+
+async function clearAuthSession(c: any) {
+  const cookies = parseCookieHeader(c.req.header("cookie"));
+  const token = cookies[AUTH_SESSION_COOKIE];
+  if (token) {
+    await kv.del(buildAuthSessionKey(token));
+  }
+  clearAuthSessionCookie(c);
+}
 
 // Enable logger
 app.use('*', logger(console.log));
@@ -111,6 +325,50 @@ app.post("/track-event", async (c) => {
     console.error("Failed to track event", e);
     return c.json({ error: "Failed" }, 500);
   }
+});
+
+app.get("/auth/session", async (c) => {
+  const session = await getAuthSessionFromRequest(c);
+
+  if (!session) {
+    clearAuthSessionCookie(c);
+    return c.json({
+      authenticated: false,
+      email: null,
+      tier: "none",
+      free: false,
+      premium: false,
+    });
+  }
+
+  const premium = session.tier === "premium"
+    ? await isPremiumSubscriberActive(session.email)
+    : false;
+
+  if (session.tier === "premium" && !premium) {
+    return c.json({
+      authenticated: true,
+      email: session.email,
+      tier: "free",
+      free: true,
+      premium: false,
+      expiresAt: session.expiresAt,
+    });
+  }
+
+  return c.json({
+    authenticated: true,
+    email: session.email,
+    tier: session.tier,
+    free: true,
+    premium,
+    expiresAt: session.expiresAt,
+  });
+});
+
+app.post("/auth/logout", async (c) => {
+  await clearAuthSession(c);
+  return c.json({ success: true });
 });
 
 
@@ -330,31 +588,50 @@ function rightEdgeEmailShell(preheader: string, label: string, innerHtml: string
 
 function freeWelcomeHtml() {
   return rightEdgeEmailShell(
-    "Your free RightEdge round predictions are live.",
+    "View this week's match simulations and score projections.",
     "Free Access",
     `
         <div style="background:#111116;border:1px solid #1E1E2E;margin-top:24px;padding:28px 26px;">
-          <div style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:10px;line-height:1.2;color:#9CA3AF;font-weight:500;letter-spacing:0.12em;text-transform:uppercase;">Round predictions unlocked</div>
-          <div style="margin-top:14px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:34px;line-height:1.05;color:#ffffff;font-weight:600;letter-spacing:-0.02em;">The free model view is live.</div>
+          <div style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:34px;line-height:1.05;color:#ffffff;font-weight:600;letter-spacing:-0.02em;text-transform:uppercase;">Welcome to RightEdge.</div>
+          <div style="margin-top:12px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:18px;line-height:1.4;color:#ffffff;font-weight:500;letter-spacing:-0.01em;">Your free round access is ready.</div>
           <div style="margin-top:18px;max-width:560px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:16px;line-height:1.6;color:#9CA3AF;font-weight:400;">
-            You now have the standard match simulations and score projections for the current round. The free view shows the model read; Premium shows the filtered plays and try scorer signals when the market price is wrong.
+            Your account is set up and you now have full access to our standard match simulations and score projections.<br/><br/>
+            Since you went straight into the live dashboard when you signed up, you are already logged in on your current browser. If you ever close the tab, log out, or want to view the data on a different device, just use the button below to head back to the site.
           </div>
-          ${emailCtaHtml("https://www.rightedge.com.au/#matches", "View Free Round Predictions ->")}
+          ${emailCtaHtml("https://www.rightedge.com.au/#matches", "View Round Predictions &rarr;")}
+          <div style="margin-top:12px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:12px;line-height:1.6;color:#6B7280;font-weight:400;">
+            <em>Note: RightEdge is completely passwordless. If your browser session expires, simply type your email on the homepage to jump straight back into your dashboard instantly.</em>
+          </div>
         </div>
 
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:18px;margin-left:-6px;margin-right:-6px;">
-          <tr>
-            ${metricCardHtml("01 / Data", "Simulations")}
-            ${metricCardHtml("02 / Market", "Fair Odds")}
-            ${metricCardHtml("03 / Signal", "Value")}
-          </tr>
-        </table>
+        <div style="margin-top:28px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:14px;line-height:1.2;color:#ffffff;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;">How the model works</div>
 
-        <div style="background:#111116;border:1px solid #1E1E2E;margin-top:6px;padding:22px 24px;">
+        <div style="background:#111116;border:1px solid #1E1E2E;margin-top:14px;padding:22px 24px;">
+          <div style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:12px;line-height:1.2;color:#ffffff;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;">01 / Data Simulation</div>
+          <div style="margin-top:10px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:14px;line-height:1.7;color:#9CA3AF;font-weight:400;">We run 10,000 algorithmic simulations for every NRL match&mdash;processing team metrics and roster changes to map out clean NRL predictions, picks and plays.</div>
+        </div>
+
+        <div style="background:#111116;border:1px solid #1E1E2E;margin-top:12px;padding:22px 24px;">
+          <div style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:12px;line-height:1.2;color:#ffffff;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;">02 / Value Detection</div>
+          <div style="margin-top:10px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:14px;line-height:1.7;color:#9CA3AF;font-weight:400;">The model automatically converts those probabilities into mathematical "true odds," giving you a clear baseline to compare against bookmaker prices.</div>
+        </div>
+
+        <div style="background:#111116;border:1px solid #1E1E2E;margin-top:12px;padding:22px 24px;">
+          <div style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:12px;line-height:1.2;color:#ffffff;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;">03 / Premium Plays</div>
+          <div style="margin-top:10px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:14px;line-height:1.7;color:#9CA3AF;font-weight:400;">Standard access gives you score projections for every match of each round. When the gap between the bookmaker price and the model's odds creates a heavy mathematical edge, the system flags it as a Premium Play. Premium Plays include H2H, Line, Total and Try Scorers.</div>
+        </div>
+
+        <div style="background:#111116;border:1px solid #1E1E2E;margin-top:16px;padding:22px 24px;">
           <div style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:13px;line-height:1.7;color:#9CA3AF;">
-            Premium remains optional. It adds the action layer: model plays, try scorer value, live market context and edge filtering.
+            The RightEdge matches dashboard is, and always will be, 100% free to use.<br/><br/>
+            Our Premium tier functions as an automated upgrade for users who don't want to track data shifts manually&mdash;unlocking our highest-conviction model plays, precise staking metrics, and live Try Scorer value signals the exact second a market price moves.
           </div>
-          ${emailCtaHtml("https://www.rightedge.com.au/#best-bets", "View Premium Access ->", "secondary")}
+          ${emailCtaHtml("https://www.rightedge.com.au/#best-bets", "See How Premium Works &rarr;", "secondary")}
+        </div>
+
+        <div style="margin-top:20px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:12px;line-height:1.7;color:#6B7280;font-weight:400;">
+          RightEdge Analytics. Data-driven probabilities with zero media bias.<br/>
+          You are receiving this email because you created a free account at rightedge.com.au.
         </div>`
   );
 }
@@ -440,7 +717,7 @@ async function sendWelcomeEmail(type: "free" | "premium", email: string) {
 
   const subject =
     type === "free"
-      ? "Welcome to RightEdge — here’s what sharp punters do differently"
+      ? "Welcome to RightEdge | Your NRL Predictions Link"
       : "You’re in — RightEdge Premium is live";
 
   const html =
@@ -1071,6 +1348,11 @@ app.post("/register-free-access", async (c) => {
         console.error("[register-free-access] Welcome email failed:", emailErr);
       }
     }
+
+    const existingSession = await getAuthSessionFromRequest(c);
+    const sessionTier: AuthSessionTier = existingSession?.tier === "premium" ? "premium" : "free";
+    const authSession = await createAuthSession(email, sessionTier);
+    writeAuthSessionCookie(c, authSession.token);
 
     return c.json({ success: true });
   } catch (e) {
@@ -2157,8 +2439,13 @@ app.post("/verify-email", async (c) => {
     await saveVerifiedSubscriber(email, "stripe_login_verified", {
       customerId,
       subscriptionId: activeSubscription.id,
+      subscriptionStatus: activeSubscription.status,
+      currentPeriodEnd: getStripeCurrentPeriodEnd(activeSubscription),
+      cancelAtPeriodEnd: Boolean(activeSubscription.cancel_at_period_end),
     });
     await syncResendLifecycle(email, "premium");
+    const authSession = await createAuthSession(email, "premium");
+    writeAuthSessionCookie(c, authSession.token);
 
     // Keep compatibility with the currently deployed frontend, which sends
     // users with active=true into the old OTP screen. Returning active=false
@@ -2203,13 +2490,16 @@ async function findActiveStripeSubscription(stripe: Stripe, email: string) {
   return { activeSubscription, customerId };
 }
 
-async function createInstantAccessUrl(email: string, returnUrl: string, returnHash: string, customerId: string, subscriptionId: string) {
+async function createInstantAccessUrl(email: string, returnUrl: string, returnHash: string, customerId: string, subscription: any) {
   const token = crypto.randomUUID();
   await kv.set(`instant_access:${token}`, JSON.stringify({
     email,
     returnHash,
     customerId,
-    subscriptionId,
+    subscriptionId: subscription?.id || "",
+    subscriptionStatus: subscription?.status || "",
+    currentPeriodEnd: getStripeCurrentPeriodEnd(subscription),
+    cancelAtPeriodEnd: Boolean(subscription?.cancel_at_period_end),
     createdAt: new Date().toISOString(),
   }));
 
@@ -2266,6 +2556,62 @@ app.post("/create-customer-portal", async (c) => {
   }
 });
 
+app.post("/stripe-webhook", async (c) => {
+  const signature = c.req.header("stripe-signature");
+  const webhookSecret = Deno.env.get("STRIPE_WEBHOOK_SECRET");
+
+  if (!signature || !webhookSecret) {
+    return c.text("Webhook signature or configuration missing", 400);
+  }
+
+  let event: any;
+
+  try {
+    const stripe = getStripeClient();
+    const rawBody = await c.req.text();
+    event = await stripe.webhooks.constructEventAsync(rawBody, signature, webhookSecret);
+  } catch (err: any) {
+    console.error("[Stripe Webhook] Signature verification failed:", err?.message || err);
+    return c.text(`Webhook Error: ${err?.message || "Invalid signature"}`, 400);
+  }
+
+  try {
+    const stripe = getStripeClient();
+
+    switch (event.type) {
+      case "checkout.session.completed":
+        await syncStripeCheckoutSession(stripe, event.data.object);
+        break;
+
+      case "customer.subscription.created":
+      case "customer.subscription.updated":
+      case "customer.subscription.deleted":
+        await syncStripeSubscriptionStatus(stripe, event.data.object, event.type);
+        break;
+
+      case "invoice.payment_succeeded":
+      case "invoice.payment_failed":
+        await syncStripeInvoiceSubscription(stripe, event.data.object, event.type);
+        break;
+
+      default:
+        console.log(`[Stripe Webhook] Ignored event ${event.type}`);
+        break;
+    }
+
+    await kv.set(`stripe_webhook:${event.id}`, JSON.stringify({
+      id: event.id,
+      type: event.type,
+      receivedAt: new Date().toISOString(),
+    }));
+
+    return c.json({ received: true });
+  } catch (err: any) {
+    console.error("[Stripe Webhook] Handler failed:", err?.message || err, err?.stack);
+    return c.text(`Webhook handler failed: ${err?.message || "unknown error"}`, 500);
+  }
+});
+
 app.post("/create-checkout-session", async (c) => {
   try {
     const body = await c.req.json();
@@ -2290,7 +2636,7 @@ app.post("/create-checkout-session", async (c) => {
     const { activeSubscription, customerId } = await findActiveStripeSubscription(stripe, email);
 
     if (activeSubscription) {
-      const url = await createInstantAccessUrl(email, returnUrl, returnHash, customerId, activeSubscription.id);
+      const url = await createInstantAccessUrl(email, returnUrl, returnHash, customerId, activeSubscription);
       console.log(`[Stripe] Existing subscriber ${email} given instant premium access for #${returnHash}`);
       return c.json({
         url,
@@ -2355,6 +2701,7 @@ async function saveVerifiedSubscriber(email: string, source = 'stripe_verified',
   const key = `subscriber:${normalizedEmail}`;
   const existingSubscriber = await kv.get(key);
   const isNewSubscriber = !existingSubscriber;
+  const existingSubscriberRecord = parseKvValue<any>(existingSubscriber) || {};
   let favoriteTeam = "";
 
   try {
@@ -2368,15 +2715,23 @@ async function saveVerifiedSubscriber(email: string, source = 'stripe_verified',
   }
 
   const payload = {
+    ...existingSubscriberRecord,
     email: normalizedEmail,
-    subscribedAt: existingSubscriber
-      ? (() => { try { return JSON.parse(String(existingSubscriber)).subscribedAt; } catch { return new Date().toISOString(); } })()
-      : new Date().toISOString(),
+    subscribedAt: existingSubscriberRecord.subscribedAt || new Date().toISOString(),
     source,
     favoriteTeam,
-    stripeCustomerId: stripeData.customerId || '',
-    stripeSubscriptionId: stripeData.subscriptionId || '',
-    stripeCheckoutSessionId: stripeData.checkoutSessionId || '',
+    stripeCustomerId: stripeData.customerId || existingSubscriberRecord.stripeCustomerId || '',
+    stripeSubscriptionId: stripeData.subscriptionId || existingSubscriberRecord.stripeSubscriptionId || '',
+    stripeCheckoutSessionId: stripeData.checkoutSessionId || existingSubscriberRecord.stripeCheckoutSessionId || '',
+    stripeSubscriptionStatus: normalizeStripeSubscriptionStatus(
+      stripeData.subscriptionStatus || existingSubscriberRecord.stripeSubscriptionStatus || "active"
+    ),
+    stripeCurrentPeriodEnd: stripeData.currentPeriodEnd || existingSubscriberRecord.stripeCurrentPeriodEnd || '',
+    stripeCancelAtPeriodEnd:
+      typeof stripeData.cancelAtPeriodEnd === "boolean"
+        ? stripeData.cancelAtPeriodEnd
+        : Boolean(existingSubscriberRecord.stripeCancelAtPeriodEnd),
+    stripeStatusUpdatedAt: new Date().toISOString(),
     verifiedAt: new Date().toISOString(),
   };
 
@@ -2399,6 +2754,139 @@ async function saveVerifiedSubscriber(email: string, source = 'stripe_verified',
   }
 
   return { payload, isNewSubscriber };
+}
+
+function getStripeCustomerIdFromSubscription(subscription: any) {
+  return typeof subscription?.customer === "string"
+    ? subscription.customer
+    : subscription?.customer?.id || "";
+}
+
+function getStripeCurrentPeriodEnd(subscription: any) {
+  const currentPeriodEnd = Number(subscription?.current_period_end || 0);
+  return currentPeriodEnd > 0
+    ? new Date(currentPeriodEnd * 1000).toISOString()
+    : "";
+}
+
+async function resolveSubscriptionEmail(stripe: Stripe, subscription: any) {
+  const metadataEmail = String(subscription?.metadata?.email || "").trim().toLowerCase();
+  if (metadataEmail.includes("@")) return metadataEmail;
+
+  const customerId = getStripeCustomerIdFromSubscription(subscription);
+  const linkedSubscriber = await getSubscriberByStripeIds({
+    subscriptionId: subscription?.id,
+    customerId,
+  });
+  if (linkedSubscriber?.email) return String(linkedSubscriber.email).trim().toLowerCase();
+
+  if (customerId) {
+    try {
+      const customer: any = await stripe.customers.retrieve(customerId);
+      const customerEmail = String(customer?.email || "").trim().toLowerCase();
+      if (customerEmail.includes("@")) return customerEmail;
+    } catch (customerErr) {
+      console.error("[Stripe Webhook] Failed to resolve customer email:", customerErr);
+    }
+  }
+
+  return "";
+}
+
+async function syncStripeSubscriptionStatus(stripe: Stripe, subscription: any, source: string) {
+  const email = await resolveSubscriptionEmail(stripe, subscription);
+  if (!email || !email.includes("@")) {
+    console.warn("[Stripe Webhook] Subscription event skipped: no email could be resolved.", {
+      subscriptionId: subscription?.id,
+      status: subscription?.status,
+    });
+    return null;
+  }
+
+  const customerId = getStripeCustomerIdFromSubscription(subscription);
+  const status = normalizeStripeSubscriptionStatus(subscription?.status);
+
+  const result = await saveVerifiedSubscriber(email, source, {
+    customerId,
+    subscriptionId: subscription?.id || "",
+    subscriptionStatus: status,
+    currentPeriodEnd: getStripeCurrentPeriodEnd(subscription),
+    cancelAtPeriodEnd: Boolean(subscription?.cancel_at_period_end),
+  });
+
+  if (isPremiumStripeStatus(status)) {
+    await syncResendLifecycle(email, "premium");
+  }
+
+  await kv.set(`stripe_subscription:${subscription?.id}`, JSON.stringify({
+    email,
+    stripeCustomerId: customerId,
+    stripeSubscriptionId: subscription?.id || "",
+    stripeSubscriptionStatus: status,
+    stripeCurrentPeriodEnd: getStripeCurrentPeriodEnd(subscription),
+    stripeCancelAtPeriodEnd: Boolean(subscription?.cancel_at_period_end),
+    source,
+    updatedAt: new Date().toISOString(),
+  }));
+
+  console.log(`[Stripe Webhook] Synced ${subscription?.id} (${status}) for ${email}`);
+  return result;
+}
+
+async function syncStripeInvoiceSubscription(stripe: Stripe, invoice: any, source: string) {
+  const subscriptionId =
+    typeof invoice?.subscription === "string"
+      ? invoice.subscription
+      : invoice?.subscription?.id || "";
+
+  if (!subscriptionId) {
+    console.warn("[Stripe Webhook] Invoice event skipped: no subscription id.");
+    return null;
+  }
+
+  const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+  return syncStripeSubscriptionStatus(stripe, subscription, source);
+}
+
+async function syncStripeCheckoutSession(stripe: Stripe, session: any) {
+  if (session?.mode !== "subscription") return null;
+
+  const subscriptionId =
+    typeof session?.subscription === "string"
+      ? session.subscription
+      : session?.subscription?.id || "";
+
+  const email =
+    String(session?.customer_details?.email || "").trim().toLowerCase() ||
+    String(session?.customer_email || "").trim().toLowerCase() ||
+    String(session?.metadata?.email || "").trim().toLowerCase();
+
+  if (!subscriptionId) {
+    console.warn("[Stripe Webhook] Checkout completed skipped: no subscription id.");
+    return null;
+  }
+
+  const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+  const synced = await syncStripeSubscriptionStatus(stripe, subscription, "stripe_checkout_completed_webhook");
+
+  if (email.includes("@")) {
+    const customerId =
+      typeof session?.customer === "string"
+        ? session.customer
+        : session?.customer?.id || getStripeCustomerIdFromSubscription(subscription);
+
+    await saveVerifiedSubscriber(email, "stripe_checkout_completed_webhook", {
+      customerId,
+      subscriptionId,
+      checkoutSessionId: session?.id || "",
+      subscriptionStatus: subscription.status,
+      currentPeriodEnd: getStripeCurrentPeriodEnd(subscription),
+      cancelAtPeriodEnd: Boolean((subscription as any)?.cancel_at_period_end),
+    });
+    await syncResendLifecycle(email, "premium");
+  }
+
+  return synced;
 }
 
 type BroadcastAudience = "premium" | "free" | "all";
@@ -2482,6 +2970,8 @@ async function loadBroadcastRecipients(opts: { audience?: BroadcastAudience; tea
         const record = typeof entry === "string" ? JSON.parse(entry) : entry;
         const email = String(record?.email || "").trim().toLowerCase();
         if (!email) continue;
+        const subscriptionStatus = normalizeStripeSubscriptionStatus(record?.stripeSubscriptionStatus);
+        if (subscriptionStatus && !isPremiumStripeStatus(subscriptionStatus)) continue;
 
         const linkedFreeAccess = freeAccessLookup.get(email);
         const favoriteTeam = String(record?.favoriteTeam || linkedFreeAccess?.favoriteTeam || "").trim();
@@ -2584,9 +3074,14 @@ app.post("/confirm-checkout-session", async (c) => {
       await saveVerifiedSubscriber(email, "stripe_existing_subscriber_instant_access", {
         customerId: data.customerId || "",
         subscriptionId: data.subscriptionId || "",
+        subscriptionStatus: data.subscriptionStatus || "active",
+        currentPeriodEnd: data.currentPeriodEnd || "",
+        cancelAtPeriodEnd: Boolean(data.cancelAtPeriodEnd),
       });
       await syncResendLifecycle(email, "premium");
       await kv.del(`instant_access:${token}`);
+      const authSession = await createAuthSession(email, "premium");
+      writeAuthSessionCookie(c, authSession.token);
 
       console.log(`[Stripe] Confirmed instant premium access for existing subscriber ${email}`);
       return c.json({
@@ -2651,9 +3146,14 @@ app.post("/confirm-checkout-session", async (c) => {
       customerId,
       subscriptionId,
       checkoutSessionId: session.id,
+      subscriptionStatus: subscription.status,
+      currentPeriodEnd: getStripeCurrentPeriodEnd(subscription),
+      cancelAtPeriodEnd: Boolean(subscription.cancel_at_period_end),
     });
 
     await syncResendLifecycle(email, "premium");
+    const authSession = await createAuthSession(email, "premium");
+    writeAuthSessionCookie(c, authSession.token);
 
     if (isNewSubscriber) {
       try {
@@ -2729,6 +3229,9 @@ app.post("/subscribe", async (c) => {
     const { isNewSubscriber } = await saveVerifiedSubscriber(email, body?.source || "stripe_active_verified", {
       customerId,
       subscriptionId: activeSubscription.id,
+      subscriptionStatus: activeSubscription.status,
+      currentPeriodEnd: getStripeCurrentPeriodEnd(activeSubscription),
+      cancelAtPeriodEnd: Boolean(activeSubscription.cancel_at_period_end),
     });
 
     await syncResendLifecycle(email, "premium");

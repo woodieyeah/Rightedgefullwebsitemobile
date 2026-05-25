@@ -1728,44 +1728,30 @@ function ConfidenceBadge({
   );
 }
 
-const EMAIL_ACCESS_KEY = "rightedge_email_access";
 const ADMIN_EMAILS = ["elliott@woodbry.com", "ewoodbry@gmail.com", "elliott@rightedge.com.au"];
+type AuthTier = "none" | "free" | "premium";
+type RuntimeAuthState = {
+  checked: boolean;
+  email: string | null;
+  tier: AuthTier;
+};
+
+let runtimeAuthState: RuntimeAuthState = {
+  checked: false,
+  email: null,
+  tier: "none",
+};
+
+function updateRuntimeAuthState(nextState: RuntimeAuthState) {
+  runtimeAuthState = nextState;
+}
 
 function hasEmailAccess(): boolean {
-  try {
-    if (hasPaidAccess()) return true;
-
-    const val = localStorage.getItem(EMAIL_ACCESS_KEY);
-    if (!val) return false;
-
-    if (val.startsWith("{")) {
-      const data = JSON.parse(val);
-      // Support legacy expiresAt check just in case, but prefer simple subscribed flag
-      if (data.email && (data.subscribed || (data.expiresAt && Date.now() < data.expiresAt))) {
-        return true;
-      }
-    }
-    
-    // Clear old simple email strings or expired data
-    localStorage.removeItem(EMAIL_ACCESS_KEY);
-    return false;
-  } catch {
-    return false;
-  }
+  return runtimeAuthState.tier === "free" || runtimeAuthState.tier === "premium";
 }
 
 function getUserEmail(): string | null {
-  try {
-    const val = localStorage.getItem(EMAIL_ACCESS_KEY);
-    if (!val) return null;
-    if (val.startsWith("{")) {
-      const data = JSON.parse(val);
-      return data.email ? String(data.email).trim().toLowerCase() : null;
-    }
-    return null;
-  } catch {
-    return null;
-  }
+  return runtimeAuthState.email;
 }
 
 function getPreviewBookmakerName(bookmaker?: string) {
@@ -1889,84 +1875,36 @@ function BookmakerName({
 
 function isUserAdmin(): boolean {
   try {
-    const email = getUserEmail();
-    return (
-      localStorage.getItem("rightedge_admin_auth") === "true" ||
-      (!!email && ADMIN_EMAILS.includes(email))
-    );
+    return localStorage.getItem("rightedge_admin_auth") === "true";
   } catch {
     return false;
   }
 }
 
 function setEmailAccess(email: string) {
-  try {
-    const normalizedEmail = email.trim().toLowerCase();
-    localStorage.setItem(
-      EMAIL_ACCESS_KEY,
-      JSON.stringify({ email: normalizedEmail, subscribed: true }),
-    );
-    // Permanently stamp this browser as internal if the email is ours.
-    // This means all future sessions from this device are correctly excluded
-    // from the Real Users view — even before email entry.
-    if (ADMIN_EMAILS.includes(normalizedEmail)) {
-      localStorage.setItem('rightedge_internal_visitor', 'true');
-    }
-  } catch {}
+  const normalizedEmail = email.trim().toLowerCase();
+  updateRuntimeAuthState({
+    checked: true,
+    email: normalizedEmail,
+    tier: runtimeAuthState.tier === "premium" ? "premium" : "free",
+  });
 }
 
-const PAID_ACCESS_KEY = "rightedge_paid_access";
-
 function hasPaidAccess(): boolean {
-  try {
-    const val = localStorage.getItem(PAID_ACCESS_KEY);
-    if (!val) return false;
-
-    if (val.startsWith("{")) {
-      const data = JSON.parse(val);
-      if (data.email && (data.subscribed || (data.expiresAt && Date.now() < data.expiresAt))) {
-        return true;
-      }
-    }
-
-    localStorage.removeItem(PAID_ACCESS_KEY);
-    return false;
-  } catch {
-    return false;
-  }
+  return runtimeAuthState.tier === "premium";
 }
 
 function getPaidUserEmail(): string | null {
-  try {
-    const val = localStorage.getItem(PAID_ACCESS_KEY);
-    if (!val) return null;
-    if (val.startsWith("{")) {
-      const data = JSON.parse(val);
-      return data.email || null;
-    }
-    return null;
-  } catch {
-    return null;
-  }
+  return runtimeAuthState.tier === "premium" ? runtimeAuthState.email : null;
 }
 
 function setPaidAccess(email: string) {
-  try {
-    const normalizedEmail = email.trim().toLowerCase();
-    localStorage.setItem(
-      EMAIL_ACCESS_KEY,
-      JSON.stringify({ email: normalizedEmail, subscribed: true }),
-    );
-    localStorage.setItem(
-      PAID_ACCESS_KEY,
-      JSON.stringify({ email: normalizedEmail, subscribed: true }),
-    );
-    localStorage.setItem('rightedge_subscriber', 'true');
-
-    if (ADMIN_EMAILS.includes(normalizedEmail)) {
-      localStorage.setItem('rightedge_internal_visitor', 'true');
-    }
-  } catch {}
+  const normalizedEmail = email.trim().toLowerCase();
+  updateRuntimeAuthState({
+    checked: true,
+    email: normalizedEmail,
+    tier: "premium",
+  });
 }
 
 // ── Free Email Gate Helpers ──────────────────────────────────────────────────
@@ -2009,10 +1947,12 @@ function PaymentGateModal({
   open,
   onClose,
   onSuccess,
+  onSessionRefresh,
 }: {
   open: boolean;
   onClose: () => void;
   onSuccess: () => void;
+  onSessionRefresh: () => Promise<RuntimeAuthState>;
 }) {
   const [step, setStep] = useState<"email" | "processing">("email");
   const [email, setEmail] = useState("");
@@ -2052,6 +1992,7 @@ function PaymentGateModal({
           "Content-Type": "application/json",
           Authorization: `Bearer ${publicAnonKey}`,
         },
+        credentials: "include",
         body: JSON.stringify({ email: trimmedEmail }),
       });
 
@@ -2066,8 +2007,12 @@ function PaymentGateModal({
 
       if (verifyRes.ok && isActiveSubscriber) {
         const verifiedEmail = (verifyData.email || trimmedEmail).trim().toLowerCase();
-        setEmailAccess(verifiedEmail);
-        setPaidAccess(verifiedEmail);
+        const nextAuthState = await onSessionRefresh();
+        if (nextAuthState.tier !== "premium") {
+          setErrorMsg("We verified your email, but could not restore the secure session. Please try again.");
+          setSubmitting(false);
+          return;
+        }
         (window as any).trackAnalyticsEvent?.("paid_access_verified", { email: verifiedEmail });
         onSuccess();
         return;
@@ -2241,10 +2186,12 @@ function EmailGateModal({
   open,
   onClose,
   onSuccess,
+  onSessionRefresh,
 }: {
   open: boolean;
   onClose: () => void;
   onSuccess: () => void;
+  onSessionRefresh: () => Promise<RuntimeAuthState>;
 }) {
   const [step, setStep] = useState<"email" | "otp">("email");
   const [email, setEmail] = useState("");
@@ -2265,7 +2212,7 @@ function EmailGateModal({
 
   // Admin bypass
   const BYPASS_EMAILS = [...ADMIN_EMAILS, "test@rightedge.com.au"];
-  if (BYPASS_EMAILS.includes(trimmed)) {
+  if (localStorage.getItem('rightedge_admin_auth') === 'true' && BYPASS_EMAILS.includes(trimmed)) {
     setEmailAccess(trimmed);
     window.dispatchEvent(new Event('adminAuthChanged'));
     onSuccess();
@@ -2281,6 +2228,7 @@ function EmailGateModal({
         "Content-Type": "application/json",
         Authorization: `Bearer ${publicAnonKey}`,
       },
+      credentials: "include",
       body: JSON.stringify({
         email: trimmed,
         source: "mailing_list",
@@ -2292,7 +2240,12 @@ function EmailGateModal({
       setSubmitting(false);
       return;
     }
-    setEmailAccess(trimmed);
+    const nextAuthState = await onSessionRefresh();
+    if (nextAuthState.tier === "none") {
+      setErrorMsg("We saved your email, but could not start your secure session. Please try again.");
+      setSubmitting(false);
+      return;
+    }
     (window as any).trackAnalyticsEvent?.("mailing_list_signup", {
       email: trimmed,
     });
@@ -6931,8 +6884,60 @@ export default function App() {
   const [error, setError] = useState("");
   const [showEmailGate, setShowEmailGate] = useState(false);
   const [showPaymentGate, setShowPaymentGate] = useState(false);
+  const [authState, setAuthState] = useState<RuntimeAuthState>(() => runtimeAuthState);
   const [paidAccessState, setPaidAccessState] = useState(() => hasPaidAccess());
   const [isAdmin, setIsAdmin] = useState(() => isUserAdmin());
+
+  const applyAuthState = (nextState: RuntimeAuthState) => {
+    updateRuntimeAuthState(nextState);
+    setAuthState(nextState);
+    setPaidAccessState(nextState.tier === "premium");
+    setIsAdmin(isUserAdmin());
+
+    if (nextState.email && ADMIN_EMAILS.includes(nextState.email)) {
+      localStorage.setItem("rightedge_internal_visitor", "true");
+    }
+  };
+
+  const refreshAuthSession = async (): Promise<RuntimeAuthState> => {
+    try {
+      const res = await fetch(`/api/auth/session`, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${publicAnonKey}`,
+        },
+        credentials: "include",
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (res.ok && data.authenticated && data.email) {
+        const nextState: RuntimeAuthState = {
+          checked: true,
+          email: String(data.email).trim().toLowerCase(),
+          tier: data.tier === "premium" ? "premium" : "free",
+        };
+        applyAuthState(nextState);
+        return nextState;
+      }
+
+      const nextState: RuntimeAuthState = {
+        checked: true,
+        email: null,
+        tier: "none",
+      };
+      applyAuthState(nextState);
+      return nextState;
+    } catch {
+      const nextState: RuntimeAuthState = {
+        checked: true,
+        email: null,
+        tier: "none",
+      };
+      applyAuthState(nextState);
+      return nextState;
+    }
+  };
 
   // Setup Analytics Tracking (meta tags now handled by <Helmet> — rendered synchronously)
   useEffect(() => {
@@ -6989,29 +6994,9 @@ export default function App() {
       // 2. Admin panel authenticated (current or past session this visit)
       if (localStorage.getItem('rightedge_admin_auth') === 'true') isInternal = true;
 
-      // 3. Logged-in email is an internal address (rightedge_email_access)
-      let visitorEmail: string | null = null;
-      try {
-        const accessVal = localStorage.getItem('rightedge_email_access');
-        if (accessVal) {
-          const parsed = JSON.parse(accessVal);
-          if (parsed.email) {
-            visitorEmail = parsed.email.toLowerCase();
-            if (ADMIN_EMAILS.includes(visitorEmail)) isInternal = true;
-          }
-        }
-      } catch (e) {}
+      const visitorEmail = getUserEmail();
 
-      // 4. Legacy rightedge_user key
-      try {
-        const userStr = localStorage.getItem('rightedge_user');
-        if (userStr) {
-          const user = JSON.parse(userStr);
-          if (user.email && ADMIN_EMAILS.includes(user.email.toLowerCase())) isInternal = true;
-        }
-      } catch (e) {}
-
-      // 5. Current page is the admin route
+      // 3. Current page is the admin route
       if (window.location.hash.toLowerCase().includes('admin')) isInternal = true;
 
       // Persist internal status permanently for this browser so the very first
@@ -7042,7 +7027,7 @@ export default function App() {
         device,
         user_agent: ua,
         is_internal: isInternal,
-        is_subscriber: !!localStorage.getItem('rightedge_subscriber'),
+        is_subscriber: hasPaidAccess(),
         ...data
       };
 
@@ -7068,7 +7053,7 @@ export default function App() {
 
     // Expose globally for other components to track events like clicks/conversions
     (window as any).trackAnalyticsEvent = trackAnalyticsEvent;
-  }, [sitePage]);
+  }, [sitePage, authState.email, authState.tier]);
 
   useEffect(() => {
     const handleAdminAuth = () => {
@@ -7191,15 +7176,24 @@ export default function App() {
             "Content-Type": "application/json",
             Authorization: `Bearer ${publicAnonKey}`,
           },
+          credentials: "include",
           body: JSON.stringify({ session_id: sessionId }),
         });
 
         const data = await res.json().catch(() => ({}));
 
         if (res.ok && data.success && data.email) {
-          setEmailAccess(data.email);
-          setPaidAccess(data.email);
-          setPaidAccessState(true);
+          const nextAuthState = await refreshAuthSession();
+          if (nextAuthState.tier !== "premium") {
+            (window as any).trackAnalyticsEvent?.("premium_checkout_confirm_failed", {
+              session_id: sessionId,
+              error: "session_not_restored",
+            });
+            window.history.replaceState({}, document.title, `${window.location.pathname}#${returnHash}`);
+            setSitePage("home");
+            return;
+          }
+
           setShowEmailGate(false);
 
           const confirmedReturnHash = ["matches", "best-bets", "try-scorers"].includes(data.returnHash)
@@ -7231,11 +7225,23 @@ export default function App() {
       }
     };
 
-    confirmStripeSuccess();
-    checkHash();
-    window.addEventListener("hashchange", checkHash);
-    return () =>
+    let cancelled = false;
+
+    const bootstrap = async () => {
+      await confirmStripeSuccess();
+      if (cancelled) return;
+      await refreshAuthSession();
+      if (cancelled) return;
+      checkHash();
+      window.addEventListener("hashchange", checkHash);
+    };
+
+    void bootstrap();
+
+    return () => {
+      cancelled = true;
       window.removeEventListener("hashchange", checkHash);
+    };
   }, []);
 
   const handleEmailSuccess = () => {
@@ -7430,6 +7436,7 @@ export default function App() {
             setShowEmailGate(false);
           }}
           onSuccess={handleEmailSuccess}
+          onSessionRefresh={refreshAuthSession}
         />
 
         <PaymentGateModal
@@ -7451,6 +7458,7 @@ export default function App() {
               : "best-bets";
             window.location.hash = returnHash;
           }}
+          onSessionRefresh={refreshAuthSession}
         />
 
         <div className="p-8 mt-8 border-t-4 border-white/10 bg-[#111317]">
@@ -7459,10 +7467,16 @@ export default function App() {
               <div className="text-white font-black text-2xl uppercase tracking-tighter mb-2">
                 RightEdge
                 <button
-                  onClick={() => {
-                    localStorage.removeItem(
-                      "rightedge_email_access",
-                    );
+                  onClick={async () => {
+                    try {
+                      await fetch(`/api/auth/logout`, {
+                        method: "POST",
+                        headers: {
+                          Authorization: `Bearer ${publicAnonKey}`,
+                        },
+                        credentials: "include",
+                      });
+                    } catch {}
                     window.location.reload();
                   }}
                   className="ml-4 text-[10px] text-white/20 hover:text-[#FF2E63] transition-colors"
