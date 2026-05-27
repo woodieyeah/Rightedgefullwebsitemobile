@@ -777,6 +777,13 @@ function normalizeTeamName(value: string) {
   const lower = cleaned.toLowerCase();
 
   const aliases: Record<string, string> = {
+    "new south wales blues": "NSW Blues",
+    "new south wales": "NSW Blues",
+    "nsw blues": "NSW Blues",
+    nsw: "NSW Blues",
+    "queensland maroons": "Queensland Maroons",
+    queensland: "Queensland Maroons",
+    qld: "Queensland Maroons",
     melbourne: "Storm",
     storm: "Storm",
     penrith: "Panthers",
@@ -2423,6 +2430,10 @@ function PublicNav({
 
 function mapTeamToOddsApi(team: string): string {
   const t = team.toLowerCase();
+  if (t.includes("new south wales") || t.includes("nsw"))
+    return "New South Wales Blues";
+  if (t.includes("queensland") || t.includes("qld"))
+    return "Queensland Maroons";
   if (t.includes("bronco") || t.includes("brisbane"))
     return "Brisbane Broncos";
   if (t.includes("rabbitoh") || t.includes("south"))
@@ -5326,6 +5337,28 @@ function OriginPage({
     },
   ];
 
+  const originRow: PredictionRow = {
+    match: "NSW Blues v Queensland Maroons",
+    roundNumber: 13,
+    homeTeam: "New South Wales Blues",
+    awayTeam: "Queensland Maroons",
+    predictedWinner: "New South Wales Blues",
+    predictedHomeScore: 22,
+    predictedAwayScore: 20,
+    modelHomeOdds: 1 / 0.53,
+    modelAwayOdds: 1 / 0.47,
+    marketHomeOdds: 0,
+    marketAwayOdds: 0,
+    homeOverlay: 0,
+    awayOverlay: 0,
+    bestBet: "Queensland Maroons",
+    side: "Away",
+    stake: 0,
+    confidence: "Lean",
+    bestEdge: 0,
+    fixture: null,
+  };
+
   if (!hasPaidAccess() && !isAdmin) {
     return (
       <div className="flex flex-col gap-6 md:gap-8">
@@ -5443,6 +5476,20 @@ function OriginPage({
               </GlassCard>
             ))}
           </div>
+
+          <GlassCard className="p-5 md:p-6">
+            <div className="flex items-center justify-between gap-4 mb-4">
+              <div>
+                <div className="text-[10px] uppercase tracking-[0.18em] text-[#9CA3AF] font-medium mb-2">
+                  Live Betr markets
+                </div>
+                <div className="text-base md:text-xl font-semibold tracking-tight text-white">
+                  H2H, line and total refresh automatically when available.
+                </div>
+              </div>
+            </div>
+            <FreeBetrMarketsPanel row={originRow} />
+          </GlassCard>
         </div>
       </GlassCard>
 
