@@ -371,21 +371,25 @@ const appPages = [
   {
     id: "matches",
     label: "Matches",
+    mobileLabel: "Matches",
     icon: <Target className="w-5 h-5" />,
   },
   {
     id: "origin",
     label: "State of Origin",
+    mobileLabel: "Origin",
     icon: <Shield className="w-5 h-5" />,
   },
   {
     id: "best-bets",
     label: "Premium Plays",
+    mobileLabel: "Plays",
     icon: <Flame className="w-5 h-5" />,
   },
   {
     id: "try-scorers",
     label: "Try Scorers",
+    mobileLabel: "Scorers",
     icon: <Trophy className="w-5 h-5" />,
   },
 ];
@@ -397,6 +401,7 @@ function getAppPages(isAdmin: boolean) {
       {
         id: "admin",
         label: "Admin",
+        mobileLabel: "Admin",
         icon: <Mail className="w-5 h-5" />,
       },
     ];
@@ -7137,6 +7142,8 @@ function AppDashboard({
     window.location.hash = newPage;
   };
 
+  const mobilePages = useMemo(() => getAppPages(isAdmin), [isAdmin]);
+
   const handleManageSubscription = async () => {
     try {
       const email = getUserEmail();
@@ -7394,23 +7401,31 @@ function AppDashboard({
         </div>
       </div>
 
-      <div className="xl:hidden fixed bottom-0 left-0 right-0 bg-[#0A0A0F] border-t border-[#1E1E2E] z-[100] px-1 pb-4 pt-2 flex justify-around items-center">
-        {getAppPages(isAdmin).map((item) => (
+      <div className="xl:hidden fixed bottom-0 left-0 right-0 bg-[#0A0A0F] border-t border-[#1E1E2E] z-[100] px-2 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2">
+        <div
+          className="grid gap-1 items-stretch"
+          style={{ gridTemplateColumns: `repeat(${mobilePages.length}, minmax(0, 1fr))` }}
+        >
+        {mobilePages.map((item) => (
           <button
             key={item.id}
-            onClick={() => handlePageChange(item.id)}
-            className={`flex flex-col items-center p-2 min-w-[50px] sm:min-w-[60px] transition-all ${
+            onClick={() => {
+              handlePageChange(item.id);
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            }}
+            className={`flex min-w-0 flex-col items-center justify-center gap-1 rounded-sm border px-1 py-2 transition-all ${
               page === item.id
-                ? "text-white"
-                : "text-[#6B7280] hover:text-white"
+                ? "border-[#2A2A3A] bg-[#16161D] text-white"
+                : "border-transparent text-[#6B7280] hover:text-white"
             }`}
           >
-            <div className="mb-1">{item.icon}</div>
-            <span className="text-[9px] sm:text-[10px] font-medium uppercase tracking-wider">
-              {item.label}
+            <div className="shrink-0">{item.icon}</div>
+            <span className="max-w-full truncate text-[9px] sm:text-[10px] font-medium uppercase tracking-wider">
+              {item.mobileLabel || item.label}
             </span>
           </button>
         ))}
+        </div>
       </div>
     </>
   );
