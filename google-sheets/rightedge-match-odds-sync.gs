@@ -128,13 +128,32 @@ function syncRightEdgeMatchOdds() {
     }
   });
 
-  sh.getRange(2, bestHomeOddsCol + 1, nextBestHomeOdds.length, 1).setValues(nextBestHomeOdds);
-  sh.getRange(2, bestAwayOddsCol + 1, nextBestAwayOdds.length, 1).setValues(nextBestAwayOdds);
+  writeRightEdgeOddsColumns_(sh, {
+    homeCol: bestHomeOddsCol,
+    awayCol: bestAwayOddsCol,
+    homeValues: nextBestHomeOdds,
+    awayValues: nextBestAwayOdds,
+  });
   const pinnacleResult = syncRightEdgePinnacleMatchOdds_(ss, sh, matches, lastRow);
 
-  // Rerun the existing prediction engine after I/J odds update.
+  // Rerun the prediction engine, then rewrite odds so an older model function
+  // cannot leave overlays sitting in the odds columns.
   if (typeof updatePredictions === 'function') {
     updatePredictions();
+  }
+  writeRightEdgeOddsColumns_(sh, {
+    homeCol: bestHomeOddsCol,
+    awayCol: bestAwayOddsCol,
+    homeValues: nextBestHomeOdds,
+    awayValues: nextBestAwayOdds,
+  });
+  if (!pinnacleResult.skipped) {
+    writeRightEdgeOddsColumns_(sh, {
+      homeCol: pinnacleResult.pinnacleHomeCol,
+      awayCol: pinnacleResult.pinnacleAwayCol,
+      homeValues: pinnacleResult.nextPinnacleHomeOdds,
+      awayValues: pinnacleResult.nextPinnacleAwayOdds,
+    });
   }
 
   const stamp = payload.updatedAt
@@ -159,13 +178,24 @@ function syncRightEdgePinnacleMatchOdds() {
 
   const matches = sh.getRange(2, 1, lastRow - 1, 2).getValues();
   const result = syncRightEdgePinnacleMatchOdds_(ss, sh, matches, lastRow);
-  if (typeof updatePredictions === 'function') {
-    updatePredictions();
-  }
-
   if (result.skipped) {
     ss.toast(result.reason, 'RightEdge Odds', 10);
   } else {
+    writeRightEdgeOddsColumns_(sh, {
+      homeCol: result.pinnacleHomeCol,
+      awayCol: result.pinnacleAwayCol,
+      homeValues: result.nextPinnacleHomeOdds,
+      awayValues: result.nextPinnacleAwayOdds,
+    });
+    if (typeof updatePredictions === 'function') {
+      updatePredictions();
+    }
+    writeRightEdgeOddsColumns_(sh, {
+      homeCol: result.pinnacleHomeCol,
+      awayCol: result.pinnacleAwayCol,
+      homeValues: result.nextPinnacleHomeOdds,
+      awayValues: result.nextPinnacleAwayOdds,
+    });
     ss.toast(`Updated ${result.updatedCount} Pinnacle match odds.`, 'RightEdge Odds', 10);
   }
 }
@@ -237,9 +267,21 @@ function syncRightEdgePinnacleMatchOdds_(ss, sh, matches, lastRow) {
     if (matchOdds) updatedCount++;
   });
 
-  sh.getRange(2, pinnacleHomeCol + 1, nextPinnacleHomeOdds.length, 1).setValues(nextPinnacleHomeOdds);
-  sh.getRange(2, pinnacleAwayCol + 1, nextPinnacleAwayOdds.length, 1).setValues(nextPinnacleAwayOdds);
-  return { skipped: false, updatedCount };
+  return {
+    skipped: false,
+    updatedCount,
+    pinnacleHomeCol,
+    pinnacleAwayCol,
+    nextPinnacleHomeOdds,
+    nextPinnacleAwayOdds,
+  };
+}
+
+function writeRightEdgeOddsColumns_(sh, opts) {
+  sh.getRange(2, opts.homeCol + 1, opts.homeValues.length, 1).setValues(opts.homeValues);
+  sh.getRange(2, opts.awayCol + 1, opts.awayValues.length, 1).setValues(opts.awayValues);
+  sh.getRange(2, opts.homeCol + 1, opts.homeValues.length, 1).setNumberFormat('$0.00');
+  sh.getRange(2, opts.awayCol + 1, opts.awayValues.length, 1).setNumberFormat('$0.00');
 }
 
 function createRightEdgeMatchOddsTrigger() {
