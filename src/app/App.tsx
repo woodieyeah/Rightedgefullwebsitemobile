@@ -7140,9 +7140,18 @@ function AppDashboard({
   const handlePageChange = (newPage: string) => {
     setPage(newPage);
     window.location.hash = newPage;
+    window.scrollTo(0, 0);
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
   };
 
   const mobilePages = useMemo(() => getAppPages(isAdmin), [isAdmin]);
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+  }, [page]);
 
   const handleManageSubscription = async () => {
     try {
@@ -7411,7 +7420,6 @@ function AppDashboard({
             key={item.id}
             onClick={() => {
               handlePageChange(item.id);
-              window.scrollTo({ top: 0, behavior: "smooth" });
             }}
             className={`flex min-w-0 flex-col items-center justify-center gap-1 rounded-sm border px-1 py-2 transition-all ${
               page === item.id
