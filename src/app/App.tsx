@@ -374,6 +374,11 @@ const appPages = [
     icon: <Target className="w-5 h-5" />,
   },
   {
+    id: "origin",
+    label: "State of Origin",
+    icon: <Shield className="w-5 h-5" />,
+  },
+  {
     id: "best-bets",
     label: "Premium Plays",
     icon: <Flame className="w-5 h-5" />,
@@ -1964,7 +1969,7 @@ function PaymentGateModal({
   useEffect(() => {
     if (!open) return;
     const currentPremiumHash = window.location.hash.replace("#", "");
-    const section = ["matches", "best-bets", "try-scorers"].includes(currentPremiumHash)
+    const section = ["matches", "origin", "best-bets", "try-scorers"].includes(currentPremiumHash)
       ? currentPremiumHash
       : "best-bets";
     (window as any).trackAnalyticsEvent?.("premium_paywall_view", {
@@ -2020,7 +2025,7 @@ function PaymentGateModal({
 
       setStep("processing");
       const currentPremiumHash = window.location.hash.replace("#", "");
-      const returnHash = ["matches", "best-bets", "try-scorers"].includes(currentPremiumHash)
+      const returnHash = ["matches", "origin", "best-bets", "try-scorers"].includes(currentPremiumHash)
         ? currentPremiumHash
         : "best-bets";
       const returnUrl = `${window.location.origin}${window.location.pathname}`;
@@ -2951,6 +2956,164 @@ function HeroStickyCta({ onGoApp }: { onGoApp: (source: string) => void }) {
         <ArrowRight className="h-4 w-4" />
       </button>
     </div>
+  );
+}
+
+function OriginRapidPreview({
+  onGoApp,
+}: {
+  onGoApp: (source: string) => void;
+}) {
+  const teams = [
+    {
+      name: "NSW Blues",
+      short: "NSW",
+      score: 22,
+      winPct: 0.53,
+      odds: 1.79,
+      primary: "#0057B8",
+      secondary: "#FFFFFF",
+      isWinner: true,
+    },
+    {
+      name: "Queensland Maroons",
+      short: "QLD",
+      score: 20,
+      winPct: 0.47,
+      odds: 2.04,
+      primary: "#7A1737",
+      secondary: "#F6D6A8",
+      isWinner: false,
+    },
+  ];
+
+  return (
+    <HomeCard className="mb-6 p-5 sm:p-6 md:p-8">
+      <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <div className="mb-2 inline-flex border border-[#1E1E2E] bg-[#16161D] px-3 py-1.5 text-[10px] font-medium uppercase tracking-[0.14em] text-[#9CA3AF]">
+              Origin Rapid Preview
+            </div>
+            <h2 className="text-2xl font-semibold tracking-tight text-white sm:text-3xl">
+              NSW Blues v Queensland Maroons
+            </h2>
+            <p className="mt-2 text-sm leading-relaxed text-[#9CA3AF]">
+              Market-calibrated projection for tonight&apos;s opener. Built for a fast Origin read, separate from the standard NRL round model.
+            </p>
+          </div>
+          <div className="text-left sm:text-right">
+            <div className="text-[10px] font-medium uppercase tracking-[0.14em] text-[#6B7280]">
+              Accor Stadium
+            </div>
+            <div className="mt-1 text-sm font-medium text-white">
+              Tonight · 8:05 PM AEST
+            </div>
+          </div>
+        </div>
+
+        <div className="overflow-hidden border border-[#1E1E2E] bg-[#0A0A0F]/40">
+          {teams.map((team, index) => (
+            <div
+              key={team.name}
+              className="relative grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 border-t border-[#1E1E2E] px-4 py-4 first:border-t-0 sm:gap-5 sm:px-6"
+            >
+              <span
+                aria-hidden="true"
+                className="absolute left-0 top-4 h-[calc(100%-32px)] w-0.5"
+                style={{ backgroundColor: team.primary }}
+              />
+              <div className="flex min-w-0 items-center gap-3 sm:gap-4">
+                <div
+                  className="flex h-10 w-10 shrink-0 items-center justify-center border text-[11px] font-semibold uppercase tracking-[0.08em] sm:h-12 sm:w-12"
+                  style={{
+                    backgroundColor: team.primary,
+                    borderColor: team.secondary,
+                    color: team.secondary,
+                  }}
+                >
+                  {team.short}
+                </div>
+                <div className="min-w-0">
+                  <div className={`truncate text-xl font-semibold tracking-tight sm:text-2xl ${team.isWinner ? "text-white" : "text-[#9CA3AF]"}`}>
+                    {team.name}
+                  </div>
+                  <div className="mt-1 text-[10px] font-medium uppercase tracking-[0.14em] text-[#6B7280]">
+                    {index === 0 ? "Home" : "Away"} · H2H ${team.odds.toFixed(2)}
+                  </div>
+                </div>
+              </div>
+              <div className="border border-[#1E1E2E] bg-[#16161D] px-3 py-2 text-center sm:min-w-[78px]">
+                <div className="text-[8px] font-medium uppercase tracking-[0.14em] text-[#6B7280]">
+                  Score
+                </div>
+                <div className={`text-2xl font-semibold leading-none sm:text-3xl ${team.isWinner ? "text-white" : "text-[#9CA3AF]"}`}>
+                  {team.score}
+                </div>
+              </div>
+              <div className="border border-[#1E1E2E] bg-[#16161D] px-3 py-2 text-center sm:min-w-[78px]">
+                <div className="text-[8px] font-medium uppercase tracking-[0.14em] text-[#6B7280]">
+                  Win %
+                </div>
+                <div className={`text-lg font-semibold leading-none sm:text-xl ${team.isWinner ? "text-[#4ADE80]" : "text-[#9CA3AF]"}`}>
+                  {formatPercent(team.winPct, 0)}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-3">
+          <div className="border border-[#1E1E2E] bg-[#16161D] p-4">
+            <div className="text-[10px] font-medium uppercase tracking-[0.14em] text-[#9CA3AF]">
+              Projected margin
+            </div>
+            <div className="mt-2 text-2xl font-semibold text-white">NSW by 2</div>
+          </div>
+          <div className="border border-[#1E1E2E] bg-[#16161D] p-4">
+            <div className="text-[10px] font-medium uppercase tracking-[0.14em] text-[#9CA3AF]">
+              Line signal
+            </div>
+            <div className="mt-2 text-2xl font-semibold text-white">QLD +2.5</div>
+          </div>
+          <div className="border border-[#1E1E2E] bg-[#16161D] p-4">
+            <div className="text-[10px] font-medium uppercase tracking-[0.14em] text-[#9CA3AF]">
+              Read
+            </div>
+            <div className="mt-2 text-sm font-medium leading-relaxed text-[#9CA3AF]">
+              NSW edge on win probability, Queensland edge against the current line.
+            </div>
+          </div>
+        </div>
+
+        <div className="border border-[#1E1E2E] bg-[#0A0A0F] p-4 sm:p-5">
+          <p className="text-sm leading-relaxed text-[#9CA3AF]">
+            Origin is tight, and the market agrees. The rapid model read has NSW narrowly ahead at Accor, but not by enough to clear the current -2.5 line. Queensland +2.5 shapes as the cleaner value angle if the price holds.
+          </p>
+          <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center">
+            <button
+              type="button"
+              onClick={() => { window.location.hash = "best-bets"; }}
+              className="inline-flex items-center justify-center gap-2 border border-white bg-white px-5 py-3 text-sm font-medium text-[#0A0A0F] transition hover:opacity-85"
+            >
+              Unlock Premium Origin Signals
+              <Lock className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => onGoApp("origin_rapid_preview_free_predictions")}
+              className="inline-flex items-center justify-center gap-2 border border-[#1E1E2E] bg-transparent px-5 py-3 text-sm font-medium text-white transition hover:bg-white/5"
+            >
+              View Free Round Predictions
+              <ArrowRight className="h-4 w-4" />
+            </button>
+          </div>
+          <div className="mt-4 text-[10px] font-medium uppercase tracking-[0.12em] text-[#6B7280]">
+            18+ only · Gamble responsibly · 1800 858 858 · gamblinghelponline.org.au
+          </div>
+        </div>
+      </div>
+    </HomeCard>
   );
 }
 
@@ -5094,6 +5257,266 @@ function BestBetsPage({
   );
 }
 
+const ORIGIN_RAPID_PROPS = {
+  nsw: [
+    { player: "Tolutau Koula", probability: 39.0 },
+    { player: "Brian To'o", probability: 38.0 },
+    { player: "James Tedesco", probability: 37.8 },
+    { player: "Kotoni Staggs", probability: 34.9 },
+    { player: "Hudson Young", probability: 29.5 },
+  ],
+  qld: [
+    { player: "Selwyn Cobbo", probability: 38.6 },
+    { player: "Jojo Fifita", probability: 36.3 },
+    { player: "Hamiso Tabuai-Fidow", probability: 35.8 },
+    { player: "Robert Toia", probability: 28.1 },
+    { player: "Sam Walker", probability: 24.0 },
+  ],
+};
+
+function OriginPage({
+  onRequestAccess,
+  isAdmin = false,
+}: {
+  onRequestAccess: (targetHash?: string) => void;
+  isAdmin?: boolean;
+}) {
+  const states = [
+    {
+      key: "nsw",
+      name: "NSW Blues",
+      short: "NSW",
+      score: 22,
+      winPct: 53,
+      colors: {
+        primary: "#7CC6FF",
+        secondary: "#183153",
+      },
+      props: ORIGIN_RAPID_PROPS.nsw,
+    },
+    {
+      key: "qld",
+      name: "Queensland Maroons",
+      short: "QLD",
+      score: 20,
+      winPct: 47,
+      colors: {
+        primary: "#8A1748",
+        secondary: "#F5E6EE",
+      },
+      props: ORIGIN_RAPID_PROPS.qld,
+    },
+  ] as const;
+
+  const marketCards = [
+    {
+      label: "H2H",
+      headline: "NSW 53% · QLD 47%",
+      detail: "Rapid market-aligned read has NSW narrow at Accor.",
+    },
+    {
+      label: "Line",
+      headline: "QLD +2.5 lean",
+      detail: "Projected margin lands NSW by 2, so Queensland still covers the current number.",
+    },
+    {
+      label: "Total",
+      headline: "42 total points",
+      detail: "Tight, defensive game script with territory battles carrying most of the weight.",
+    },
+  ];
+
+  if (!hasPaidAccess() && !isAdmin) {
+    return (
+      <div className="flex flex-col gap-6 md:gap-8">
+        <GlassCard className="p-8 md:p-12 text-center relative overflow-hidden">
+          <div className="relative z-10 flex flex-col items-center max-w-2xl mx-auto">
+            <div className="border border-[#1E1E2E] bg-[#16161D] p-4 mb-6">
+              <Shield className="w-10 h-10 text-white stroke-[2px]" />
+            </div>
+            <div className="text-[10px] md:text-xs uppercase tracking-[0.2em] text-[#9CA3AF] font-medium mb-3">
+              Premium Origin Feature
+            </div>
+            <h2 className="text-3xl md:text-5xl font-semibold text-white uppercase tracking-tight mb-3">
+              State of Origin Rapid Preview
+            </h2>
+            <p className="text-sm md:text-base text-[#9CA3AF] leading-relaxed mb-8">
+              Unlock the full Origin feature page with the rapid match projection, line and total read, and the updated anytime try signal board.
+            </p>
+            <button
+              onClick={() => onRequestAccess("origin")}
+              className="inline-flex items-center justify-center gap-3 re-primary-cta border px-8 py-4 text-base font-medium uppercase tracking-wider transition hover:opacity-90"
+            >
+              Unlock Origin Signals
+              <ArrowRight className="w-5 h-5 stroke-[2px]" />
+            </button>
+          </div>
+        </GlassCard>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-6 md:gap-8">
+      <GlassCard className="p-6 md:p-8">
+        <div className="flex flex-col gap-6">
+          <div className="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-4">
+            <div>
+              <div className="text-[10px] md:text-xs uppercase tracking-[0.2em] text-[#9CA3AF] font-medium mb-2">
+                State of Origin · Premium Rapid Preview
+              </div>
+              <h2 className="text-2xl md:text-4xl font-semibold tracking-tight text-white uppercase leading-none">
+                NSW Blues v Queensland Maroons
+              </h2>
+              <div className="mt-3 text-sm md:text-base text-[#9CA3AF] font-normal">
+                Accor Stadium · Tonight 8:05 PM AEST
+              </div>
+            </div>
+            <div className="inline-flex items-center gap-2 bg-[#16161D] border border-[#1E1E2E] px-3 py-2 text-[10px] md:text-xs uppercase tracking-[0.18em] text-[#9CA3AF] font-medium w-fit">
+              <span className="w-2.5 h-2.5 rounded-full bg-[#4ADE80]" />
+              Rapid market-aligned projection
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+            {states.map((state, index) => (
+              <div
+                key={state.key}
+                className="border border-[#1E1E2E] bg-[#16161D] p-5 md:p-6"
+                style={{
+                  boxShadow: `inset 4px 0 0 ${state.colors.primary}`,
+                }}
+              >
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-4 min-w-0">
+                    <div
+                      className="w-12 h-12 md:w-14 md:h-14 rounded-full shrink-0 border"
+                      style={{
+                        backgroundColor: state.colors.primary,
+                        borderColor: state.colors.secondary,
+                      }}
+                    />
+                    <div className="min-w-0">
+                      <div className="text-xs uppercase tracking-[0.18em] text-[#9CA3AF] font-medium mb-1">
+                        {index === 0 ? "Projected winner" : "Live challenger"}
+                      </div>
+                      <div className="text-xl md:text-3xl font-semibold tracking-tight text-white uppercase">
+                        {state.name}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 shrink-0">
+                    <div className="border border-[#1E1E2E] bg-[#111116] px-4 py-3 min-w-[82px] text-center">
+                      <div className="text-[9px] uppercase tracking-[0.18em] text-[#6B7280] font-medium mb-1">
+                        Score
+                      </div>
+                      <div className="text-2xl md:text-3xl font-semibold text-white">
+                        {state.score}
+                      </div>
+                    </div>
+                    <div className="border border-[#1E1E2E] bg-[#111116] px-4 py-3 min-w-[82px] text-center">
+                      <div className="text-[9px] uppercase tracking-[0.18em] text-[#6B7280] font-medium mb-1">
+                        Win %
+                      </div>
+                      <div className="text-2xl md:text-3xl font-semibold text-[#4ADE80]">
+                        {state.winPct}%
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+            {marketCards.map((card) => (
+              <GlassCard key={card.label} className="p-5 md:p-6">
+                <div className="text-[10px] uppercase tracking-[0.18em] text-[#9CA3AF] font-medium mb-3">
+                  {card.label}
+                </div>
+                <div className="text-lg md:text-2xl font-semibold tracking-tight text-white mb-2">
+                  {card.headline}
+                </div>
+                <div className="text-sm text-[#9CA3AF] leading-relaxed">
+                  {card.detail}
+                </div>
+              </GlassCard>
+            ))}
+          </div>
+        </div>
+      </GlassCard>
+
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 md:gap-6">
+        {states.map((state) => (
+          <GlassCard key={state.key} className="p-5 md:p-6">
+            <div className="flex items-center justify-between gap-4 mb-5">
+              <div className="flex items-center gap-3">
+                <div
+                  className="w-10 h-10 rounded-full border shrink-0"
+                  style={{
+                    backgroundColor: state.colors.primary,
+                    borderColor: state.colors.secondary,
+                  }}
+                />
+                <div>
+                  <div className="text-lg md:text-2xl font-semibold tracking-tight text-white uppercase">
+                    {state.short}
+                  </div>
+                  <div className="text-[10px] uppercase tracking-[0.18em] text-[#9CA3AF] font-medium">
+                    Anytime try signals
+                  </div>
+                </div>
+              </div>
+              <div className="text-[10px] uppercase tracking-[0.18em] text-[#9CA3AF] font-medium">
+                Probability
+              </div>
+            </div>
+
+            <div className="divide-y divide-[#1E1E2E]">
+              {state.props.map((prop) => (
+                <div
+                  key={prop.player}
+                  className="py-4 flex items-center justify-between gap-4"
+                >
+                  <div className="text-base md:text-xl text-white font-normal">
+                    {prop.player}
+                  </div>
+                  <div className="border border-[#1E1E2E] bg-[#16161D] min-w-[108px] text-center px-4 py-3 text-lg md:text-2xl font-semibold text-white">
+                    {prop.probability.toFixed(1)}%
+                  </div>
+                </div>
+              ))}
+            </div>
+          </GlassCard>
+        ))}
+      </div>
+
+      <GlassCard className="p-5 md:p-6">
+        <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-5">
+          <div>
+            <div className="text-[10px] uppercase tracking-[0.18em] text-[#9CA3AF] font-medium mb-2">
+              Match read
+            </div>
+            <div className="text-xl md:text-2xl font-semibold tracking-tight text-white mb-3">
+              Queensland +2.5 is the cleaner premium angle if the number holds.
+            </div>
+            <div className="text-sm md:text-base text-[#9CA3AF] leading-relaxed max-w-3xl">
+              NSW still grades as the more likely winner, but the rapid projection only lands the Blues by two. That keeps Queensland live against the current line while the try board still shows genuine finishing upside on both edges.
+            </div>
+          </div>
+          <button
+            onClick={() => window.location.hash = "best-bets"}
+            className="inline-flex items-center justify-center gap-3 re-secondary-cta border px-6 py-4 text-sm font-medium uppercase tracking-wider transition hover:opacity-80 w-full lg:w-auto"
+          >
+            View Premium Plays
+            <ArrowUpRight className="w-4 h-4 stroke-[2px]" />
+          </button>
+        </div>
+      </GlassCard>
+    </div>
+  );
+}
+
 function TryScorersPage({
   data,
   onRequestAccess,
@@ -6282,7 +6705,7 @@ function AppDashboard({
   const [page, setPage] = useState(() => {
     const hash = window.location.hash.replace("#", "");
     if (
-      ["matches", "best-bets", "try-scorers", "performance", "admin"].includes(
+      ["matches", "origin", "best-bets", "try-scorers", "performance", "admin"].includes(
         hash,
       )
     ) {
@@ -6297,6 +6720,7 @@ function AppDashboard({
       if (
         [
           "matches",
+          "origin",
           "best-bets",
           "try-scorers",
           "performance",
@@ -6356,6 +6780,11 @@ function AppDashboard({
         return {
           subtitle: "Matches",
         };
+      case "origin":
+        return {
+          title: "Premium",
+          subtitle: "State of Origin",
+        };
       case "best-bets":
         return {
           title: "Premium",
@@ -6405,7 +6834,7 @@ function AppDashboard({
                 active={page === item.id}
                 icon={item.icon}
                 label={item.label}
-                premium={item.id === "best-bets" || item.id === "try-scorers"}
+                premium={item.id === "origin" || item.id === "best-bets" || item.id === "try-scorers"}
                 onClick={() => {
                   handlePageChange(item.id);
                   window.scrollTo({
@@ -6538,6 +6967,12 @@ function AppDashboard({
                 <PredictionsPage
                   data={data}
                   onRequestAccess={onRequestAccess}
+                />
+              )}
+              {page === "origin" && (
+                <OriginPage
+                  onRequestAccess={onRequestAccess}
+                  isAdmin={isAdmin}
                 />
               )}
               {page === "try-scorers" && (
@@ -7054,7 +7489,7 @@ export default function App() {
     const analyticsName = rawHash.replace(/-/g, "_");
     (window as any).trackAnalyticsEvent?.(`${analyticsName}_view`, {
       section: rawHash,
-      app_section: ["matches", "best-bets", "try-scorers", "performance", "admin"].includes(rawHash),
+      app_section: ["matches", "origin", "best-bets", "try-scorers", "performance", "admin"].includes(rawHash),
     });
   };
 
@@ -7069,7 +7504,7 @@ export default function App() {
   };
 
   const requestPremiumAccess = (source: string = 'unknown') => {
-    const targetHash = ["matches", "best-bets", "try-scorers"].includes(source)
+    const targetHash = ["matches", "origin", "best-bets", "try-scorers"].includes(source)
       ? source
       : "best-bets";
     setSitePage("app");
@@ -7090,8 +7525,8 @@ export default function App() {
 
   const checkHash = () => {
     const hash = window.location.hash.replace("#", "");
-    const appHashes = ["matches", "best-bets", "try-scorers", "performance", "admin"];
-    const premiumHashes = ["best-bets", "try-scorers"];
+    const appHashes = ["matches", "origin", "best-bets", "try-scorers", "performance", "admin"];
+    const premiumHashes = ["origin", "best-bets", "try-scorers"];
     const publicHashes = ["results", "methodology", "ad-studio", "articles", "article-round-5-2026", "article-methodology"];
 
     if (hash === "sgm-builder") {
@@ -7144,7 +7579,7 @@ export default function App() {
 
       const sessionId = searchParams.get("session_id");
       const fallbackReturnHash = searchParams.get("return_hash") || window.location.hash.replace("#", "") || "best-bets";
-      const returnHash = ["matches", "best-bets", "try-scorers"].includes(fallbackReturnHash)
+      const returnHash = ["matches", "origin", "best-bets", "try-scorers"].includes(fallbackReturnHash)
         ? fallbackReturnHash
         : "best-bets";
 
@@ -7182,7 +7617,7 @@ export default function App() {
 
           setShowEmailGate(false);
 
-          const confirmedReturnHash = ["matches", "best-bets", "try-scorers"].includes(data.returnHash)
+          const confirmedReturnHash = ["matches", "origin", "best-bets", "try-scorers"].includes(data.returnHash)
             ? data.returnHash
             : returnHash;
 
@@ -7439,7 +7874,7 @@ export default function App() {
             setShowPaymentGate(false);
             setSitePage("app");
             const currentPremiumHash = window.location.hash.replace("#", "");
-            const returnHash = ["matches", "best-bets", "try-scorers"].includes(currentPremiumHash)
+            const returnHash = ["matches", "origin", "best-bets", "try-scorers"].includes(currentPremiumHash)
               ? currentPremiumHash
               : "best-bets";
             window.location.hash = returnHash;
