@@ -3495,6 +3495,36 @@ function FreeBetrMarketsPanel({
         ? getFreeBetrLineOutcomes(row, betrMarkets)
         : getFreeBetrTotalOutcomes(row, betrMarkets);
 
+  const hasH2hMarkets = getFreeBetrH2hOutcomes(row, betrMarkets).length > 0;
+  const hasLineMarkets = getFreeBetrLineOutcomes(row, betrMarkets).length > 0;
+  const hasTotalMarkets = getFreeBetrTotalOutcomes(row, betrMarkets).length > 0;
+
+  const marketAvailability =
+    activeMarket === "h2h"
+      ? hasH2hMarkets
+      : activeMarket === "line"
+        ? hasLineMarkets
+        : hasTotalMarkets;
+
+  const unavailableCopy =
+    activeMarket === "total"
+      ? {
+          title: "Total market not currently in the Betr feed",
+          detail:
+            "The live affiliate board is sending head-to-head and line prices for this match, but not total points right now.",
+        }
+      : activeMarket === "line"
+        ? {
+            title: "Line market not currently in the Betr feed",
+            detail:
+              "The live affiliate board is not exposing the current handicap for this match right now.",
+            }
+        : {
+            title: "Market not currently in the Betr feed",
+            detail:
+              "Open the live board at Betr to check whether the market has just been posted.",
+          };
+
   return (
     <div className="mt-3">
       <div className="grid grid-cols-3 gap-1 mb-4 border border-[#1E1E2E] bg-[#0A0A0F] p-1">
@@ -3592,26 +3622,41 @@ function FreeBetrMarketsPanel({
             })}
           </div>
         ) : (
-          <BetrAffiliateLink
-            payload={buildFreeBetrPayload(row, activeMarket, "markets")}
-            className="re-betr-button group flex min-h-[92px] items-center justify-between gap-3 border border-[#093AD3] bg-[#093AD3] p-4 transition hover:opacity-90"
-          >
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 mb-1">
-                <BetrLogoMark className="h-7 w-7" />
-                <span className="text-[10px] font-medium uppercase tracking-widest text-white">
-                  Betr
-                </span>
+          <div className="flex flex-col gap-3">
+            {!marketAvailability && (
+              <div className="border border-[#1E1E2E] bg-[#16161D] px-4 py-4">
+                <div className="text-[10px] font-medium uppercase tracking-[0.18em] text-[#9CA3AF] mb-2">
+                  Live status
+                </div>
+                <div className="text-sm font-semibold text-white uppercase">
+                  {unavailableCopy.title}
+                </div>
+                <div className="mt-2 text-[11px] leading-relaxed text-[#9CA3AF]">
+                  {unavailableCopy.detail}
+                </div>
               </div>
-              <div className="text-sm font-semibold text-white uppercase">
-                Back at Betr
+            )}
+            <BetrAffiliateLink
+              payload={buildFreeBetrPayload(row, activeMarket, "markets")}
+              className="re-betr-button group flex min-h-[92px] items-center justify-between gap-3 border border-[#093AD3] bg-[#093AD3] p-4 transition hover:opacity-90"
+            >
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 mb-1">
+                  <BetrLogoMark className="h-7 w-7" />
+                  <span className="text-[10px] font-medium uppercase tracking-widest text-white">
+                    Betr
+                  </span>
+                </div>
+                <div className="text-sm font-semibold text-white uppercase">
+                  Back at Betr
+                </div>
+                <div className="mt-1 text-[9px] font-medium uppercase tracking-widest text-white/70">
+                  {marketAvailability ? "View live markets" : "Open live board"}
+                </div>
               </div>
-              <div className="mt-1 text-[9px] font-medium uppercase tracking-widest text-white/70">
-                View live markets
-              </div>
-            </div>
-            <ArrowUpRight className="h-5 w-5 shrink-0 text-white/80 transition group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
-          </BetrAffiliateLink>
+              <ArrowUpRight className="h-5 w-5 shrink-0 text-white/80 transition group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+            </BetrAffiliateLink>
+          </div>
         )}
       </div>
     </div>
