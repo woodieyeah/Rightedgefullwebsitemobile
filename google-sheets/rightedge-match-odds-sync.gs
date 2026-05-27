@@ -3,8 +3,10 @@
  *
  * Paste this file into Apps Script for the RightEdge Google Sheet.
  * It updates Match Predictions columns:
- *   I = Best Home Odds
- *   J = Best Away Odds
+ *   I = Pinnacle Home Odds
+ *   J = Pinnacle Away Odds
+ *   K = Best Home Odds
+ *   L = Best Away Odds
  * It also updates the Try Scorers sheet by header name:
  *   Best Odds, Bookmaker, Market Implied %, Edge %
  *
@@ -39,6 +41,24 @@ function syncRightEdgeMatchOdds() {
 
   const lastRow = sh.getLastRow();
   if (lastRow < 2) return;
+
+  const lastCol = sh.getLastColumn();
+  const headers = sh.getRange(1, 1, 1, lastCol).getValues()[0];
+  const headerMap = buildRightEdgeHeaderMap_(headers);
+  const bestHomeOddsCol = findRightEdgeHeader_(headerMap, [
+    'Best Home Odds',
+    'Betr H',
+    'Home Market Odds',
+  ]);
+  const bestAwayOddsCol = findRightEdgeHeader_(headerMap, [
+    'Best Away Odds',
+    'Betr A',
+    'Away Market Odds',
+  ]);
+
+  if (bestHomeOddsCol === -1 || bestAwayOddsCol === -1) {
+    throw new Error('Match odds sync needs headers named Best Home Odds and Best Away Odds.');
+  }
 
   const response = UrlFetchApp.fetch(RIGHTEDGE_MATCH_ODDS_URL, {
     method: 'get',
@@ -81,8 +101,10 @@ function syncRightEdgeMatchOdds() {
   });
 
   const matches = sh.getRange(2, 1, lastRow - 1, 2).getValues();
-  const currentOdds = sh.getRange(2, 9, lastRow - 1, 2).getValues();
-  const nextOdds = [];
+  const currentHomeOdds = sh.getRange(2, bestHomeOddsCol + 1, lastRow - 1, 1).getValues();
+  const currentAwayOdds = sh.getRange(2, bestAwayOddsCol + 1, lastRow - 1, 1).getValues();
+  const nextBestHomeOdds = [];
+  const nextBestAwayOdds = [];
   let updatedCount = 0;
   let clearedCount = 0;
   const unmatchedMatches = [];
@@ -93,18 +115,21 @@ function syncRightEdgeMatchOdds() {
     const matchOdds = oddsByMatch[home + ' v ' + away];
 
     if (matchOdds) {
-      nextOdds.push([matchOdds.homeOdds, matchOdds.awayOdds]);
+      nextBestHomeOdds.push([matchOdds.homeOdds]);
+      nextBestAwayOdds.push([matchOdds.awayOdds]);
       updatedCount++;
     } else {
       // Clear stale prices for fixtures that no longer exist in the API feed.
       // Keeping old odds here can make the sheet look like it synced the wrong game.
-      nextOdds.push(['', '']);
-      if (currentOdds[idx][0] || currentOdds[idx][1]) clearedCount++;
+      nextBestHomeOdds.push(['']);
+      nextBestAwayOdds.push(['']);
+      if (currentHomeOdds[idx][0] || currentAwayOdds[idx][0]) clearedCount++;
       unmatchedMatches.push(home + ' v ' + away);
     }
   });
 
-  sh.getRange(2, 9, nextOdds.length, 2).setValues(nextOdds);
+  sh.getRange(2, bestHomeOddsCol + 1, nextBestHomeOdds.length, 1).setValues(nextBestHomeOdds);
+  sh.getRange(2, bestAwayOddsCol + 1, nextBestAwayOdds.length, 1).setValues(nextBestAwayOdds);
   const pinnacleResult = syncRightEdgePinnacleMatchOdds_(ss, sh, matches, lastRow);
 
   // Rerun the existing prediction engine after I/J odds update.
