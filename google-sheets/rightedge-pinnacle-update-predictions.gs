@@ -235,15 +235,19 @@ function updatePredictions() {
     if (home && away) {
       const hD = d26[home] || {};
       const aD = d26[away] || {};
+      const hHome = hD.home || {};
+      const hOverall = hD.overall || {};
+      const aAway = aD.away || {};
+      const aOverall = aD.overall || {};
 
       const hC = getContextAvg(
-        hD.home?.p || 0, hD.home?.pf || 0, hD.home?.pa || 0,
-        hD.overall?.p || 0, hD.overall?.pf || 0, hD.overall?.pa || 0
+        hHome.p || 0, hHome.pf || 0, hHome.pa || 0,
+        hOverall.p || 0, hOverall.pf || 0, hOverall.pa || 0
       );
 
       const aC = getContextAvg(
-        aD.away?.p || 0, aD.away?.pf || 0, aD.away?.pa || 0,
-        aD.overall?.p || 0, aD.overall?.pf || 0, aD.overall?.pa || 0
+        aAway.p || 0, aAway.pf || 0, aAway.pa || 0,
+        aOverall.p || 0, aOverall.pf || 0, aOverall.pa || 0
       );
 
       const bestHomeOdds = toNumber(r[bestHomeOddsCol]);
