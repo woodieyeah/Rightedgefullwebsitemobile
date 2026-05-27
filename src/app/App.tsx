@@ -2476,7 +2476,7 @@ const ODDS_CACHE_KEY = "rightedge_odds_cache_v5_no_betfair";
 const ODDS_CACHE_DURATION = 30 * 60 * 1000; // Protect the 500/month free Odds API quota
 const BETR_ODDS_REFRESH_MS = 60 * 1000;
 
-async function fetchLiveOddsCached(bookmaker?: "betr") {
+async function fetchLiveOddsCached(bookmaker?: "betr" | "pinnacle") {
   const cacheKey = bookmaker ? `${ODDS_CACHE_KEY}_${bookmaker}` : ODDS_CACHE_KEY;
   const usePersistentCache = bookmaker !== "betr";
 
@@ -2542,6 +2542,25 @@ async function fetchLiveOddsCached(bookmaker?: "betr") {
 
   fetchOddsPromises.set(cacheKey, fetchOddsPromise);
   return fetchOddsPromise;
+}
+
+async function fetchBestMatchOddsByBookmaker(bookmaker: "pinnacle") {
+  const response = await fetch(
+    `/api/best-match-odds?bookmaker=${encodeURIComponent(bookmaker)}&_=${Date.now()}`,
+    {
+      cache: "no-store",
+      headers: {
+        Authorization: `Bearer ${publicAnonKey}`,
+        Accept: "application/json",
+      },
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch ${bookmaker} best odds`);
+  }
+
+  return response.json();
 }
 
 type LiveBookmakerOdd = {
@@ -3596,6 +3615,313 @@ function FreeBetrMarketsPanel({
         )}
       </div>
     </div>
+  );
+}
+
+type OriginMarketBoardOutcome = {
+  id: string;
+  label: string;
+  subLabel: string;
+  tag: string;
+  modelPct: number;
+  marketOdds?: number;
+  marketSource: string;
+  payload: string;
+  logoTeam?: string;
+  tone?: "home" | "away" | "over" | "under";
+};
+
+function OriginMarketBoard({ row }: { row: PredictionRow }) {
+  const [activeMarket, setActiveMarket] = useState<"h2h" | "line" | "total">("h2h");
+  const [betrMarkets, setBetrMarkets] = useState<SgmMarketBookmakerData | null>(null);
+  const [pinnacleHomeOdds, setPinnacleHomeOdds] = useState<number | null>(null);
+  const [pinnacleAwayOdds, setPinnacleAwayOdds] = useState<number | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchMarkets = async () => {
+      setIsLoading(true);
+
+      try {
+        const [betrResult, pinnacleResult] = await Promise.allSettled([
+          fetchLiveOddsCached("betr"),
+          fetchBestMatchOddsByBookmaker("pinnacle"),
+        ]);
+
+        if (!isMounted) return;
+
+        if (betrResult.status === "fulfilled") {
+          setBetrMarkets(getBetrMatchMarketsFromRaw(betrResult.value, row));
+        } else {
+          setBetrMarkets(null);
+        }
+
+        if (pinnacleResult.status === "fulfilled") {
+          const oddsRows = Array.isArray(pinnacleResult.value?.odds)
+            ? pinnacleResult.value.odds
+            : [];
+          const originOdds = oddsRows.find((oddsRow: any) =>
+            buildTeamPairKey(oddsRow.homeTeam || "", oddsRow.awayTeam || "") ===
+            buildTeamPairKey(row.homeTeam, row.awayTeam),
+          );
+
+          setPinnacleHomeOdds(
+            typeof originOdds?.bestHomeOdds === "number" && originOdds.bestHomeOdds > 1
+              ? originOdds.bestHomeOdds
+              : null,
+          );
+          setPinnacleAwayOdds(
+            typeof originOdds?.bestAwayOdds === "number" && originOdds.bestAwayOdds > 1
+              ? originOdds.bestAwayOdds
+              : null,
+          );
+        } else {
+          setPinnacleHomeOdds(null);
+          setPinnacleAwayOdds(null);
+        }
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    };
+
+    fetchMarkets();
+    const intervalId = window.setInterval(fetchMarkets, BETR_ODDS_REFRESH_MS);
+
+    return () => {
+      isMounted = false;
+      window.clearInterval(intervalId);
+    };
+  }, [row.awayTeam, row.homeTeam, row.match]);
+
+  const liveBetrOutcomes =
+    activeMarket === "h2h"
+      ? getFreeBetrH2hOutcomes(row, betrMarkets)
+      : activeMarket === "line"
+        ? getFreeBetrLineOutcomes(row, betrMarkets)
+        : getFreeBetrTotalOutcomes(row, betrMarkets);
+
+  const projectedTotal = row.predictedHomeScore + row.predictedAwayScore;
+
+  const fallbackOutcomes: OriginMarketBoardOutcome[] =
+    activeMarket === "h2h"
+      ? [
+          {
+            id: "origin-h2h-home",
+            label: row.homeTeam,
+            subLabel: `Model ${formatPercent(getImpliedWinPctFromOdds(row.modelHomeOdds), 0)} · Fair ${formatOddsValue(row.modelHomeOdds)}`,
+            tag: "NSW",
+            modelPct: getImpliedWinPctFromOdds(row.modelHomeOdds),
+            marketOdds: pinnacleHomeOdds ?? ORIGIN_MARKET_SNAPSHOT.h2h.home,
+            marketSource: pinnacleHomeOdds ? "Pinnacle live" : ORIGIN_MARKET_SNAPSHOT.updatedLabel,
+            payload: buildFreeBetrPayload(row, "origin_h2h", row.homeTeam),
+            logoTeam: row.homeTeam,
+            tone: "home",
+          },
+          {
+            id: "origin-h2h-away",
+            label: row.awayTeam,
+            subLabel: `Model ${formatPercent(getImpliedWinPctFromOdds(row.modelAwayOdds), 0)} · Fair ${formatOddsValue(row.modelAwayOdds)}`,
+            tag: "QLD",
+            modelPct: getImpliedWinPctFromOdds(row.modelAwayOdds),
+            marketOdds: pinnacleAwayOdds ?? ORIGIN_MARKET_SNAPSHOT.h2h.away,
+            marketSource: pinnacleAwayOdds ? "Pinnacle live" : ORIGIN_MARKET_SNAPSHOT.updatedLabel,
+            payload: buildFreeBetrPayload(row, "origin_h2h", row.awayTeam),
+            logoTeam: row.awayTeam,
+            tone: "away",
+          },
+        ]
+      : activeMarket === "line"
+        ? [row.homeTeam, row.awayTeam].map((team) => {
+            const isHome = normalizeTeamName(team) === normalizeTeamName(row.homeTeam);
+            const point = isHome ? ORIGIN_MARKET_SNAPSHOT.line.homePoint : ORIGIN_MARKET_SNAPSHOT.line.awayPoint;
+            const projectedMargin = getSelectedTeamProjectedMargin(row, team);
+            const modelPct = probabilityFromEdge(projectedMargin + point, 7.5);
+            return {
+              id: `origin-line-${isHome ? "home" : "away"}`,
+              label: `${team} ${formatSgmLine(point)}`,
+              subLabel: `Model cover ${formatPercent(modelPct, 0)} · Score margin ${row.predictedHomeScore}-${row.predictedAwayScore}`,
+              tag: isHome ? "NSW line" : "QLD line",
+              modelPct,
+              marketOdds: isHome ? ORIGIN_MARKET_SNAPSHOT.line.homeOdds : ORIGIN_MARKET_SNAPSHOT.line.awayOdds,
+              marketSource: ORIGIN_MARKET_SNAPSHOT.updatedLabel,
+              payload: buildFreeBetrPayload(row, "origin_line", `${team}_${point}`),
+              logoTeam: team,
+              tone: isHome ? "home" : "away",
+            };
+          })
+        : [
+            {
+              id: "origin-total-over",
+              label: `Over ${ORIGIN_MARKET_SNAPSHOT.total.point}`,
+              subLabel: `Model ${Math.round(projectedTotal)} pts · Over probability ${formatPercent(probabilityFromEdge(projectedTotal - ORIGIN_MARKET_SNAPSHOT.total.point, 8), 0)}`,
+              tag: "Over",
+              modelPct: probabilityFromEdge(projectedTotal - ORIGIN_MARKET_SNAPSHOT.total.point, 8),
+              marketOdds: ORIGIN_MARKET_SNAPSHOT.total.overOdds,
+              marketSource: ORIGIN_MARKET_SNAPSHOT.updatedLabel,
+              payload: buildFreeBetrPayload(row, "origin_total", `over_${ORIGIN_MARKET_SNAPSHOT.total.point}`),
+              tone: "over",
+            },
+            {
+              id: "origin-total-under",
+              label: `Under ${ORIGIN_MARKET_SNAPSHOT.total.point}`,
+              subLabel: `Model ${Math.round(projectedTotal)} pts · Under probability ${formatPercent(probabilityFromEdge(ORIGIN_MARKET_SNAPSHOT.total.point - projectedTotal, 8), 0)}`,
+              tag: "Under",
+              modelPct: probabilityFromEdge(ORIGIN_MARKET_SNAPSHOT.total.point - projectedTotal, 8),
+              marketOdds: ORIGIN_MARKET_SNAPSHOT.total.underOdds,
+              marketSource: ORIGIN_MARKET_SNAPSHOT.updatedLabel,
+              payload: buildFreeBetrPayload(row, "origin_total", `under_${ORIGIN_MARKET_SNAPSHOT.total.point}`),
+              tone: "under",
+            },
+          ];
+
+  const displayOutcomes: OriginMarketBoardOutcome[] = liveBetrOutcomes.length > 0
+    ? liveBetrOutcomes.map((outcome) => ({
+        id: outcome.id,
+        label: outcome.label,
+        subLabel: outcome.subLabel,
+        tag: outcome.tag,
+        modelPct: outcome.modelPct,
+        marketOdds: outcome.odds,
+        marketSource: "Betr live",
+        payload: outcome.payload,
+        logoTeam: outcome.logoTeam,
+        tone: outcome.tone,
+      }))
+    : fallbackOutcomes;
+
+  return (
+    <GlassCard className="p-5 md:p-6">
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-3">
+          <div>
+            <div className="text-[10px] uppercase tracking-[0.18em] text-[#9CA3AF] font-medium mb-2">
+              Market board
+            </div>
+            <div className="text-lg md:text-2xl font-semibold tracking-tight text-white">
+              The number is doing most of the talking here.
+            </div>
+            <div className="mt-2 text-sm text-[#9CA3AF] leading-relaxed max-w-3xl">
+              Origin I is pricing as a tight, low-possession opener. NSW owns the moneyline, but the board is still leaving Queensland live against the number, which is exactly where the premium angle sits.
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="inline-flex items-center gap-2 border border-[#1E1E2E] bg-[#16161D] px-3 py-2 text-[10px] uppercase tracking-[0.18em] text-[#9CA3AF] font-medium">
+              <span className={`w-2 h-2 rounded-full ${liveBetrOutcomes.length > 0 ? "bg-[#4ADE80]" : "bg-[#6B7280]"}`} />
+              {liveBetrOutcomes.length > 0 ? "Betr live board active" : "Betr board pending release"}
+            </div>
+            <div className="inline-flex items-center gap-2 border border-[#1E1E2E] bg-[#16161D] px-3 py-2 text-[10px] uppercase tracking-[0.18em] text-[#9CA3AF] font-medium">
+              <span className="w-2 h-2 rounded-full bg-[#4ADE80]" />
+              {pinnacleHomeOdds ? "Pinnacle live moneyline" : ORIGIN_MARKET_SNAPSHOT.updatedLabel}
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-3 gap-1 border border-[#1E1E2E] bg-[#0A0A0F] p-1">
+          {([
+            ["h2h", "H2H"],
+            ["line", "Line"],
+            ["total", "Total"],
+          ] as const).map(([market, label]) => (
+            <button
+              key={market}
+              type="button"
+              onClick={() => setActiveMarket(market)}
+              className={`min-h-[38px] px-2 text-[10px] font-medium uppercase tracking-widest transition ${
+                activeMarket === market
+                  ? "bg-white text-[#0A0A0F]"
+                  : "bg-transparent text-[#6B7280] hover:bg-white/5 hover:text-white"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {isLoading ? (
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+            <div className="h-40 border border-[#1E1E2E] bg-white/5 animate-pulse" />
+            <div className="h-40 border border-[#1E1E2E] bg-white/5 animate-pulse" />
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+            {displayOutcomes.map((outcome) => (
+              <div
+                key={outcome.id}
+                className="border border-[#1E1E2E] bg-[#111116] p-4 md:p-5"
+              >
+                <div className="flex items-start justify-between gap-3 mb-4">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 mb-2">
+                      {outcome.logoTeam ? (
+                        <TeamLogo teamName={outcome.logoTeam} className="h-8 w-8 text-[10px]" />
+                      ) : (
+                        <BetrLogoMark className="h-8 w-8" />
+                      )}
+                      <span className="inline-flex px-1.5 py-0.5 text-[8px] font-medium uppercase tracking-widest border border-[#1E1E2E] bg-[#16161D] text-white">
+                        {outcome.tag}
+                      </span>
+                    </div>
+                    <div className="text-lg md:text-2xl font-semibold tracking-tight text-white leading-tight">
+                      {outcome.label}
+                    </div>
+                    <div className="mt-2 text-[10px] font-medium uppercase tracking-[0.18em] text-[#9CA3AF]">
+                      {outcome.subLabel}
+                    </div>
+                  </div>
+                  <div className="shrink-0 border border-[#1E1E2E] bg-[#16161D] px-3 py-2 text-right min-w-[104px]">
+                    <div className="text-[8px] uppercase tracking-[0.18em] text-[#9CA3AF] font-medium mb-1">
+                      Model
+                    </div>
+                    <div className="text-xl md:text-2xl font-semibold text-[#4ADE80] tabular-nums">
+                      {formatPercent(outcome.modelPct, 0)}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between gap-3 border border-[#1E1E2E] bg-[#16161D] px-3 py-3 mb-4">
+                  <div>
+                    <div className="text-[8px] uppercase tracking-[0.18em] text-[#9CA3AF] font-medium mb-1">
+                      {outcome.marketSource}
+                    </div>
+                    <div className="text-sm md:text-base text-white font-medium">
+                      {typeof outcome.marketOdds === "number" && outcome.marketOdds > 1
+                        ? formatOddsValue(outcome.marketOdds)
+                        : "Open live market"}
+                    </div>
+                  </div>
+                  {!liveBetrOutcomes.length && (
+                    <div className="text-[9px] uppercase tracking-[0.18em] text-[#6B7280] font-medium text-right max-w-[110px]">
+                      Open the live market at Betr
+                    </div>
+                  )}
+                </div>
+
+                <BetrAffiliateLink
+                  payload={outcome.payload}
+                  className="re-betr-button flex items-center justify-between gap-3 border border-[#093AD3] bg-[#093AD3] px-4 py-3 text-white transition hover:opacity-90"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <BetrLogoMark className="h-6 w-6 rounded-sm" />
+                    <span className="text-[10px] font-medium uppercase tracking-widest">
+                      {liveBetrOutcomes.length > 0 ? "Back at Betr" : "Open at Betr"}
+                    </span>
+                  </div>
+                  {typeof outcome.marketOdds === "number" && outcome.marketSource === "Betr live" ? (
+                    <span className="text-2xl font-semibold leading-none shrink-0">
+                      {formatOddsValue(outcome.marketOdds)}
+                    </span>
+                  ) : (
+                    <ArrowUpRight className="h-5 w-5 shrink-0 text-white/80" />
+                  )}
+                </BetrAffiliateLink>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </GlassCard>
   );
 }
 
@@ -5285,6 +5611,25 @@ const ORIGIN_RAPID_PROPS = {
   ],
 };
 
+const ORIGIN_MARKET_SNAPSHOT = {
+  updatedLabel: "Pinnacle board snapshot · 5:00 PM AEST",
+  h2h: {
+    home: 1.689,
+    away: 2.23,
+  },
+  line: {
+    homePoint: -4.5,
+    homeOdds: 2.13,
+    awayPoint: 4.5,
+    awayOdds: 1.751,
+  },
+  total: {
+    point: 42.5,
+    overOdds: 2.19,
+    underOdds: 1.719,
+  },
+};
+
 function OriginPage({
   onRequestAccess,
   isAdmin = false,
@@ -5318,24 +5663,6 @@ function OriginPage({
       props: ORIGIN_RAPID_PROPS.qld,
     },
   ] as const;
-
-  const marketCards = [
-    {
-      label: "H2H",
-      headline: "NSW 53% · QLD 47%",
-      detail: "Rapid market-aligned read has NSW narrow at Accor.",
-    },
-    {
-      label: "Line",
-      headline: "QLD +2.5 lean",
-      detail: "Projected margin lands NSW by 2, so Queensland still covers the current number.",
-    },
-    {
-      label: "Total",
-      headline: "42 total points",
-      detail: "Tight, defensive game script with territory battles carrying most of the weight.",
-    },
-  ];
 
   const originRow: PredictionRow = {
     match: "NSW Blues v Queensland Maroons",
@@ -5396,13 +5723,16 @@ function OriginPage({
           <div className="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-4">
             <div>
               <div className="text-[10px] md:text-xs uppercase tracking-[0.2em] text-[#9CA3AF] font-medium mb-2">
-                State of Origin · Premium Rapid Preview
+                State of Origin I · Premium market brief
               </div>
               <h2 className="text-2xl md:text-4xl font-semibold tracking-tight text-white uppercase leading-none">
                 NSW Blues v Queensland Maroons
               </h2>
               <div className="mt-3 text-sm md:text-base text-[#9CA3AF] font-normal">
                 Accor Stadium · Tonight 8:05 PM AEST
+              </div>
+              <div className="mt-4 max-w-3xl text-sm md:text-base text-[#9CA3AF] leading-relaxed">
+                The board is shaping this as a classic low-possession Origin opener. NSW owns the moneyline, but the number is still leaving Queensland live against the handicap, which is where the sharper premium angle starts to show.
               </div>
             </div>
             <div className="inline-flex items-center gap-2 bg-[#16161D] border border-[#1E1E2E] px-3 py-2 text-[10px] md:text-xs uppercase tracking-[0.18em] text-[#9CA3AF] font-medium w-fit">
@@ -5438,8 +5768,8 @@ function OriginPage({
                       </div>
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-3 shrink-0">
-                    <div className="border border-[#1E1E2E] bg-[#111116] px-4 py-3 min-w-[82px] text-center">
+                    <div className="grid grid-cols-2 gap-3 shrink-0">
+                      <div className="border border-[#1E1E2E] bg-[#111116] px-4 py-3 min-w-[82px] text-center">
                       <div className="text-[9px] uppercase tracking-[0.18em] text-[#6B7280] font-medium mb-1">
                         Score
                       </div>
@@ -5447,12 +5777,12 @@ function OriginPage({
                         {state.score}
                       </div>
                     </div>
-                    <div className="border border-[#1E1E2E] bg-[#111116] px-4 py-3 min-w-[82px] text-center">
-                      <div className="text-[9px] uppercase tracking-[0.18em] text-[#6B7280] font-medium mb-1">
-                        Win %
-                      </div>
-                      <div className="text-2xl md:text-3xl font-semibold text-[#4ADE80]">
-                        {state.winPct}%
+                      <div className="border border-[#1E1E2E] bg-[#111116] px-4 py-3 min-w-[82px] text-center">
+                        <div className="text-[9px] uppercase tracking-[0.18em] text-[#6B7280] font-medium mb-1">
+                          Win %
+                        </div>
+                        <div className="text-2xl md:text-3xl font-semibold text-[#4ADE80]">
+                          {state.winPct}%
                       </div>
                     </div>
                   </div>
@@ -5460,38 +5790,10 @@ function OriginPage({
               </div>
             ))}
           </div>
-
-          <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-            {marketCards.map((card) => (
-              <GlassCard key={card.label} className="p-5 md:p-6">
-                <div className="text-[10px] uppercase tracking-[0.18em] text-[#9CA3AF] font-medium mb-3">
-                  {card.label}
-                </div>
-                <div className="text-lg md:text-2xl font-semibold tracking-tight text-white mb-2">
-                  {card.headline}
-                </div>
-                <div className="text-sm text-[#9CA3AF] leading-relaxed">
-                  {card.detail}
-                </div>
-              </GlassCard>
-            ))}
-          </div>
-
-          <GlassCard className="p-5 md:p-6">
-            <div className="flex items-center justify-between gap-4 mb-4">
-              <div>
-                <div className="text-[10px] uppercase tracking-[0.18em] text-[#9CA3AF] font-medium mb-2">
-                  Live Betr markets
-                </div>
-                <div className="text-base md:text-xl font-semibold tracking-tight text-white">
-                  H2H, line and total refresh automatically when available.
-                </div>
-              </div>
-            </div>
-            <FreeBetrMarketsPanel row={originRow} />
-          </GlassCard>
         </div>
       </GlassCard>
+
+      <OriginMarketBoard row={originRow} />
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 md:gap-6">
         {states.map((state) => (
@@ -5545,10 +5847,10 @@ function OriginPage({
               Match read
             </div>
             <div className="text-xl md:text-2xl font-semibold tracking-tight text-white mb-3">
-              Queensland +2.5 is the cleaner premium angle if the number holds.
+              Queensland against the line is still the cleaner premium angle.
             </div>
             <div className="text-sm md:text-base text-[#9CA3AF] leading-relaxed max-w-3xl">
-              NSW still grades as the more likely winner, but the rapid projection only lands the Blues by two. That keeps Queensland live against the current line while the try board still shows genuine finishing upside on both edges.
+              NSW still deserves to be favourite, but the projection does not create enough daylight to justify laying a full Origin handicap. That leaves Queensland live on the number, while the try board still points to genuine finishing upside on both edges rather than one obvious one-way scorer lane.
             </div>
           </div>
           <button
