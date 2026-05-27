@@ -14,6 +14,8 @@
 
 const RIGHTEDGE_MATCH_ODDS_URL =
   'https://spahmuawycgohcznathc.supabase.co/functions/v1/make-server-3b84b96c/best-match-odds?format=sheets';
+const RIGHTEDGE_PINNACLE_MATCH_ODDS_URL =
+  'https://spahmuawycgohcznathc.supabase.co/functions/v1/make-server-3b84b96c/best-match-odds?format=sheets&bookmaker=pinnacle';
 const RIGHTEDGE_TRY_SCORER_ODDS_URL =
   'https://spahmuawycgohcznathc.supabase.co/functions/v1/make-server-3b84b96c/best-try-scorer-odds?format=sheets';
 
@@ -21,6 +23,7 @@ function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('RightEdge Odds')
     .addItem('Sync Match Odds Now', 'syncRightEdgeMatchOdds')
+    .addItem('Sync Pinnacle Match Odds Now', 'syncRightEdgePinnacleMatchOdds')
     .addItem('Sync Try Scorer Odds Now', 'syncRightEdgeTryScorerOdds')
     .addSeparator()
     .addItem('Create 15 Minute Match Auto Sync', 'createRightEdgeMatchOddsTrigger')
@@ -102,6 +105,7 @@ function syncRightEdgeMatchOdds() {
   });
 
   sh.getRange(2, 9, nextOdds.length, 2).setValues(nextOdds);
+  const pinnacleResult = syncRightEdgePinnacleMatchOdds_(ss, sh, matches, lastRow);
 
   // Rerun the existing prediction engine after I/J odds update.
   if (typeof updatePredictions === 'function') {
@@ -114,7 +118,103 @@ function syncRightEdgeMatchOdds() {
   const unmatchedNote = unmatchedMatches.length
     ? ` Cleared ${clearedCount} stale unmatched row(s): ${unmatchedMatches.slice(0, 3).join(', ')}${unmatchedMatches.length > 3 ? '...' : ''}`
     : '';
-  ss.toast(`Updated ${updatedCount} match odds from RightEdge.${unmatchedNote} Last sync: ${stamp}`, 'RightEdge Odds', 12);
+  const pinnacleNote = pinnacleResult.skipped
+    ? ''
+    : ` Updated ${pinnacleResult.updatedCount} Pinnacle row(s).`;
+  ss.toast(`Updated ${updatedCount} match odds from RightEdge.${pinnacleNote}${unmatchedNote} Last sync: ${stamp}`, 'RightEdge Odds', 12);
+}
+
+function syncRightEdgePinnacleMatchOdds() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sh = ss.getSheetByName('Match Predictions');
+  if (!sh) throw new Error('Match Predictions sheet not found.');
+
+  const lastRow = sh.getLastRow();
+  if (lastRow < 2) return;
+
+  const matches = sh.getRange(2, 1, lastRow - 1, 2).getValues();
+  const result = syncRightEdgePinnacleMatchOdds_(ss, sh, matches, lastRow);
+  if (typeof updatePredictions === 'function') {
+    updatePredictions();
+  }
+
+  if (result.skipped) {
+    ss.toast(result.reason, 'RightEdge Odds', 10);
+  } else {
+    ss.toast(`Updated ${result.updatedCount} Pinnacle match odds.`, 'RightEdge Odds', 10);
+  }
+}
+
+function syncRightEdgePinnacleMatchOdds_(ss, sh, matches, lastRow) {
+  const lastCol = sh.getLastColumn();
+  const headers = sh.getRange(1, 1, 1, lastCol).getValues()[0];
+  const headerMap = buildRightEdgeHeaderMap_(headers);
+  const pinnacleHomeCol = findRightEdgeHeader_(headerMap, [
+    'Pinnacle Home Odds',
+    'Pinny Home Odds',
+    'Sharp Home Odds',
+  ]);
+  const pinnacleAwayCol = findRightEdgeHeader_(headerMap, [
+    'Pinnacle Away Odds',
+    'Pinny Away Odds',
+    'Sharp Away Odds',
+  ]);
+
+  if (pinnacleHomeCol === -1 || pinnacleAwayCol === -1) {
+    return {
+      skipped: true,
+      reason: 'Add headers named Pinnacle Home Odds and Pinnacle Away Odds to sync sharp model-input prices.',
+    };
+  }
+
+  const response = UrlFetchApp.fetch(RIGHTEDGE_PINNACLE_MATCH_ODDS_URL, {
+    method: 'get',
+    muteHttpExceptions: true,
+  });
+
+  const status = response.getResponseCode();
+  const text = response.getContentText();
+  if (status < 200 || status >= 300) {
+    throw new Error('RightEdge Pinnacle odds sync failed: ' + status + ' ' + text);
+  }
+
+  const payload = JSON.parse(text);
+  const oddsRows = payload.rows || [];
+  const oddsByMatch = {};
+
+  oddsRows.forEach(row => {
+    const home = normalizeRightEdgeSheetTeam(row[0]);
+    const away = normalizeRightEdgeSheetTeam(row[1]);
+    const exactKey = home + ' v ' + away;
+    const reverseKey = away + ' v ' + home;
+
+    oddsByMatch[exactKey] = {
+      homeOdds: Number(row[2]) || '',
+      awayOdds: Number(row[3]) || '',
+    };
+    oddsByMatch[reverseKey] = {
+      homeOdds: Number(row[3]) || '',
+      awayOdds: Number(row[2]) || '',
+    };
+  });
+
+  const nextPinnacleHomeOdds = [];
+  const nextPinnacleAwayOdds = [];
+  let updatedCount = 0;
+
+  matches.forEach((row, idx) => {
+    const home = normalizeRightEdgeSheetTeam(row[0]);
+    const away = normalizeRightEdgeSheetTeam(row[1]);
+    const matchOdds = oddsByMatch[home + ' v ' + away];
+
+    nextPinnacleHomeOdds.push([matchOdds ? matchOdds.homeOdds : '']);
+    nextPinnacleAwayOdds.push([matchOdds ? matchOdds.awayOdds : '']);
+    if (matchOdds) updatedCount++;
+  });
+
+  sh.getRange(2, pinnacleHomeCol + 1, nextPinnacleHomeOdds.length, 1).setValues(nextPinnacleHomeOdds);
+  sh.getRange(2, pinnacleAwayCol + 1, nextPinnacleAwayOdds.length, 1).setValues(nextPinnacleAwayOdds);
+  return { skipped: false, updatedCount };
 }
 
 function createRightEdgeMatchOddsTrigger() {

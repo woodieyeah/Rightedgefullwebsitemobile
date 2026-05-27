@@ -2359,7 +2359,18 @@ app.get("/best-match-odds", async (c) => {
   try {
     const force = allowOddsForceRefresh(c);
     const format = c.req.query("format") || "json";
-    const payload = await refreshBestMatchOdds(force);
+    const bookmaker = c.req.query("bookmaker") || "";
+    const normalizedBookmaker = normalizeBookmakerFilter(bookmaker);
+    const payload = normalizedBookmaker
+      ? {
+          updatedAt: new Date().toISOString(),
+          sport: "rugbyleague_nrl",
+          market: "h2h",
+          odds: buildBestMatchOdds(
+            filterMatchOddsBookmakers(await fetchLiveOddsRaw(force), normalizedBookmaker),
+          ),
+        }
+      : await refreshBestMatchOdds(force);
 
     if (format === "sheets") {
       return c.json({
