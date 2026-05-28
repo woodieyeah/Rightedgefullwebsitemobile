@@ -776,6 +776,10 @@ function formatPercent(value: number, decimals = 2) {
   return `${value.toFixed(decimals)}%`;
 }
 
+function formatOddsValue(value: number) {
+  return `$${Number(value).toFixed(2)}`;
+}
+
 function normalizeTeamName(value: string) {
   if (!value) return "";
   const cleaned = value.trim();
