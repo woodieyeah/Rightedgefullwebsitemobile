@@ -4002,6 +4002,23 @@ function FeaturedMatchPreview({
       : selectedTeam === normalizeTeamName(row.awayTeam)
         ? row.modelAwayOdds
         : 0;
+  const selectedIsHome = selectedTeam === normalizeTeamName(row.homeTeam);
+  const selectedIsAway = selectedTeam === normalizeTeamName(row.awayTeam);
+  const selectedEdge = selectedIsHome
+    ? row.homeOverlay
+    : selectedIsAway
+      ? row.awayOverlay
+      : 0;
+  const selectedEdgeLabel =
+    selectedIsHome || selectedIsAway
+      ? `${selectedEdge >= 0 ? "+" : ""}${formatPercent(selectedEdge, 2)}`
+      : "—";
+  const selectedEdgeClass =
+    !selectedIsHome && !selectedIsAway
+      ? "text-[#9CA3AF]"
+      : selectedEdge >= 0
+        ? "text-[#4ADE80]"
+        : "text-[#F87171]";
 
   const featuredWinPct =
     isOfficialPlay
@@ -4127,8 +4144,8 @@ function FeaturedMatchPreview({
               <div className="mb-2 text-[10px] font-medium uppercase tracking-[0.14em] text-[#9CA3AF]">
                 Model edge
               </div>
-              <div className="text-xl font-semibold text-[#4ADE80]">
-                +{formatPercent(row.bestEdge, 2)}
+              <div className={`text-xl font-semibold ${selectedEdgeClass}`}>
+                {selectedEdgeLabel}
               </div>
             </div>
           </div>
