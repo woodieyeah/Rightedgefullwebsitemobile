@@ -13,6 +13,7 @@ const BLUEBET_AFFILIATE_USER_AGENT =
   Deno.env.get("BLUEBET_AFFILIATE_USER_AGENT") || "rightedge.com.au";
 const AUTH_SESSION_COOKIE = "rightedge_session";
 const AUTH_SESSION_MAX_AGE_SECONDS = 7_776_000;
+const DEFAULT_STRIPE_PREMIUM_PRICE_ID = "price_1TYHPcHbbDQt0kPBTrqSxMmK";
 
 type AuthSessionTier = "free" | "premium";
 type StoredAuthSession = {
@@ -45,6 +46,13 @@ function getStripeClient() {
   const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
   if (!stripeKey) throw new Error("STRIPE_SECRET_KEY not configured");
   return new Stripe(stripeKey, { apiVersion: "2023-10-16" });
+}
+
+function getPremiumStripePriceId() {
+  return (
+    Deno.env.get("STRIPE_PREMIUM_PRICE_ID")?.trim() ||
+    DEFAULT_STRIPE_PREMIUM_PRICE_ID
+  );
 }
 
 function normalizeStripeSubscriptionStatus(status: unknown) {
@@ -2667,6 +2675,7 @@ app.post("/create-checkout-session", async (c) => {
 
     const stripe = new Stripe(stripeKey, { apiVersion: "2023-10-16" });
     const { activeSubscription, customerId } = await findActiveStripeSubscription(stripe, email);
+    const premiumPriceId = getPremiumStripePriceId();
 
     if (activeSubscription) {
       const url = await createInstantAccessUrl(email, returnUrl, returnHash, customerId, activeSubscription);
@@ -2705,15 +2714,7 @@ app.post("/create-checkout-session", async (c) => {
         },
       },
       line_items: [{
-        price_data: {
-          currency: 'aud',
-          product_data: {
-            name: 'RightEdge Premium — Full Round Card',
-            description: `Best Bets, Try Scorer value plays, staking guidance and model edges`,
-          },
-          unit_amount: 900, // $9.00 AUD
-          recurring: { interval: 'week' },
-        },
+        price: premiumPriceId,
         quantity: 1,
       }],
       mode: 'subscription',
@@ -3262,12 +3263,15 @@ app.post("/subscribe", async (c) => {
     for (const customer of customers.data) {
       const subscriptions = await stripe.subscriptions.list({
         customer: customer.id,
-        status: "active",
-        limit: 1,
+        status: "all",
+        limit: 10,
       });
 
-      if (subscriptions.data.length > 0) {
-        activeSubscription = subscriptions.data[0];
+      activeSubscription = subscriptions.data.find((subscription: any) =>
+        isPremiumStripeStatus(subscription.status)
+      );
+
+      if (activeSubscription) {
         customerId = customer.id;
         break;
       }
