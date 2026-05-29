@@ -258,8 +258,8 @@ function updatePredictions() {
       var pinnacleHomeOdds = toNumber(r[pinnacleHomeOddsCol]);
       var pinnacleAwayOdds = toNumber(r[pinnacleAwayOddsCol]);
 
-      var modelMarketHomeOdds = pinnacleHomeOdds || bestHomeOdds;
-      var modelMarketAwayOdds = pinnacleAwayOdds || bestAwayOdds;
+      var modelMarketHomeOdds = pinnacleHomeOdds;
+      var modelMarketAwayOdds = pinnacleAwayOdds;
 
       var hRate = { off: hC.pf - leagueAvgPPG, def: hC.pa - leagueAvgPPG };
       var aRate = { off: aC.pf - leagueAvgPPG, def: aC.pa - leagueAvgPPG };

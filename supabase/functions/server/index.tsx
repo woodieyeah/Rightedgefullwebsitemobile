@@ -2005,14 +2005,17 @@ async function fetchBlueBetNrlOddsRaw() {
     .filter((event: any) => event && event.bookmakers?.length);
 }
 
-async function fetchLiveOddsRaw(force = false, region = "au") {
+async function fetchLiveOddsRaw(force = false, region = "au", bookmaker = "") {
   const apiKey = Deno.env.get("ODDS_API_KEY");
   if (!apiKey) {
     throw new Error("Missing ODDS_API_KEY environment variable. Add your The Odds API key.");
   }
 
   const normalizedRegion = String(region || "au").toLowerCase().replace(/[^a-z]/g, "") || "au";
-  const cacheSuffix = normalizedRegion === "au" ? "" : `_${normalizedRegion}`;
+  const normalizedBookmaker = normalizeBookmakerFilter(bookmaker);
+  const cacheSuffix = normalizedBookmaker
+    ? `_bookmaker_${normalizedBookmaker}`
+    : (normalizedRegion === "au" ? "" : `_${normalizedRegion}`);
   const cacheKey = `live_odds_cache${cacheSuffix}`;
   const cacheTimeKey = `live_odds_cache_time${cacheSuffix}`;
   const cachedOdds = await kv.get(cacheKey);
@@ -2032,7 +2035,18 @@ async function fetchLiveOddsRaw(force = false, region = "au") {
     }
   }
 
-  const response = await fetch(`https://api.the-odds-api.com/v4/sports/rugbyleague_nrl/odds/?apiKey=${apiKey}&regions=${encodeURIComponent(normalizedRegion)}&markets=h2h,spreads,totals&oddsFormat=decimal`);
+  const oddsApiParams = new URLSearchParams({
+    apiKey,
+    markets: "h2h,spreads,totals",
+    oddsFormat: "decimal",
+  });
+  if (normalizedBookmaker) {
+    oddsApiParams.set("bookmakers", normalizedBookmaker);
+  } else {
+    oddsApiParams.set("regions", normalizedRegion);
+  }
+
+  const response = await fetch(`https://api.the-odds-api.com/v4/sports/rugbyleague_nrl/odds/?${oddsApiParams.toString()}`);
 
   if (!response.ok) {
     const text = await response.text();
@@ -2366,14 +2380,16 @@ app.get("/best-match-odds", async (c) => {
     const format = c.req.query("format") || "json";
     const bookmaker = c.req.query("bookmaker") || "";
     const normalizedBookmaker = normalizeBookmakerFilter(bookmaker);
-    const oddsRegion = normalizedBookmaker === "pinnacle" ? "us" : "au";
     const payload = normalizedBookmaker
       ? {
           updatedAt: new Date().toISOString(),
           sport: "rugbyleague_nrl",
           market: "h2h",
           odds: buildBestMatchOdds(
-            filterMatchOddsBookmakers(await fetchLiveOddsRaw(force, oddsRegion), normalizedBookmaker),
+            filterMatchOddsBookmakers(
+              await fetchLiveOddsRaw(force, "au", normalizedBookmaker),
+              normalizedBookmaker,
+            ),
           ),
         }
       : await refreshBestMatchOdds(force);
