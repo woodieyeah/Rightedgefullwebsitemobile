@@ -937,6 +937,25 @@ function getPredictedWinnerModelOdds(row: PredictionRow) {
   return 0;
 }
 
+function getOfficialPlayEdge(row: PredictionRow) {
+  if (row.side === "Home") return row.homeOverlay;
+  if (row.side === "Away") return row.awayOverlay;
+  return 0;
+}
+
+function getOfficialPlayMarketOdds(row: PredictionRow) {
+  if (row.side === "Home") return row.marketHomeOdds;
+  if (row.side === "Away") return row.marketAwayOdds;
+  return 0;
+}
+
+function getPredictedWinnerEdge(row: PredictionRow) {
+  const winner = normalizeTeamName(row.predictedWinner);
+  if (winner === normalizeTeamName(row.homeTeam)) return row.homeOverlay;
+  if (winner === normalizeTeamName(row.awayTeam)) return row.awayOverlay;
+  return 0;
+}
+
 function getFixtureSortValue(row: PredictionRow) {
   if (!row.fixture) return Number.MAX_SAFE_INTEGER;
 
@@ -1162,28 +1181,84 @@ function getTryScorerSignalClass(label?: string) {
 function getFeaturedPrediction(predictions: PredictionRow[]) {
   if (!predictions.length) return null;
 
-  const officialPlays = predictions.filter(
-    (row) => isModelAlignedOfficialPlay(row),
+  const upcomingPredictions = predictions.filter(
+    (row) => !hasPredictionKickedOff(row),
+  );
+  const candidateRows = upcomingPredictions.length
+    ? upcomingPredictions
+    : predictions;
+
+  const scoreUrgency = (row: PredictionRow) => {
+    const kickoff = getFixtureUtcKickoffMs(row.fixture);
+    if (!Number.isFinite(kickoff)) return 0;
+    const hoursUntilKickoff = (kickoff - Date.now()) / (60 * 60 * 1000);
+    if (hoursUntilKickoff < 0) return 0;
+    if (hoursUntilKickoff <= 24) return 6;
+    if (hoursUntilKickoff <= 72) return 3;
+    return 0;
+  };
+
+  const scoreMarketAppeal = (odds: number) => {
+    if (!odds || odds < 1.3) return -100;
+    if (odds <= 3.75) return 5;
+    return 1;
+  };
+
+  const positiveOfficialPlays = candidateRows.filter(
+    (row) =>
+      isModelAlignedOfficialPlay(row) &&
+      getOfficialPlayEdge(row) > 0 &&
+      scoreMarketAppeal(getOfficialPlayMarketOdds(row)) > -100,
   );
 
-  if (officialPlays.length) {
-    return [...officialPlays].sort((a, b) => {
+  if (positiveOfficialPlays.length) {
+    return [...positiveOfficialPlays].sort((a, b) => {
       const aWinPct = getRowSideWinPct(a);
       const bWinPct = getRowSideWinPct(b);
+      const aScore =
+        getOfficialPlayEdge(a) * 4 +
+        aWinPct * 0.15 +
+        scoreMarketAppeal(getOfficialPlayMarketOdds(a)) +
+        scoreUrgency(a);
+      const bScore =
+        getOfficialPlayEdge(b) * 4 +
+        bWinPct * 0.15 +
+        scoreMarketAppeal(getOfficialPlayMarketOdds(b)) +
+        scoreUrgency(b);
 
-      if (bWinPct !== aWinPct) return bWinPct - aWinPct;
-      if (b.bestEdge !== a.bestEdge)
-        return b.bestEdge - a.bestEdge;
+      if (bScore !== aScore) return bScore - aScore;
       return b.stake - a.stake;
     })[0];
   }
 
-  return [...predictions].sort((a, b) => {
+  const positivePredictedWinnerRows = candidateRows.filter(
+    (row) =>
+      getPredictedWinnerEdge(row) > 0 &&
+      scoreMarketAppeal(getPredictedWinnerMarketOdds(row)) > -100,
+  );
+
+  const rowsToRank = positivePredictedWinnerRows.length
+    ? positivePredictedWinnerRows
+    : candidateRows;
+
+  return [...rowsToRank].sort((a, b) => {
     const aWinPct = getPredictedWinnerWinPct(a);
     const bWinPct = getPredictedWinnerWinPct(b);
+    const aEdge = getPredictedWinnerEdge(a);
+    const bEdge = getPredictedWinnerEdge(b);
+    const aScore =
+      aEdge * 4 +
+      aWinPct * 0.15 +
+      scoreMarketAppeal(getPredictedWinnerMarketOdds(a)) +
+      scoreUrgency(a);
+    const bScore =
+      bEdge * 4 +
+      bWinPct * 0.15 +
+      scoreMarketAppeal(getPredictedWinnerMarketOdds(b)) +
+      scoreUrgency(b);
 
-    if (bWinPct !== aWinPct) return bWinPct - aWinPct;
-    return b.bestEdge - a.bestEdge;
+    if (bScore !== aScore) return bScore - aScore;
+    return getFixtureSortValue(a) - getFixtureSortValue(b);
   })[0];
 }
 
