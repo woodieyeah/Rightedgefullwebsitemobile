@@ -2045,6 +2045,8 @@ function setStoredFavoriteTeam(team: string) {
   } catch {}
 }
 
+const DEFAULT_PREMIUM_CHECKOUT_PLAN = "weekly";
+
 function PaymentGateModal({
   open,
   onClose,
@@ -2131,6 +2133,7 @@ function PaymentGateModal({
       (window as any).trackAnalyticsEvent?.("premium_email_submit", {
         email: trimmedEmail,
         section: returnHash,
+        plan: DEFAULT_PREMIUM_CHECKOUT_PLAN,
       });
 
       try {
@@ -2144,6 +2147,7 @@ function PaymentGateModal({
             email: trimmedEmail,
             source: `premium_${returnHash}`,
             return_hash: returnHash,
+            plan: DEFAULT_PREMIUM_CHECKOUT_PLAN,
           }),
         });
       } catch (leadErr) {
@@ -2153,6 +2157,7 @@ function PaymentGateModal({
       (window as any).trackAnalyticsEvent?.("premium_checkout_start", {
         email: trimmedEmail,
         section: returnHash,
+        plan: DEFAULT_PREMIUM_CHECKOUT_PLAN,
       });
 
       const checkoutRes = await fetch(`/api/create-checkout-session`, {
@@ -2165,6 +2170,7 @@ function PaymentGateModal({
           email: trimmedEmail,
           returnUrl,
           returnHash,
+          plan: DEFAULT_PREMIUM_CHECKOUT_PLAN,
           cancelUrl,
           cancel_url: cancelUrl,
         }),
@@ -2175,6 +2181,7 @@ function PaymentGateModal({
         (window as any).trackAnalyticsEvent?.("premium_checkout_redirect", {
           email: trimmedEmail,
           section: returnHash,
+          plan: DEFAULT_PREMIUM_CHECKOUT_PLAN,
         });
         window.location.href = checkoutData.url;
         return;
