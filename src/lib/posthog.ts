@@ -1,6 +1,8 @@
 import posthog from "posthog-js";
 
-const posthogToken = import.meta.env.VITE_POSTHOG_PROJECT_TOKEN;
+const POSTHOG_PROJECT_TOKEN = "phc_sz2MWWnBEkdy8iW5zKEEgXTzhJLnNdRo2puiQjPBfmKy";
+
+const posthogToken = import.meta.env.VITE_POSTHOG_PROJECT_TOKEN || POSTHOG_PROJECT_TOKEN;
 const posthogHost = import.meta.env.VITE_POSTHOG_HOST || "https://us.i.posthog.com";
 
 export function isPostHogEnabled() {
