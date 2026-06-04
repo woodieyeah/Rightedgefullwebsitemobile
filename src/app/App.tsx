@@ -5444,7 +5444,9 @@ function getBestPremiumMarketPlayForMatch(
       play.type === "Line" ? 3 : play.type === "Total" ? 2 : 1;
     const aScore = a.modelPct + Math.min(8, Math.max(0, (a.odds - 1.8) * 6)) + typeRank(a);
     const bScore = b.modelPct + Math.min(8, Math.max(0, (b.odds - 1.8) * 6)) + typeRank(b);
-    return bScore - aScore;
+    const scoreDiff = bScore - aScore;
+    if (Math.abs(scoreDiff) > 0.001) return scoreDiff;
+    return b.odds - a.odds;
   });
 
   return rankedCandidates[0];
