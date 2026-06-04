@@ -6,7 +6,9 @@ import Stripe from "npm:stripe";
 import { createClient } from "jsr:@supabase/supabase-js@2.49.8";
 import * as kv from "./kv_store.tsx";
 const app = new Hono().basePath('/make-server-3b84b96c');
-const MATCH_ODDS_CACHE_MS = 30 * 60 * 1000;
+const MATCH_ODDS_CACHE_MS = 12 * 60 * 60 * 1000;
+const NRL_EVENTS_CACHE_MS = 6 * 60 * 60 * 1000;
+const TRY_SCORER_ODDS_CACHE_MS = 24 * 60 * 60 * 1000;
 const PREMATCH_ODDS_LOCK_PREFIX = "prematch_odds_lock";
 const BLUEBET_API_BASE_URL = "https://affiliate-api.bluebet.com.au";
 const BLUEBET_AFFILIATE_USER_AGENT =
@@ -2180,7 +2182,7 @@ async function fetchNrlEventsRaw(force = false) {
 
   // Events do not count against The Odds API quota, but this keeps the edge
   // function fast and avoids needless network calls.
-  if (!force && cachedEvents && cacheTime && (now - Number(cacheTime)) < 600000) {
+  if (!force && cachedEvents && cacheTime && (now - Number(cacheTime)) < NRL_EVENTS_CACHE_MS) {
     return typeof cachedEvents === "string" ? JSON.parse(cachedEvents) : cachedEvents;
   }
 
@@ -2240,7 +2242,7 @@ async function fetchTryScorerEventOdds(event: any, force = false) {
 
   // Player props are fetched event-by-event and are expensive on the free plan.
   // Keep them aligned with the main odds cache unless explicitly refreshed.
-  if (!force && parsedCachedOdds && cacheTime && (now - Number(cacheTime)) < MATCH_ODDS_CACHE_MS) {
+  if (!force && parsedCachedOdds && cacheTime && (now - Number(cacheTime)) < TRY_SCORER_ODDS_CACHE_MS) {
     return parsedCachedOdds;
   }
 

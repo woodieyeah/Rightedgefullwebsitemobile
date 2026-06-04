@@ -2563,7 +2563,7 @@ function mapTeamToOddsApi(team: string): string {
 // Module level cache to prevent concurrent fetch requests from multiple cards
 const fetchOddsPromises = new Map<string, Promise<any>>();
 const ODDS_CACHE_KEY = "rightedge_odds_cache_v5_no_betfair";
-const ODDS_CACHE_DURATION = 30 * 60 * 1000; // Protect the 500/month free Odds API quota
+const ODDS_CACHE_DURATION = 12 * 60 * 60 * 1000; // Protect the 500/month Starter Odds API quota
 const BETR_ODDS_REFRESH_MS = 60 * 1000;
 
 async function fetchLiveOddsCached(bookmaker?: "betr" | "pinnacle") {

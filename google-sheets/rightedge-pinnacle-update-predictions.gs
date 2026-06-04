@@ -20,7 +20,9 @@
  *   O = Best Value Bet
  *   P = Stake
  *
- * Pinnacle drives the model blend.
+ * Pinnacle drives the model blend when available.
+ * If Pinnacle prices are unavailable, the model uses the raw ratings output
+ * instead of blending against retail best odds.
  * Betr/best odds drive the commercial overlay and staking.
  ************************/
 

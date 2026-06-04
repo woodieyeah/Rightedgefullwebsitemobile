@@ -20,6 +20,8 @@ const RIGHTEDGE_PINNACLE_MATCH_ODDS_URL =
   'https://spahmuawycgohcznathc.supabase.co/functions/v1/make-server-3b84b96c/best-match-odds?format=sheets&bookmaker=pinnacle';
 const RIGHTEDGE_TRY_SCORER_ODDS_URL =
   'https://spahmuawycgohcznathc.supabase.co/functions/v1/make-server-3b84b96c/best-try-scorer-odds?format=sheets';
+const RIGHTEDGE_MATCH_SYNC_HOURS = 12;
+const RIGHTEDGE_TRY_SCORER_SYNC_DAYS = 1;
 
 function onOpen() {
   SpreadsheetApp.getUi()
@@ -28,8 +30,8 @@ function onOpen() {
     .addItem('Sync Pinnacle Match Odds Now', 'syncRightEdgePinnacleMatchOdds')
     .addItem('Sync Try Scorer Odds Now', 'syncRightEdgeTryScorerOdds')
     .addSeparator()
-    .addItem('Create 15 Minute Match Auto Sync', 'createRightEdgeMatchOddsTrigger')
-    .addItem('Create 15 Minute Try Scorer Auto Sync', 'createRightEdgeTryScorerOddsTrigger')
+    .addItem('Create 12 Hour Match Auto Sync', 'createRightEdgeMatchOddsTrigger')
+    .addItem('Create Daily Try Scorer Auto Sync', 'createRightEdgeTryScorerOddsTrigger')
     .addItem('Remove All Auto Syncs', 'removeRightEdgeOddsTriggers')
     .addToUi();
 }
@@ -134,7 +136,15 @@ function syncRightEdgeMatchOdds() {
     homeValues: nextBestHomeOdds,
     awayValues: nextBestAwayOdds,
   });
-  const pinnacleResult = syncRightEdgePinnacleMatchOdds_(ss, sh, matches, lastRow);
+  let pinnacleResult;
+  try {
+    pinnacleResult = syncRightEdgePinnacleMatchOdds_(ss, sh, matches, lastRow);
+  } catch (err) {
+    pinnacleResult = {
+      skipped: true,
+      reason: 'Pinnacle odds skipped. The Starter Odds API plan may not include this bookmaker: ' + err.message,
+    };
+  }
 
   // Rerun the prediction engine, then rewrite odds so an older model function
   // cannot leave overlays sitting in the odds columns.
@@ -177,7 +187,13 @@ function syncRightEdgePinnacleMatchOdds() {
   if (lastRow < 2) return;
 
   const matches = sh.getRange(2, 1, lastRow - 1, 2).getValues();
-  const result = syncRightEdgePinnacleMatchOdds_(ss, sh, matches, lastRow);
+  let result;
+  try {
+    result = syncRightEdgePinnacleMatchOdds_(ss, sh, matches, lastRow);
+  } catch (err) {
+    ss.toast('Pinnacle odds skipped. The Starter Odds API plan may not include this bookmaker: ' + err.message, 'RightEdge Odds', 12);
+    return;
+  }
   if (result.skipped) {
     ss.toast(result.reason, 'RightEdge Odds', 10);
   } else {
@@ -288,18 +304,18 @@ function createRightEdgeMatchOddsTrigger() {
   removeRightEdgeMatchOddsTrigger();
   ScriptApp.newTrigger('syncRightEdgeMatchOdds')
     .timeBased()
-    .everyMinutes(15)
+    .everyHours(RIGHTEDGE_MATCH_SYNC_HOURS)
     .create();
-  SpreadsheetApp.getActiveSpreadsheet().toast('Match odds will sync every 15 minutes.', 'RightEdge Odds', 8);
+  SpreadsheetApp.getActiveSpreadsheet().toast('Match odds will sync every 12 hours.', 'RightEdge Odds', 8);
 }
 
 function createRightEdgeTryScorerOddsTrigger() {
   removeRightEdgeTryScorerOddsTrigger();
   ScriptApp.newTrigger('syncRightEdgeTryScorerOdds')
     .timeBased()
-    .everyMinutes(15)
+    .everyDays(RIGHTEDGE_TRY_SCORER_SYNC_DAYS)
     .create();
-  SpreadsheetApp.getActiveSpreadsheet().toast('Try scorer odds will sync every 15 minutes.', 'RightEdge Odds', 8);
+  SpreadsheetApp.getActiveSpreadsheet().toast('Try scorer odds will sync daily. Use manual sync for fresher prices on the Starter quota.', 'RightEdge Odds', 8);
 }
 
 function removeRightEdgeOddsTriggers() {
