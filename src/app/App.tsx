@@ -3528,12 +3528,17 @@ function getFreeBetrOutcomeStyle(outcome: FreeBetrMarketOutcome) {
 
 function FreeBetrMarketsPanel({
   row,
+  isPremium,
+  onRequestAccess,
 }: {
   row: PredictionRow;
+  isPremium: boolean;
+  onRequestAccess: (targetHash?: string) => void;
 }) {
   const [activeMarket, setActiveMarket] = useState<"h2h" | "line" | "total">("h2h");
   const [betrMarkets, setBetrMarkets] = useState<SgmMarketBookmakerData | null>(null);
   const [isLoadingOdds, setIsLoadingOdds] = useState(true);
+  const isPremiumLockedMarket = !isPremium && activeMarket !== "h2h";
 
   useEffect(() => {
     let isMounted = true;
@@ -3633,18 +3638,21 @@ function FreeBetrMarketsPanel({
                 : "bg-transparent text-[#6B7280] hover:bg-white/5 hover:text-white"
             }`}
           >
-            {label}
+            <span className="inline-flex items-center justify-center gap-1.5">
+              {market !== "h2h" && !isPremium && <Lock className="h-3 w-3" />}
+              {label}
+            </span>
           </button>
         ))}
       </div>
-      <div className="min-h-[132px]">
+      <div className="relative min-h-[132px]">
         {isLoadingOdds ? (
           <div className="flex flex-col gap-2 opacity-50">
             <div className="h-10 bg-white/5 animate-pulse border border-[#1E1E2E]" />
             <div className="h-10 bg-white/5 animate-pulse border border-[#1E1E2E]" />
           </div>
         ) : outcomes.length > 0 ? (
-          <div className="grid grid-cols-1 gap-2">
+          <div className={`grid grid-cols-1 gap-2 ${isPremiumLockedMarket ? "pointer-events-none select-none blur-sm opacity-45" : ""}`}>
             {outcomes.map((outcome) => {
               const outcomeStyle = getFreeBetrOutcomeStyle(outcome);
 
@@ -3712,7 +3720,7 @@ function FreeBetrMarketsPanel({
             })}
           </div>
         ) : (
-          <div className="flex flex-col gap-3">
+          <div className={`flex flex-col gap-3 ${isPremiumLockedMarket ? "pointer-events-none select-none blur-sm opacity-45" : ""}`}>
             {!marketAvailability && (
               <div className="border border-[#1E1E2E] bg-[#16161D] px-4 py-4">
                 <div className="text-[10px] font-medium uppercase tracking-[0.18em] text-[#9CA3AF] mb-2">
@@ -3746,6 +3754,28 @@ function FreeBetrMarketsPanel({
               </div>
               <ArrowUpRight className="h-5 w-5 shrink-0 text-white/80 transition group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
             </BetrAffiliateLink>
+          </div>
+        )}
+        {isPremiumLockedMarket && !isLoadingOdds && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center border border-[#1E1E2E] bg-[#0A0A0F]/80 px-4 text-center backdrop-blur-[2px]">
+            <div className="max-w-[260px]">
+              <div className="mx-auto mb-3 flex h-9 w-9 items-center justify-center border border-white/15 bg-[#16161D]">
+                <Lock className="h-4 w-4 text-white" />
+              </div>
+              <div className="text-xs font-semibold uppercase tracking-widest text-white">
+                Premium market
+              </div>
+              <div className="mt-2 text-[10px] font-medium uppercase tracking-widest text-[#9CA3AF]">
+                Unlock line and total reads
+              </div>
+              <button
+                type="button"
+                onClick={() => onRequestAccess("matches")}
+                className="mt-4 inline-flex min-h-[36px] items-center justify-center border border-white bg-white px-4 text-[10px] font-semibold uppercase tracking-widest text-[#0A0A0F] transition hover:opacity-90"
+              >
+                Unlock Premium
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -5131,9 +5161,11 @@ function RoundCentrePage({ data }: { data: DashboardData }) {
 function PredictionsPage({
   data,
   onRequestAccess,
+  isPremium,
 }: {
   data: DashboardData;
   onRequestAccess: (targetHash?: string) => void;
+  isPremium: boolean;
 }) {
   const now = useMinuteNow();
   const rows = [...data.predictions].sort(sortPredictionsByFixture);
@@ -5255,6 +5287,8 @@ function PredictionsPage({
                     </div>
                     <FreeBetrMarketsPanel
                       row={row}
+                      isPremium={isPremium}
+                      onRequestAccess={onRequestAccess}
                     />
                   </div>
                 </div>
@@ -7184,6 +7218,7 @@ function AppDashboard({
   loadData,
   onExit,
   onRequestAccess,
+  isPremium,
 }: {
   data: DashboardData | null;
   loading: boolean;
@@ -7192,6 +7227,7 @@ function AppDashboard({
   loadData: (isRefresh?: boolean) => void;
   onExit: () => void;
   onRequestAccess: (targetHash?: string) => void;
+  isPremium: boolean;
 }) {
   const [isAdmin, setIsAdmin] = useState(() => isUserAdmin());
 
@@ -7479,6 +7515,7 @@ function AppDashboard({
                 <PredictionsPage
                   data={data}
                   onRequestAccess={onRequestAccess}
+                  isPremium={isPremium || isAdmin}
                 />
               )}
               {page === "origin" && (
@@ -8349,6 +8386,7 @@ export default function App() {
             error={error}
             refreshing={refreshing}
             loadData={loadData}
+            isPremium={paidAccessState || isAdmin}
             onRequestAccess={(targetHash = "best-bets") => {
               setSitePage("app");
               window.location.hash = targetHash;
