@@ -15,9 +15,11 @@ const BLUEBET_AFFILIATE_USER_AGENT =
   Deno.env.get("BLUEBET_AFFILIATE_USER_AGENT") || "rightedge.com.au";
 const AUTH_SESSION_COOKIE = "rightedge_session";
 const AUTH_SESSION_MAX_AGE_SECONDS = 7_776_000;
-const DEFAULT_STRIPE_PREMIUM_PRICE_ID = "price_1TYHPcHbbDQt0kPBTrqSxMmK";
+const DEFAULT_STRIPE_PREMIUM_WEEKLY_PRICE_ID = "price_1TE76qHbbDQt0kPBF1BrLgdQ";
+const DEFAULT_STRIPE_PREMIUM_MONTHLY_PRICE_ID = "price_1TeeatHbbDQt0kPBBQ3xzV1d";
 
 type AuthSessionTier = "free" | "premium";
+type PremiumCheckoutPlan = "weekly" | "monthly";
 type StoredAuthSession = {
   token: string;
   email: string;
@@ -50,10 +52,21 @@ function getStripeClient() {
   return new Stripe(stripeKey, { apiVersion: "2023-10-16" });
 }
 
-function getPremiumStripePriceId() {
+function normalizePremiumCheckoutPlan(plan: unknown): PremiumCheckoutPlan {
+  return String(plan || "").trim().toLowerCase() === "monthly" ? "monthly" : "weekly";
+}
+
+function getPremiumStripePriceId(plan: PremiumCheckoutPlan = "weekly") {
+  if (plan === "monthly") {
+    return (
+      Deno.env.get("STRIPE_PREMIUM_MONTHLY_PRICE_ID")?.trim() ||
+      DEFAULT_STRIPE_PREMIUM_MONTHLY_PRICE_ID
+    );
+  }
+
   return (
-    Deno.env.get("STRIPE_PREMIUM_PRICE_ID")?.trim() ||
-    DEFAULT_STRIPE_PREMIUM_PRICE_ID
+    Deno.env.get("STRIPE_PREMIUM_WEEKLY_PRICE_ID")?.trim() ||
+    DEFAULT_STRIPE_PREMIUM_WEEKLY_PRICE_ID
   );
 }
 
@@ -2669,6 +2682,7 @@ app.post("/create-checkout-session", async (c) => {
       ? body.returnHash
       : "best-bets";
     const cancelUrl = body?.cancelUrl || `${returnUrl}#${returnHash}`;
+    const plan = normalizePremiumCheckoutPlan(body?.plan || body?.billingPlan || body?.interval);
 
     if (!email || !email.includes('@') || !email.includes('.')) {
       return c.json({ error: "Please enter a valid email address." }, 400);
@@ -2682,7 +2696,7 @@ app.post("/create-checkout-session", async (c) => {
 
     const stripe = new Stripe(stripeKey, { apiVersion: "2023-10-16" });
     const { activeSubscription, customerId } = await findActiveStripeSubscription(stripe, email);
-    const premiumPriceId = getPremiumStripePriceId();
+    const premiumPriceId = getPremiumStripePriceId(plan);
 
     if (activeSubscription) {
       const url = await createInstantAccessUrl(email, returnUrl, returnHash, customerId, activeSubscription);
@@ -2697,6 +2711,7 @@ app.post("/create-checkout-session", async (c) => {
     await kv.set(`checkout_lead:${email}`, JSON.stringify({
       email,
       returnHash,
+      plan,
       source: body?.source || `premium_${returnHash}`,
       created_at: new Date().toISOString(),
       last_seen_at: new Date().toISOString(),
@@ -2711,12 +2726,14 @@ app.post("/create-checkout-session", async (c) => {
       metadata: {
         email,
         returnHash,
+        plan,
         source: body?.source || `premium_${returnHash}`,
       },
       subscription_data: {
         metadata: {
           email,
           returnHash,
+          plan,
           source: body?.source || `premium_${returnHash}`,
         },
       },
@@ -2729,7 +2746,7 @@ app.post("/create-checkout-session", async (c) => {
       cancel_url: `${returnUrl}?canceled=true&return_hash=${encodeURIComponent(returnHash)}#${returnHash}`,
     });
 
-    console.log(`[Stripe] Created checkout session for ${email} returning to #${returnHash}`);
+    console.log(`[Stripe] Created ${plan} checkout session for ${email} returning to #${returnHash}`);
     return c.json({ url: session.url, sessionId: session.id });
   } catch (err: any) {
     console.error("[Stripe] Error creating checkout session:", err);
@@ -3104,6 +3121,322 @@ async function resolveGuardedBroadcastRecipients(body: any) {
   };
 }
 
+type PremiumBestBetAlertPlay = {
+  round: number;
+  match: string;
+  homeTeam: string;
+  awayTeam: string;
+  selection: string;
+  side: "Home" | "Away" | "";
+  stake: number;
+  modelPct: number;
+  edgePct: number;
+  marketOdds: number;
+  projectedScore: string;
+};
+
+type PremiumBestBetAlertContext = {
+  round: number;
+  plays: PremiumBestBetAlertPlay[];
+};
+
+const PREMIUM_BEST_BET_ALERT_LOCK_KEY = "premium_best_bets_alert:last";
+
+function cleanBestBetSelection(value: string) {
+  return normalizeNrlTeamName(
+    String(value || "")
+      .replace(/\s+\(Home\)/i, "")
+      .replace(/\s+\(Away\)/i, "")
+      .trim(),
+  );
+}
+
+function getPredictionSide(bestBetCell: string, selection: string, homeTeam: string, awayTeam: string): "Home" | "Away" | "" {
+  if (/\(Home\)/i.test(bestBetCell)) return "Home";
+  if (/\(Away\)/i.test(bestBetCell)) return "Away";
+  if (selection === normalizeNrlTeamName(homeTeam)) return "Home";
+  if (selection === normalizeNrlTeamName(awayTeam)) return "Away";
+  return "";
+}
+
+function isValidBestBetSelection(selection: string) {
+  const cleaned = String(selection || "").trim();
+  return Boolean(cleaned && cleaned !== "-" && cleaned !== "—");
+}
+
+async function loadPremiumBestBetAlertContext(): Promise<PremiumBestBetAlertContext> {
+  const [predictionRows, fixtureRows] = await Promise.all([
+    fetchPublishedSheetRows(SHEET_GIDS.matchPredictions),
+    fetchPublishedSheetRows(SHEET_GIDS.fixtures2026),
+  ]);
+
+  const fixtures = fixtureRows
+    .map((row) => {
+      const round = toSheetRound(getSheetValue(row, ["Round Number", "RoundNumber", "Round"]));
+      const kickoffMs = parseAestKickoffMs(
+        getSheetValue(row, ["Date ISO", "DateISO"]),
+        getSheetValue(row, ["AEST", "AEDT", "Time", "Kickoff"]),
+        getSheetValue(row, ["TZ", "Timezone", "Time Zone"]) || "AEST",
+      );
+      return { round, kickoffMs };
+    })
+    .filter((fixture) => fixture.round)
+    .sort((a, b) => a.kickoffMs - b.kickoffMs);
+
+  const now = Date.now();
+  const upcomingRound = fixtures.find((fixture) => fixture.kickoffMs >= now)?.round;
+
+  const parsedPredictions = predictionRows
+    .map((row) => {
+      const homeTeam = shortNrlTeamName(getSheetValue(row, ["Home Team", "Home"]));
+      const awayTeam = shortNrlTeamName(getSheetValue(row, ["Away Team", "Away"]));
+      const round = toSheetRound(getSheetValue(row, ["Round", "Round Number", "RoundNumber", "NRL Round"]));
+      const predictedHomeScore = toSheetNumber(getSheetValue(row, ["Predicted Home Score", "Home Score", "Projected Home Score"]));
+      const predictedAwayScore = toSheetNumber(getSheetValue(row, ["Predicted Away Score", "Away Score", "Projected Away Score"]));
+      const bestBetCell = getSheetValue(row, ["Best Value Bet", "Best Bet", "BestValueBet"]);
+      const selection = cleanBestBetSelection(bestBetCell);
+      const side = getPredictionSide(bestBetCell, selection, homeTeam, awayTeam);
+      const modelHomeOdds = toSheetNumber(getSheetValue(row, ["Home Implied Odds", "Home Model Odds", "Model Home Odds"]));
+      const modelAwayOdds = toSheetNumber(getSheetValue(row, ["Away Implied Odds", "Away Model Odds", "Model Away Odds"]));
+      const marketHomeOdds = toSheetNumber(getSheetValue(row, ["Best Home Odds", "Tab Home Odds", "Actual Home Odds (Market)", "Home Market Odds"]));
+      const marketAwayOdds = toSheetNumber(getSheetValue(row, ["Best Away Odds", "Tab Away Odds", "Actual Away Odds (Market)", "Away Market Odds"]));
+      const homeOverlay = toSheetPercent(getSheetValue(row, ["Home Overlay %", "Home Overlay"]));
+      const awayOverlay = toSheetPercent(getSheetValue(row, ["Away Overlay %", "Away Overlay"]));
+      const stake = toSheetNumber(getSheetValue(row, ["Stake"]));
+      const modelOdds = side === "Home" ? modelHomeOdds : side === "Away" ? modelAwayOdds : 0;
+
+      return {
+        round,
+        match: homeTeam && awayTeam ? `${homeTeam} v ${awayTeam}` : "",
+        homeTeam,
+        awayTeam,
+        selection,
+        side,
+        stake,
+        modelPct: modelOdds > 1 ? (1 / modelOdds) * 100 : 0,
+        edgePct: side === "Home" ? homeOverlay : side === "Away" ? awayOverlay : 0,
+        marketOdds: side === "Home" ? marketHomeOdds : side === "Away" ? marketAwayOdds : 0,
+        projectedScore: predictedHomeScore || predictedAwayScore
+          ? `${Math.round(predictedHomeScore)}-${Math.round(predictedAwayScore)}`
+          : "",
+      };
+    })
+    .filter((row) => row.match && isValidBestBetSelection(row.selection) && row.stake > 0);
+
+  const latestPredictionRound = Math.max(0, ...parsedPredictions.map((row) => row.round || 0));
+  const targetRound = upcomingRound || latestPredictionRound;
+  const roundPlays = targetRound
+    ? parsedPredictions.filter((row) => row.round === targetRound)
+    : parsedPredictions;
+  const plays = (roundPlays.length ? roundPlays : parsedPredictions)
+    .sort((a, b) =>
+      (b.stake - a.stake) ||
+      (b.edgePct - a.edgePct) ||
+      (b.modelPct - a.modelPct)
+    );
+
+  return {
+    round: targetRound || latestPredictionRound || 0,
+    plays,
+  };
+}
+
+function buildPremiumBestBetAlertFingerprint(ctx: PremiumBestBetAlertContext) {
+  return [
+    `round:${ctx.round}`,
+    ...ctx.plays.map((play) => [
+      play.match,
+      play.selection,
+      play.side,
+      play.stake,
+      play.marketOdds.toFixed(3),
+      play.modelPct.toFixed(3),
+      play.edgePct.toFixed(3),
+    ].join("|")),
+  ].join("::");
+}
+
+function formatAlertPercent(value: number, decimals = 1) {
+  return Number.isFinite(value) ? `${value.toFixed(decimals)}%` : "—";
+}
+
+function formatAlertOdds(value: number) {
+  return value > 1 ? `$${value.toFixed(2)}` : "Live price";
+}
+
+function buildPremiumBestBetAlertHtml(ctx: PremiumBestBetAlertContext) {
+  const playCards = ctx.plays.map((play) => `
+        <div style="background:#16161D;border:1px solid #1E1E2E;margin-top:12px;padding:18px 18px;">
+          <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+            <tr>
+              <td style="vertical-align:top;padding-right:14px;">
+                <div style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:10px;line-height:1.2;color:#9CA3AF;font-weight:500;letter-spacing:0.12em;text-transform:uppercase;">${escapeHtml(play.match)}</div>
+                <div style="margin-top:8px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:20px;line-height:1.18;color:#ffffff;font-weight:600;letter-spacing:-0.02em;">${escapeHtml(publicNrlTeamName(play.selection))}</div>
+                <div style="margin-top:8px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:13px;line-height:1.6;color:#9CA3AF;">Projected score ${escapeHtml(play.projectedScore || "TBC")} · stake ${play.stake.toFixed(1)}u</div>
+              </td>
+              <td style="vertical-align:top;text-align:right;width:150px;">
+                <div style="display:inline-block;background:#111116;border:1px solid #1E1E2E;padding:10px 12px;text-align:left;">
+                  <div style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:9px;line-height:1;color:#9CA3AF;font-weight:500;letter-spacing:0.12em;text-transform:uppercase;">Model</div>
+                  <div style="margin-top:6px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:18px;line-height:1;color:#4ADE80;font-weight:600;">${formatAlertPercent(play.modelPct)}</div>
+                </div>
+                <div style="margin-top:8px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:13px;line-height:1.4;color:#ffffff;font-weight:600;">${formatAlertOdds(play.marketOdds)}</div>
+                <div style="margin-top:3px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:10px;line-height:1.2;color:#9CA3AF;font-weight:500;letter-spacing:0.10em;text-transform:uppercase;">Edge ${formatAlertPercent(play.edgePct, 2)}</div>
+              </td>
+            </tr>
+          </table>
+        </div>`).join("");
+
+  return rightEdgeEmailShell(
+    `${ctx.plays.length} premium best bet${ctx.plays.length === 1 ? "" : "s"} are live for Round ${ctx.round}.`,
+    "Premium Alert",
+    `
+        <div style="background:#111116;border:1px solid #1E1E2E;margin-top:24px;padding:28px 26px;">
+          <div style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:10px;line-height:1.2;color:#9CA3AF;font-weight:500;letter-spacing:0.12em;text-transform:uppercase;">Round ${ctx.round} premium card</div>
+          <div style="margin-top:14px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:30px;line-height:1.08;color:#ffffff;font-weight:600;letter-spacing:-0.02em;">Best bets are live.</div>
+          <div style="margin-top:18px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:15px;line-height:1.7;color:#9CA3AF;font-weight:400;">
+            The model has ${ctx.plays.length} qualifying premium play${ctx.plays.length === 1 ? "" : "s"} on the current card. Check live prices before acting, because markets can move quickly.
+          </div>
+          ${emailCtaHtml("https://www.rightedge.com.au/#best-bets", "Open Premium Plays ->")}
+        </div>
+        ${playCards}
+        <div style="background:#111116;border:1px solid #1E1E2E;margin-top:16px;padding:18px 20px;">
+          <div style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:12px;line-height:1.7;color:#9CA3AF;">This alert only sends when the premium card changes, so subscribers do not receive duplicate emails for the same set of plays.</div>
+        </div>`
+  );
+}
+
+async function runPremiumBestBetAlerts(opts: { dryRun?: boolean; force?: boolean; limit?: number; testMode?: boolean; testEmail?: string } = {}) {
+  const dryRun = opts.dryRun !== false;
+  const force = opts.force === true;
+  const testMode = opts.testMode !== false;
+  const testEmail = String(opts.testEmail || "elliott@woodbry.com").trim().toLowerCase();
+  const limit = Number.isInteger(opts.limit) && opts.limit! > 0 ? Math.min(opts.limit!, 1000) : null;
+  const ctx = await loadPremiumBestBetAlertContext();
+  const fingerprint = buildPremiumBestBetAlertFingerprint(ctx);
+  const lastAlert = parseKvValue<any>(await kv.get(PREMIUM_BEST_BET_ALERT_LOCK_KEY));
+
+  if (!ctx.plays.length) {
+    return {
+      success: true,
+      dryRun,
+      testMode,
+      skipped: true,
+      reason: "no_qualifying_premium_plays",
+      round: ctx.round,
+      playCount: 0,
+      recipientCount: 0,
+    };
+  }
+
+  if (!testMode && !force && lastAlert?.fingerprint === fingerprint) {
+    return {
+      success: true,
+      dryRun,
+      testMode,
+      skipped: true,
+      reason: "duplicate_card",
+      round: ctx.round,
+      playCount: ctx.plays.length,
+      recipientCount: Number(lastAlert?.recipientCount || 0),
+      lastSentAt: lastAlert?.sentAt || "",
+    };
+  }
+
+  const { recipients } = await loadBroadcastRecipients({ audience: "premium" });
+  const livePremiumEmails = [...new Set(recipients.map((recipient) => recipient.email).filter(Boolean))]
+    .slice(0, limit || undefined);
+  const emailsToSend = testMode
+    ? [testEmail].filter((email) => email.includes("@"))
+    : livePremiumEmails;
+  const subject = `RightEdge Premium: ${ctx.plays.length} best bet${ctx.plays.length === 1 ? "" : "s"} live for Round ${ctx.round}`;
+  const htmlContent = buildPremiumBestBetAlertHtml(ctx);
+
+  if (dryRun) {
+    return {
+      success: true,
+      dryRun: true,
+      testMode,
+      skipped: false,
+      round: ctx.round,
+      playCount: ctx.plays.length,
+      recipientCount: testMode ? 1 : livePremiumEmails.length,
+      testRecipient: testMode ? testEmail : "",
+      subject,
+      fingerprint,
+      plays: ctx.plays,
+    };
+  }
+
+  if (!emailsToSend.length) {
+    return {
+      success: true,
+      dryRun: false,
+      testMode,
+      skipped: true,
+      reason: testMode ? "no_test_recipient" : "no_premium_recipients",
+      round: ctx.round,
+      playCount: ctx.plays.length,
+      recipientCount: 0,
+    };
+  }
+
+  const resend = getResendClient();
+  const fromEmail = getFromEmail();
+  const BATCH_SIZE = 100;
+  const results = [];
+
+  for (let i = 0; i < emailsToSend.length; i += BATCH_SIZE) {
+    const batch = emailsToSend.slice(i, i + BATCH_SIZE);
+    const emailBatch = batch.map((email) => ({
+      from: fromEmail,
+      to: [email],
+      subject,
+      html: htmlContent,
+    }));
+
+    const { data, error } = await resend.batch.send(emailBatch);
+    if (error) {
+      throw new Error(`Premium best bet alert batch failed: ${JSON.stringify(error)}`);
+    }
+    results.push(data);
+  }
+
+  const sentAt = new Date().toISOString();
+  if (!testMode) {
+    await kv.set(PREMIUM_BEST_BET_ALERT_LOCK_KEY, JSON.stringify({
+      fingerprint,
+      round: ctx.round,
+      playCount: ctx.plays.length,
+      recipientCount: emailsToSend.length,
+      sentAt,
+      subject,
+      testMode,
+    }));
+    await kv.set(`broadcast:${Date.now()}`, JSON.stringify({
+      subject,
+      htmlContent,
+      sentAt,
+      recipients: emailsToSend.length,
+      source: "auto:premium-best-bets",
+      audience: "premium",
+      team: "",
+    }));
+  }
+
+  return {
+    success: true,
+    dryRun: false,
+    testMode,
+    skipped: false,
+    round: ctx.round,
+    playCount: ctx.plays.length,
+    recipientCount: emailsToSend.length,
+    subject,
+    fingerprint,
+    results,
+  };
+}
+
 app.post("/confirm-checkout-session", async (c) => {
   try {
     const body = await c.req.json();
@@ -3439,6 +3772,40 @@ app.post("/admin/broadcast", async (c) => {
   } catch (err: any) {
     console.error("[AdminEmail] Server error:", err);
     return c.json({ error: "Internal server error", message: err.message }, 500);
+  }
+});
+
+app.post("/admin/premium-best-bet-alerts", async (c) => {
+  try {
+    const authHeader = c.req.header("Authorization");
+    if (!authHeader) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+
+    const body = await c.req.json().catch(() => ({}));
+    const dryRun = body?.dryRun !== false;
+    const testMode = body?.testMode !== false;
+    const liveEnabled = Deno.env.get("PREMIUM_BEST_BET_ALERTS_LIVE_ENABLED") === "true";
+
+    if (!testMode && (!liveEnabled || body?.confirm !== "SEND_PREMIUM_BEST_BET_ALERTS_LIVE")) {
+      return c.json({
+        error: "Live premium best-bet alerts are disabled. Use testMode:true for private testing.",
+        liveEnabled,
+      }, 403);
+    }
+
+    const result = await runPremiumBestBetAlerts({
+      dryRun,
+      testMode,
+      force: body?.force === true,
+      limit: Number(body?.limit) || undefined,
+      testEmail: body?.testEmail || "elliott@woodbry.com",
+    });
+
+    return c.json(result);
+  } catch (err: any) {
+    console.error("[admin/premium-best-bet-alerts] error:", err);
+    return c.json({ error: "Internal server error", message: err?.message || "unknown" }, 500);
   }
 });
 
