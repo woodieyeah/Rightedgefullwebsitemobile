@@ -5328,6 +5328,7 @@ function getBestPremiumMarketPlayForMatch(
   const projectedHomeMargin = row.predictedHomeScore - row.predictedAwayScore;
   const predictedWinner = normalizeTeamName(row.predictedWinner);
   const winnerWinPct = getPredictedWinnerWinPct(row);
+  const sheetWinnerMarketOdds = getPredictedWinnerMarketOdds(row);
 
   Object.entries(matchMarkets).forEach(([bookKey, bookData]) => {
     const bookmaker = displayBookmakerName(bookKey);
@@ -5400,8 +5401,28 @@ function getBestPremiumMarketPlayForMatch(
     });
   });
 
+  if (winnerWinPct >= 55 && sheetWinnerMarketOdds >= 1.35) {
+    const bestLiveH2hCandidate = candidates
+      .filter((candidate) => candidate.type === "Head 2 Head")
+      .sort((a, b) => b.odds - a.odds)[0];
+
+    if (!bestLiveH2hCandidate || sheetWinnerMarketOdds > bestLiveH2hCandidate.odds) {
+      candidates.push({
+        id: `${row.match}-sheet-best-h2h`,
+        row,
+        type: "Head 2 Head",
+        selection: `${row.predictedWinner} head-to-head`,
+        bookmaker: "Best available",
+        odds: sheetWinnerMarketOdds,
+        modelPct: winnerWinPct,
+        modelEdge: winnerWinPct - getImpliedWinPctFromOdds(sheetWinnerMarketOdds),
+        projectedValue: Math.abs(projectedHomeMargin),
+      });
+    }
+  }
+
   if (!candidates.length) {
-    const odds = getPredictedWinnerMarketOdds(row);
+    const odds = sheetWinnerMarketOdds;
     if (winnerWinPct >= 55 && odds >= 1.35) {
       return {
         id: `${row.match}-fallback-h2h`,
