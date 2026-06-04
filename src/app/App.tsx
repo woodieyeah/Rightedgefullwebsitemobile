@@ -5,6 +5,7 @@ import {
   publicAnonKey,
 } from "../../utils/supabase/info";
 import { AdminDashboard } from "./components/AdminDashboard";
+import { capturePostHogEvent, identifyPostHogUser } from "../lib/posthog";
 import {
   Activity,
   ArrowRight,
@@ -8037,6 +8038,16 @@ export default function App() {
         is_subscriber: hasPaidAccess(),
         ...data
       };
+
+      if (visitorEmail) {
+        identifyPostHogUser(visitorEmail, {
+          tier: authState.tier,
+          is_subscriber: hasPaidAccess(),
+          visitor_id: visitorId,
+        });
+      }
+
+      capturePostHogEvent(type, payload);
 
       try {
         await fetch(`/api/track-event`, {

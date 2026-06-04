@@ -1,7 +1,18 @@
 
-  import { createRoot } from "react-dom/client";
-  import App from "./app/App.tsx";
-  import "./styles/index.css";
+import { createRoot } from "react-dom/client";
+import { PostHogProvider } from "posthog-js/react";
+import App from "./app/App.tsx";
+import { initPostHog, isPostHogEnabled, posthog } from "./lib/posthog.ts";
+import "./styles/index.css";
 
-  createRoot(document.getElementById("root")!).render(<App />);
-  
+initPostHog();
+
+const app = <App />;
+
+createRoot(document.getElementById("root")!).render(
+  isPostHogEnabled() ? (
+    <PostHogProvider client={posthog}>{app}</PostHogProvider>
+  ) : (
+    app
+  ),
+);
