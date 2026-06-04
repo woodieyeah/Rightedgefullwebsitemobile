@@ -1315,7 +1315,7 @@ function parsePredictions(
       const awayTeam = normalizeTeamName(
         getValue(row, ["Away Team", "Away"]),
       );
-      const predictedWinner = normalizeTeamName(
+      const sheetPredictedWinner = normalizeTeamName(
         getValue(row, [
           "Predicted Winner",
           "Winner",
@@ -1341,6 +1341,12 @@ function parsePredictions(
           "Projected Away Score",
         ]),
       );
+      const predictedWinner =
+        predictedHomeScore > predictedAwayScore
+          ? homeTeam
+          : predictedAwayScore > predictedHomeScore
+            ? awayTeam
+            : sheetPredictedWinner;
 
       const bestBetCell = getValue(row, [
         "Best Value Bet",

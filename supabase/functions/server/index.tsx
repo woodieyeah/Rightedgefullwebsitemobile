@@ -947,9 +947,14 @@ async function loadNurtureRoundContext() {
     .map((row) => {
       const homeTeam = shortNrlTeamName(getSheetValue(row, ["Home Team", "Home"]));
       const awayTeam = shortNrlTeamName(getSheetValue(row, ["Away Team", "Away"]));
-      const predictedWinner = shortNrlTeamName(getSheetValue(row, ["Predicted Winner", "Winner", "Projected Winner"]));
+      const sheetPredictedWinner = shortNrlTeamName(getSheetValue(row, ["Predicted Winner", "Winner", "Projected Winner"]));
       const homeScore = toSheetNumber(getSheetValue(row, ["Predicted Home Score", "Home Score", "Projected Home Score"]));
       const awayScore = toSheetNumber(getSheetValue(row, ["Predicted Away Score", "Away Score", "Projected Away Score"]));
+      const predictedWinner = homeScore > awayScore
+        ? homeTeam
+        : awayScore > homeScore
+          ? awayTeam
+          : sheetPredictedWinner;
       const homeModelOdds = toSheetNumber(getSheetValue(row, ["Home Implied Odds", "Home Model Odds", "Model Home Odds"]));
       const awayModelOdds = toSheetNumber(getSheetValue(row, ["Away Implied Odds", "Away Model Odds", "Model Away Odds"]));
       const winnerModelOdds = predictedWinner === homeTeam ? homeModelOdds : awayModelOdds;
