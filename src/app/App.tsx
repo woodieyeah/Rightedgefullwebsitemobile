@@ -5,6 +5,7 @@ import {
   publicAnonKey,
 } from "../../utils/supabase/info";
 import { AdminDashboard } from "./components/AdminDashboard";
+import { trackLinkedInConversion } from "../lib/linkedin";
 import { capturePostHogEvent, identifyPostHogUser } from "../lib/posthog";
 import {
   Activity,
@@ -8048,6 +8049,7 @@ export default function App() {
       }
 
       capturePostHogEvent(type, payload);
+      trackLinkedInConversion(type);
 
       try {
         await fetch(`/api/track-event`, {
