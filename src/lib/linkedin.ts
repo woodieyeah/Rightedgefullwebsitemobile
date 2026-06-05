@@ -5,7 +5,9 @@ declare global {
   }
 }
 
-const linkedInPartnerId = import.meta.env.VITE_LINKEDIN_PARTNER_ID;
+const LINKEDIN_PARTNER_ID = "9485236";
+
+const linkedInPartnerId = import.meta.env.VITE_LINKEDIN_PARTNER_ID || LINKEDIN_PARTNER_ID;
 
 const conversionIds: Record<string, number | undefined> = {
   unlock_click: parseConversionId(import.meta.env.VITE_LINKEDIN_UNLOCK_CLICK_CONVERSION_ID),
