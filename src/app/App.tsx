@@ -1052,6 +1052,13 @@ function getFixtureStatusBadge(fixture?: FixtureRow | null, now = Date.now()) {
   };
 }
 
+function isFixtureCompleted(fixture?: FixtureRow | null, now = Date.now()) {
+  const kickoff = getFixtureUtcKickoffMs(fixture);
+  return Number.isFinite(kickoff) &&
+    kickoff !== Number.MAX_SAFE_INTEGER &&
+    now - kickoff > 3 * 60 * 60 * 1000;
+}
+
 function useMinuteNow() {
   const [now, setNow] = useState(() => Date.now());
 
@@ -3602,6 +3609,7 @@ function FreeBetrMarketsPanel({
   const hasH2hMarkets = getFreeBetrH2hOutcomes(row, betrMarkets).length > 0;
   const hasLineMarkets = getFreeBetrLineOutcomes(row, betrMarkets).length > 0;
   const hasTotalMarkets = getFreeBetrTotalOutcomes(row, betrMarkets).length > 0;
+  const matchCompleted = isFixtureCompleted(row.fixture);
 
   const marketAvailability =
     activeMarket === "h2h"
@@ -3628,6 +3636,10 @@ function FreeBetrMarketsPanel({
             detail:
               "Open the live board at Betr to check whether the market has just been posted.",
           };
+  const completedCopy = {
+    title: "Match completed",
+    detail: "Live Betr markets are closed for this fixture.",
+  };
 
   return (
     <div className="mt-3">
@@ -3733,36 +3745,38 @@ function FreeBetrMarketsPanel({
             {!marketAvailability && (
               <div className="border border-[#1E1E2E] bg-[#16161D] px-4 py-4">
                 <div className="text-[10px] font-medium uppercase tracking-[0.18em] text-[#9CA3AF] mb-2">
-                  Live status
+                  {matchCompleted ? "Market status" : "Live status"}
                 </div>
                 <div className="text-sm font-semibold text-white uppercase">
-                  {unavailableCopy.title}
+                  {matchCompleted ? completedCopy.title : unavailableCopy.title}
                 </div>
                 <div className="mt-2 text-[11px] leading-relaxed text-[#9CA3AF]">
-                  {unavailableCopy.detail}
+                  {matchCompleted ? completedCopy.detail : unavailableCopy.detail}
                 </div>
               </div>
             )}
-            <BetrAffiliateLink
-              payload={buildFreeBetrPayload(row, activeMarket, "markets")}
-              className="re-betr-button group flex min-h-[92px] items-center justify-between gap-3 border border-[#093AD3] bg-[#093AD3] p-4 transition hover:opacity-90"
-            >
-              <div className="min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  <BetrLogoMark className="h-7 w-7" />
-                  <span className="text-[10px] font-medium uppercase tracking-widest text-white">
-                    Betr
-                  </span>
+            {!matchCompleted && (
+              <BetrAffiliateLink
+                payload={buildFreeBetrPayload(row, activeMarket, "markets")}
+                className="re-betr-button group flex min-h-[92px] items-center justify-between gap-3 border border-[#093AD3] bg-[#093AD3] p-4 transition hover:opacity-90"
+              >
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <BetrLogoMark className="h-7 w-7" />
+                    <span className="text-[10px] font-medium uppercase tracking-widest text-white">
+                      Betr
+                    </span>
+                  </div>
+                  <div className="text-sm font-semibold text-white uppercase">
+                    Back at Betr
+                  </div>
+                  <div className="mt-1 text-[9px] font-medium uppercase tracking-widest text-white/70">
+                    {marketAvailability ? "View live markets" : "Open live board"}
+                  </div>
                 </div>
-                <div className="text-sm font-semibold text-white uppercase">
-                  Back at Betr
-                </div>
-                <div className="mt-1 text-[9px] font-medium uppercase tracking-widest text-white/70">
-                  {marketAvailability ? "View live markets" : "Open live board"}
-                </div>
-              </div>
-              <ArrowUpRight className="h-5 w-5 shrink-0 text-white/80 transition group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
-            </BetrAffiliateLink>
+                <ArrowUpRight className="h-5 w-5 shrink-0 text-white/80 transition group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+              </BetrAffiliateLink>
+            )}
           </div>
         )}
         {isPremiumLockedMarket && !isLoadingOdds && (
