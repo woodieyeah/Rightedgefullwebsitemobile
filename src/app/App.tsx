@@ -5596,10 +5596,12 @@ function PremiumMarketPlayCard({ play, now }: { play: PremiumMarketPlay; now: nu
 function BestBetsPage({
   data,
   onRequestAccess,
+  isPremium = false,
   isAdmin = false,
 }: {
   data: DashboardData;
   onRequestAccess: (targetHash?: string) => void;
+  isPremium?: boolean;
   isAdmin?: boolean;
 }) {
   const [marketMap, setMarketMap] = useState<SgmMarketMap>({});
@@ -5628,9 +5630,10 @@ function BestBetsPage({
     };
   }, []);
 
+  const canViewStartedPremiumPlays = isPremium || isAdmin;
   const matchReads = useMemo(
-    () => buildPremiumMarketPlays(data, marketMap, now, isAdmin).slice(0, isAdmin ? 50 : 8),
-    [data, marketMap, now, isAdmin],
+    () => buildPremiumMarketPlays(data, marketMap, now, canViewStartedPremiumPlays).slice(0, isAdmin ? 50 : 8),
+    [data, marketMap, now, canViewStartedPremiumPlays, isAdmin],
   );
 
   const latestTryScorerRound = Math.max(
@@ -5657,7 +5660,7 @@ function BestBetsPage({
     .flatMap((players) => {
       const keys = getMatchBestBetKeys(players);
       return players
-        .filter((row) => isAdmin || !isTryScorerMatchLive(row))
+        .filter((row) => canViewStartedPremiumPlays || !isTryScorerMatchLive(row))
         .filter((row) => keys.has(getTryScorerKey(row)))
         .map((row) => ({
           row,
@@ -5678,7 +5681,7 @@ function BestBetsPage({
     })
     .slice(0, isAdmin ? 50 : 8);
 
-  if (!hasPaidAccess() && !isAdmin) {
+  if (!isPremium && !isAdmin) {
     return (
       <div className="flex flex-col gap-6 md:gap-8">
         <GlassCard className="p-8 md:p-12 text-center !border-[#FF2E63] !shadow-[8px_8px_0_0_#FF2E63] relative overflow-hidden">
@@ -6102,10 +6105,12 @@ function OriginPage({
 function TryScorersPage({
   data,
   onRequestAccess,
+  isPremium = false,
   isAdmin = false,
 }: {
   data: DashboardData;
   onRequestAccess: (targetHash?: string) => void;
+  isPremium?: boolean;
   isAdmin?: boolean;
 }) {
   const availableRounds = useMemo(
@@ -6156,7 +6161,7 @@ function TryScorersPage({
 
   const matchCount = Object.keys(matchGroups).length;
 
-  if (!hasPaidAccess() && !isAdmin) {
+  if (!isPremium && !isAdmin) {
     return (
       <div className="flex flex-col gap-6 md:gap-8">
         <GlassCard className="p-8 md:p-12 text-center relative overflow-hidden">
@@ -6260,8 +6265,8 @@ function TryScorersPage({
                 </div>
 
                 {/* Desktop */}
-                <div className="hidden md:block">
-                  <table className="w-full text-left border-collapse">
+                <div className="hidden md:block overflow-x-auto">
+                  <table className="w-full min-w-[920px] text-left border-collapse">
                     <thead>
                       <tr className="border-b border-white/10">
                         {["Player", "Round", "Model %", "Market %", "Best Odds", "Bookmaker", "Signal"].map((h) => (
@@ -6296,7 +6301,7 @@ function TryScorersPage({
                               ${row.bestOdds.toFixed(2)}
                             </div>
                           </td>
-                          <td className="py-4 px-3 text-xs font-bold text-[#FFEA00] uppercase tracking-wider">
+                          <td className="py-4 px-3 text-xs font-bold text-[#FFEA00] uppercase tracking-wider min-w-[150px]">
                             <AffiliateMarketButton
                               payload="rightedge_try_scorer"
                               bookmaker={row.bookmaker}
@@ -7555,6 +7560,7 @@ function AppDashboard({
                 <BestBetsPage
                   data={data}
                   onRequestAccess={onRequestAccess}
+                  isPremium={isPremium}
                   isAdmin={isAdmin}
                 />
               )}
@@ -7575,6 +7581,7 @@ function AppDashboard({
                 <TryScorersPage
                   data={data}
                   onRequestAccess={onRequestAccess}
+                  isPremium={isPremium}
                   isAdmin={isAdmin}
                 />
               )}
