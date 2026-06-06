@@ -3638,7 +3638,6 @@ function FreeBetrMarketsPanel({
           };
   const completedCopy = {
     title: "Match completed",
-    detail: "Live Betr markets are closed for this fixture.",
   };
 
   return (
@@ -3750,9 +3749,11 @@ function FreeBetrMarketsPanel({
                 <div className="text-sm font-semibold text-white uppercase">
                   {matchCompleted ? completedCopy.title : unavailableCopy.title}
                 </div>
-                <div className="mt-2 text-[11px] leading-relaxed text-[#9CA3AF]">
-                  {matchCompleted ? completedCopy.detail : unavailableCopy.detail}
-                </div>
+                {!matchCompleted && (
+                  <div className="mt-2 text-[11px] leading-relaxed text-[#9CA3AF]">
+                    {unavailableCopy.detail}
+                  </div>
+                )}
               </div>
             )}
             {!matchCompleted && (
