@@ -5215,6 +5215,76 @@ function PredictionsPage({
           const homeColors = getTeamColors(row.homeTeam);
           const awayColors = getTeamColors(row.awayTeam);
           const fixtureStatus = getFixtureStatusBadge(row.fixture, now);
+          const matchCompleted = isFixtureCompleted(row.fixture, now);
+
+          if (matchCompleted) {
+            return (
+              <GlassCard
+                key={i}
+                className="p-3 md:p-4 relative overflow-hidden border-l-4 border-l-white/15"
+              >
+                <div className="flex flex-col gap-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-[9px] md:text-[10px] uppercase font-medium tracking-widest text-[#6B7280]">
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                      <span>
+                        {row.fixture
+                          ? `${row.fixture.day} ${row.fixture.dateLabel} @ ${row.fixture.aedt} AEST`
+                          : "TBC"}
+                      </span>
+                      <span className={`inline-flex shrink-0 border px-2 py-0.5 text-[8px] font-black uppercase tracking-widest ${fixtureStatus.className}`}>
+                        {fixtureStatus.label}
+                      </span>
+                    </div>
+                    <span className="truncate">
+                      {row.fixture?.stadium || "Venue TBC"}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-2">
+                    <div className="relative grid grid-cols-[minmax(0,1fr)_minmax(56px,auto)] items-center gap-2 overflow-hidden border border-[#1E1E2E] bg-[#111116] px-2.5 py-2">
+                      <span
+                        className="absolute left-0 top-0 h-full w-1"
+                        style={{ backgroundColor: homeColors.secondary }}
+                      />
+                      <div className="flex min-w-0 items-center gap-2 pl-1">
+                        <TeamLogo teamName={row.homeTeam} className="h-7 w-7 rounded-sm" />
+                        <span className={`min-w-0 truncate text-sm md:text-base font-black uppercase tracking-tight ${
+                          hasPredictedWinner && !homeIsPredictedWinner ? "text-white/50" : "text-white"
+                        }`}>
+                          {row.homeTeam}
+                        </span>
+                      </div>
+                      <div className={`border border-[#1E1E2E] bg-[#16161D] px-2 py-1 text-center text-lg md:text-xl font-black tabular-nums ${
+                        hasPredictedWinner && !homeIsPredictedWinner ? "text-white/50" : "text-white"
+                      }`}>
+                        {projectedHomeScore ?? "—"}
+                      </div>
+                    </div>
+
+                    <div className="relative grid grid-cols-[minmax(0,1fr)_minmax(56px,auto)] items-center gap-2 overflow-hidden border border-[#1E1E2E] bg-[#111116] px-2.5 py-2">
+                      <span
+                        className="absolute left-0 top-0 h-full w-1"
+                        style={{ backgroundColor: awayColors.secondary }}
+                      />
+                      <div className="flex min-w-0 items-center gap-2 pl-1">
+                        <TeamLogo teamName={row.awayTeam} className="h-7 w-7 rounded-sm" />
+                        <span className={`min-w-0 truncate text-sm md:text-base font-black uppercase tracking-tight ${
+                          hasPredictedWinner && !awayIsPredictedWinner ? "text-white/50" : "text-white"
+                        }`}>
+                          {row.awayTeam}
+                        </span>
+                      </div>
+                      <div className={`border border-[#1E1E2E] bg-[#16161D] px-2 py-1 text-center text-lg md:text-xl font-black tabular-nums ${
+                        hasPredictedWinner && !awayIsPredictedWinner ? "text-white/50" : "text-white"
+                      }`}>
+                        {projectedAwayScore ?? "—"}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </GlassCard>
+            );
+          }
 
           return (
             <GlassCard
