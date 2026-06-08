@@ -279,6 +279,149 @@
     opacity: 0.9;
   }
 
+  #root .rightedge-admin-editorial-theme {
+    --background: #E7E7E4;
+    --foreground: #0A0A0A;
+    --card: #F1F1EF;
+    --card-foreground: #0A0A0A;
+    --popover: #F6F6F3;
+    --popover-foreground: #0A0A0A;
+    --primary: #0A0A0A;
+    --primary-foreground: #FFFFFF;
+    --secondary: #DADAD6;
+    --secondary-foreground: #0A0A0A;
+    --muted: #DADAD6;
+    --muted-foreground: #6A6A65;
+    --accent: #DADAD6;
+    --accent-foreground: #0A0A0A;
+    --border: #C7C7C2;
+    --input: #C7C7C2;
+    --input-background: #F6F6F3;
+    --switch-background: #C7C7C2;
+    --ring: #6A6A65;
+    background: #E7E7E4 !important;
+    color: #0A0A0A !important;
+  }
+
+  #root .rightedge-admin-editorial-theme [class*="border-[#FFEA00]"],
+  #root .rightedge-admin-editorial-theme [class*="border-[#FFD600]"],
+  #root .rightedge-admin-editorial-theme [class*="border-[#FF2E63]"],
+  #root .rightedge-admin-editorial-theme [class*="border-[#FF2F7D]"],
+  #root .rightedge-admin-editorial-theme [class*="border-[#FF3366]"],
+  #root .rightedge-admin-editorial-theme [class*="border-[#0047FF]"],
+  #root .rightedge-admin-editorial-theme [class*="border-l-[#FFEA00]"],
+  #root .rightedge-admin-editorial-theme [class*="border-l-[#FF2E63]"],
+  #root .rightedge-admin-editorial-theme [class*="border-l-[#0047FF]"],
+  #root .rightedge-admin-editorial-theme [class*="border-t-8 border-[#0047FF]"],
+  #root .rightedge-admin-editorial-theme [class*="border-[#00E676]"],
+  #root .rightedge-admin-editorial-theme [class*="border-[#1E1E2E]"],
+  #root .rightedge-admin-editorial-theme [class*="border-[#2A2A3A]"],
+  #root .rightedge-admin-editorial-theme [class*="border-white/"],
+  #root .rightedge-admin-editorial-theme [class*="border-black/"] {
+    border-color: #C7C7C2 !important;
+  }
+
+  #root .rightedge-admin-editorial-theme [class*="bg-[#0A0A0F]"],
+  #root .rightedge-admin-editorial-theme [class*="bg-[#08080C]"],
+  #root .rightedge-admin-editorial-theme [class*="bg-[#000000]"],
+  #root .rightedge-admin-editorial-theme [class*="bg-black/"] {
+    background-color: #E7E7E4 !important;
+  }
+
+  #root .rightedge-admin-editorial-theme [class*="bg-[#FFEA00]"],
+  #root .rightedge-admin-editorial-theme [class*="bg-[#FFD600]"],
+  #root .rightedge-admin-editorial-theme [class*="bg-[#FF2E63]"],
+  #root .rightedge-admin-editorial-theme [class*="bg-[#FF2F7D]"],
+  #root .rightedge-admin-editorial-theme [class*="bg-[#FF3366]"],
+  #root .rightedge-admin-editorial-theme [class*="bg-[#0047FF]"],
+  #root .rightedge-admin-editorial-theme [class*="bg-[#003BCC]"],
+  #root .rightedge-admin-editorial-theme [class*="bg-[#1E232B]"],
+  #root .rightedge-admin-editorial-theme [class*="bg-[#0A0C10]"],
+  #root .rightedge-admin-editorial-theme [class*="bg-[#0B0D10]"],
+  #root .rightedge-admin-editorial-theme [class*="bg-[#111317]"] {
+    background-color: #F1F1EF !important;
+  }
+
+  #root .rightedge-admin-editorial-theme [class*="bg-[#111116]"],
+  #root .rightedge-admin-editorial-theme [class*="bg-[#16161D]"] {
+    background-color: #F6F6F3 !important;
+  }
+
+  #root .rightedge-admin-editorial-theme [class*="bg-[#1A1D24]"] {
+    background-color: #DADAD6 !important;
+  }
+
+  #root .rightedge-admin-editorial-theme .bg-white,
+  #root .rightedge-admin-editorial-theme [class*="bg-[#FFFFFF]"] {
+    background-color: #FFFFFF !important;
+  }
+
+  #root .rightedge-admin-editorial-theme .text-white,
+  #root .rightedge-admin-editorial-theme [class*="text-white"],
+  #root .rightedge-admin-editorial-theme [class*="text-[#FFEA00]"],
+  #root .rightedge-admin-editorial-theme [class*="text-[#FFD600]"],
+  #root .rightedge-admin-editorial-theme [class*="text-[#0047FF]"],
+  #root .rightedge-admin-editorial-theme [class*="text-[#093AD3]"] {
+    color: #0A0A0A !important;
+  }
+
+  #root .rightedge-admin-editorial-theme [class*="text-[#9CA3AF]"],
+  #root .rightedge-admin-editorial-theme [class*="text-[#6B7280]"],
+  #root .rightedge-admin-editorial-theme [class*="text-white/70"],
+  #root .rightedge-admin-editorial-theme [class*="text-white/60"],
+  #root .rightedge-admin-editorial-theme [class*="text-white/50"],
+  #root .rightedge-admin-editorial-theme [class*="text-white/45"] {
+    color: #6A6A65 !important;
+  }
+
+  #root .rightedge-admin-editorial-theme [class*="text-white/40"],
+  #root .rightedge-admin-editorial-theme [class*="text-white/35"],
+  #root .rightedge-admin-editorial-theme [class*="text-white/30"],
+  #root .rightedge-admin-editorial-theme [class*="text-white/20"] {
+    color: #9D9D96 !important;
+  }
+
+  #root .rightedge-admin-editorial-theme [class*="text-[#FF2E63]"],
+  #root .rightedge-admin-editorial-theme [class*="text-[#FF2F7D]"],
+  #root .rightedge-admin-editorial-theme [class*="text-[#FF3366]"] {
+    color: #B4232A !important;
+  }
+
+  #root .rightedge-admin-editorial-theme [class*="text-[#00E676]"] {
+    color: #147A42 !important;
+  }
+
+  #root .rightedge-admin-editorial-theme [class*="bg-[#00E676]"] {
+    background-color: #147A42 !important;
+    color: #FFFFFF !important;
+  }
+
+  #root .rightedge-admin-editorial-theme .re-primary-cta {
+    background: #0A0A0A !important;
+    color: #FFFFFF !important;
+    border-color: #0A0A0A !important;
+  }
+
+  #root .rightedge-admin-editorial-theme .re-secondary-cta {
+    background: transparent !important;
+    color: #0A0A0A !important;
+    border-color: #C7C7C2 !important;
+  }
+
+  #root .rightedge-admin-editorial-theme .re-betr-button,
+  #root .rightedge-admin-editorial-theme [class*="bg-[#093AD3]"] {
+    background: #093AD3 !important;
+    border-color: #093AD3 !important;
+    color: #FFFFFF !important;
+  }
+
+  #root .rightedge-admin-editorial-theme .re-betr-button *,
+  #root .rightedge-admin-editorial-theme [class*="bg-[#093AD3]"] *,
+  #root .rightedge-admin-editorial-theme [class*="bg-[#0047FF]"] *,
+  #root .rightedge-admin-editorial-theme [class*="bg-[#003BCC]"] * {
+    color: #FFFFFF !important;
+  }
+
   #root .try-scorer-ticker-track {
     animation: rightedge-ticker-scroll 58s linear infinite;
   }

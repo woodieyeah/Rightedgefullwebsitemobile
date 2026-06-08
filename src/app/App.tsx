@@ -9254,7 +9254,9 @@ export default function App() {
     "inLanguage": "en-AU"
   })}</script>
 </Helmet>
-    <div className="min-h-screen bg-[#0A0A0F] text-white relative overflow-x-clip font-sans">
+    <div className={`min-h-screen bg-background text-foreground relative overflow-x-clip font-sans ${
+      isAdmin || authState.email === "elliott@woodbry.com" ? "rightedge-admin-editorial-theme" : ""
+    }`}>
       <div className="absolute inset-0 pointer-events-none" />
 
       <div
