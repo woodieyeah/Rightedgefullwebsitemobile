@@ -5649,14 +5649,16 @@ function PredictionsPage({
                       </div>
                     </div>
                   </div>
-                  <MatchPremiumSignalStrip
-                    matchCompleted={matchCompleted}
-                    isPremium={isPremium}
-                    play={premiumMarketPlay}
-                    settledBet={settledPremiumBet}
-                    tryScorerSignals={tryScorerSignals}
-                    onRequestAccess={onRequestAccess}
-                  />
+                  {(matchCompleted || isPremium) && (
+                    <MatchPremiumSignalStrip
+                      matchCompleted={matchCompleted}
+                      isPremium={isPremium}
+                      play={premiumMarketPlay}
+                      settledBet={settledPremiumBet}
+                      tryScorerSignals={tryScorerSignals}
+                      onRequestAccess={onRequestAccess}
+                    />
+                  )}
                 </div>
               </GlassCard>
             );
@@ -5755,14 +5757,16 @@ function PredictionsPage({
                         </div>
                       </div>
                     </div>
-                    <MatchPremiumSignalStrip
-                      matchCompleted={matchCompleted}
-                      isPremium={isPremium}
-                      play={premiumMarketPlay}
-                      settledBet={settledPremiumBet}
-                      tryScorerSignals={tryScorerSignals}
-                      onRequestAccess={onRequestAccess}
-                    />
+                    {(matchCompleted || isPremium) && (
+                      <MatchPremiumSignalStrip
+                        matchCompleted={matchCompleted}
+                        isPremium={isPremium}
+                        play={premiumMarketPlay}
+                        settledBet={settledPremiumBet}
+                        tryScorerSignals={tryScorerSignals}
+                        onRequestAccess={onRequestAccess}
+                      />
+                    )}
                     <FreeBetrMarketsPanel
                       row={row}
                       isPremium={isPremium}
