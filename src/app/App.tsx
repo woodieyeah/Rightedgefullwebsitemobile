@@ -5626,14 +5626,6 @@ function PredictionsPage({
           const tryScorerSignals = getTryScorerSignalsForPrediction(data, row);
           const proofMatchPlays = getRoundProofMatchPlaysForPrediction(row);
           const proofTryScorerHits = getRoundProofTryScorerHitsForPrediction(row);
-          const cardStatus =
-            matchCompleted &&
-            (proofMatchPlays[0]?.result === "Hit" || proofMatchPlays[0]?.result === "Miss")
-              ? {
-                  label: proofMatchPlays[0].result,
-                  className: getProofResultClass(proofMatchPlays[0].result),
-                }
-              : fixtureStatus;
 
           if (matchCompleted) {
             return (
@@ -5649,8 +5641,8 @@ function PredictionsPage({
                           ? `${row.fixture.day} ${row.fixture.dateLabel} @ ${row.fixture.aedt} AEST`
                           : "TBC"}
                       </span>
-                      <span className={`inline-flex shrink-0 border px-2 py-0.5 text-[8px] font-black uppercase tracking-widest ${cardStatus.className}`}>
-                        {cardStatus.label}
+                      <span className={`inline-flex shrink-0 border px-2 py-0.5 text-[8px] font-black uppercase tracking-widest ${fixtureStatus.className}`}>
+                        {fixtureStatus.label}
                       </span>
                     </div>
                     <span className="truncate">
@@ -5729,8 +5721,8 @@ function PredictionsPage({
                           ? `${row.fixture.day} ${row.fixture.dateLabel} @ ${row.fixture.aedt} AEST`
                           : "TBC"}
                       </span>
-                      <span className={`inline-flex shrink-0 border px-2 py-0.5 text-[8px] font-black uppercase tracking-widest ${cardStatus.className}`}>
-                        {cardStatus.label}
+                      <span className={`inline-flex shrink-0 border px-2 py-0.5 text-[8px] font-black uppercase tracking-widest ${fixtureStatus.className}`}>
+                        {fixtureStatus.label}
                       </span>
                     </div>
                     <span className="text-[#6B7280]">
@@ -5882,11 +5874,17 @@ function MatchPremiumSignalStrip({
   const scorerLabel = hasTryScorers
     ? tryScorerSignals.map(({ row }) => row.player).join(" / ")
     : "Try scorer signals";
-  const matchPlayLabel = settledBet
-    ? `${settledBet.selection || settledBet.side || "Premium play"} ${settledBet.oddsTaken ? `@ $${settledBet.oddsTaken.toFixed(2)}` : ""}`.trim()
-    : play
-      ? `${play.selection} ${play.odds ? `@ $${play.odds.toFixed(2)}` : ""}`.trim()
-      : "Premium match play";
+  const proofMatchPlay = proofMatchPlays[0] || null;
+  const proofMatchPlaySelection = proofMatchPlay?.selection
+    .replace(/\bhead-to-head\b/i, "H2H")
+    .trim();
+  const matchPlayLabel = proofMatchPlay
+    ? `${proofMatchPlaySelection}${proofMatchPlay.odds ? ` @ $${proofMatchPlay.odds.toFixed(2)}` : ""}`.trim()
+    : settledBet
+      ? `${settledBet.selection || settledBet.side || "Premium play"} ${settledBet.oddsTaken ? `@ $${settledBet.oddsTaken.toFixed(2)}` : ""}`.trim()
+      : play
+        ? `${play.selection} ${play.odds ? `@ $${play.odds.toFixed(2)}` : ""}`.trim()
+        : "Premium match play";
 
   if (matchCompleted) {
     const fallbackMatchPlay = settledBet
@@ -5949,11 +5947,8 @@ function MatchPremiumSignalStrip({
         {proofTryScorerHits.length > 0 && (
           <div className="border border-[#1E1E2E] bg-[#111116] px-3 py-2.5">
             <div className="mb-2 flex items-center gap-2">
-              <span className="border border-white/10 bg-[#16161D] px-2 py-1 text-[8px] font-black uppercase tracking-widest text-white">
-                ATS
-              </span>
               <span className="text-[8px] font-black uppercase tracking-widest text-[#6B7280]">
-                Try scorer hits
+                Try scorers
               </span>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -5993,11 +5988,8 @@ function MatchPremiumSignalStrip({
         </div>
         <div className="min-w-0 border border-[#1E1E2E] bg-[#111116] px-3 py-2">
           <div className="mb-1 flex items-center gap-2">
-            <span className="border border-white/10 bg-[#16161D] px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest text-white">
-              ATS
-            </span>
             <span className="text-[8px] font-black uppercase tracking-widest text-[#6B7280]">
-              Scorers
+              Try scorers
             </span>
           </div>
           <div className="truncate text-xs font-black uppercase text-white">
@@ -6301,9 +6293,6 @@ function RoundProofMarketPlayCard({ play }: { play: RoundProofMatchPlay }) {
         <div className="min-w-0">
           <div className="mb-2 flex flex-wrap items-center gap-2 text-[10px] uppercase font-black text-white/45 tracking-widest">
             <span>{play.match}</span>
-            <span className="inline-flex shrink-0 border border-white/10 bg-[#16161D] px-2 py-0.5 text-[8px] font-black uppercase tracking-widest text-white/45">
-              {ROUND_14_PROOF.label}
-            </span>
           </div>
           <div className="flex min-w-0 items-center gap-2.5 md:gap-3">
             <TeamLogo
