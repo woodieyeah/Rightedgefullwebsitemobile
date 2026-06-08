@@ -1555,6 +1555,12 @@ function getRoundProofTryScorerHitsForPrediction(row: PredictionRow) {
   );
 }
 
+function hasSettledRoundProofForPrediction(row: PredictionRow) {
+  return getRoundProofMatchPlaysForPrediction(row).some(
+    (play) => play.result === "Hit" || play.result === "Miss",
+  );
+}
+
 function getRoundProofForPremiumPlay(play: PremiumMarketPlay) {
   const pairKey = getPredictionPairKey(play.row);
   const matchProofs = ROUND_14_PROOF.matchPlays.filter(
@@ -5647,13 +5653,18 @@ function PredictionsPage({
           const hasPredictedWinner = homeIsPredictedWinner || awayIsPredictedWinner;
           const homeColors = getTeamColors(row.homeTeam);
           const awayColors = getTeamColors(row.awayTeam);
-          const fixtureStatus = getFixtureStatusBadge(row.fixture, now);
-          const matchCompleted = isFixtureCompleted(row.fixture, now);
           const premiumMarketPlay = getBestPremiumMarketPlayForMatch(row, marketMap);
           const settledPremiumBet = getSettledBetForPrediction(data, row);
           const tryScorerSignals = getTryScorerSignalsForPrediction(data, row);
           const proofMatchPlays = getRoundProofMatchPlaysForPrediction(row);
           const proofTryScorerHits = getRoundProofTryScorerHitsForPrediction(row);
+          const matchCompleted = isFixtureCompleted(row.fixture, now) || hasSettledRoundProofForPrediction(row);
+          const fixtureStatus = matchCompleted
+            ? {
+                label: "Completed",
+                className: "border-white/10 bg-white/[0.04] text-white/35",
+              }
+            : getFixtureStatusBadge(row.fixture, now);
 
           if (matchCompleted) {
             return (
