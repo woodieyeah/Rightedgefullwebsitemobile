@@ -26,7 +26,6 @@ import {
   Printer,
   RefreshCw,
   ShieldAlert,
-  Sparkles,
   Target,
   Trophy,
   Wallet,
@@ -335,6 +334,7 @@ type RoundProofMatchPlay = {
   market: "Head 2 Head" | "Line" | "Total";
   modelScore: string;
   finalScore: string;
+  modelPct?: number;
   odds: number;
   bookmaker: string;
   result: ProofResult;
@@ -366,6 +366,7 @@ const ROUND_14_PROOF: {
       market: "Head 2 Head",
       modelScore: "28-23",
       finalScore: "28-14",
+      modelPct: 58.8,
       odds: 1.62,
       bookmaker: "BetOnline",
       result: "Hit",
@@ -377,6 +378,7 @@ const ROUND_14_PROOF: {
       market: "Line",
       modelScore: "26-24",
       finalScore: "26-24",
+      modelPct: 55.0,
       odds: 2,
       bookmaker: "TAB",
       result: "Hit",
@@ -388,6 +390,7 @@ const ROUND_14_PROOF: {
       market: "Total",
       modelScore: "22-26",
       finalScore: "0-26",
+      modelPct: 67.7,
       odds: 1.82,
       bookmaker: "Sportsbet",
       result: "Hit",
@@ -399,6 +402,7 @@ const ROUND_14_PROOF: {
       market: "Line",
       modelScore: "25-24",
       finalScore: "14-40",
+      modelPct: 70.4,
       odds: 1.9,
       bookmaker: "Betr",
       result: "Miss",
@@ -410,6 +414,7 @@ const ROUND_14_PROOF: {
       market: "Total",
       modelScore: "25-20",
       finalScore: "23-28",
+      modelPct: 69.3,
       odds: 1.9,
       bookmaker: "Sportsbet",
       result: "Hit",
@@ -421,6 +426,7 @@ const ROUND_14_PROOF: {
       market: "Line",
       modelScore: "19-29",
       finalScore: "0-68",
+      modelPct: 64.6,
       odds: 1.82,
       bookmaker: "Sportsbet",
       result: "Miss",
@@ -432,6 +438,7 @@ const ROUND_14_PROOF: {
       market: "Line",
       modelScore: "32-18",
       finalScore: "34-12",
+      modelPct: 61.5,
       odds: 1.91,
       bookmaker: "Sportsbet",
       result: "Hit",
@@ -443,6 +450,7 @@ const ROUND_14_PROOF: {
       market: "Head 2 Head",
       modelScore: "29-21",
       finalScore: "Pending",
+      modelPct: 66.7,
       odds: 1.53,
       bookmaker: "TAB",
       result: "Pending",
@@ -1531,6 +1539,38 @@ function getTryScorerSignalsForPrediction(data: DashboardData, row: PredictionRo
       b.row.edgePct - a.row.edgePct
     )
     .slice(0, limit);
+}
+
+function getRoundProofMatchPlaysForPrediction(row: PredictionRow) {
+  const pairKey = getPredictionPairKey(row);
+  return ROUND_14_PROOF.matchPlays.filter(
+    (play) => getMatchPairKeyFromLabel(play.match) === pairKey,
+  );
+}
+
+function getRoundProofTryScorerHitsForPrediction(row: PredictionRow) {
+  const pairKey = getPredictionPairKey(row);
+  return ROUND_14_PROOF.tryScorers.filter(
+    (scorer) => scorer.result === "Hit" && getMatchPairKeyFromLabel(scorer.match) === pairKey,
+  );
+}
+
+function getRoundProofForPremiumPlay(play: PremiumMarketPlay) {
+  const pairKey = getPredictionPairKey(play.row);
+  const matchProofs = ROUND_14_PROOF.matchPlays.filter(
+    (proof) => getMatchPairKeyFromLabel(proof.match) === pairKey,
+  );
+  return matchProofs.find((proof) => proof.market === play.type) || matchProofs[0] || null;
+}
+
+function getRoundProofForTryScorer(row: TryScorerRow) {
+  const pairKey = getMatchPairKeyFromLabel(row.match);
+  const playerKey = row.player.trim().toLowerCase();
+  return ROUND_14_PROOF.tryScorers.find(
+    (proof) =>
+      getMatchPairKeyFromLabel(proof.match) === pairKey &&
+      proof.player.trim().toLowerCase() === playerKey,
+  ) || null;
 }
 
 function getFeaturedPrediction(predictions: PredictionRow[]) {
@@ -5584,6 +5624,16 @@ function PredictionsPage({
           const premiumMarketPlay = getBestPremiumMarketPlayForMatch(row, marketMap);
           const settledPremiumBet = getSettledBetForPrediction(data, row);
           const tryScorerSignals = getTryScorerSignalsForPrediction(data, row);
+          const proofMatchPlays = getRoundProofMatchPlaysForPrediction(row);
+          const proofTryScorerHits = getRoundProofTryScorerHitsForPrediction(row);
+          const cardStatus =
+            matchCompleted &&
+            (proofMatchPlays[0]?.result === "Hit" || proofMatchPlays[0]?.result === "Miss")
+              ? {
+                  label: proofMatchPlays[0].result,
+                  className: getProofResultClass(proofMatchPlays[0].result),
+                }
+              : fixtureStatus;
 
           if (matchCompleted) {
             return (
@@ -5599,8 +5649,8 @@ function PredictionsPage({
                           ? `${row.fixture.day} ${row.fixture.dateLabel} @ ${row.fixture.aedt} AEST`
                           : "TBC"}
                       </span>
-                      <span className={`inline-flex shrink-0 border px-2 py-0.5 text-[8px] font-black uppercase tracking-widest ${fixtureStatus.className}`}>
-                        {fixtureStatus.label}
+                      <span className={`inline-flex shrink-0 border px-2 py-0.5 text-[8px] font-black uppercase tracking-widest ${cardStatus.className}`}>
+                        {cardStatus.label}
                       </span>
                     </div>
                     <span className="truncate">
@@ -5656,7 +5706,8 @@ function PredictionsPage({
                       play={premiumMarketPlay}
                       settledBet={settledPremiumBet}
                       tryScorerSignals={tryScorerSignals}
-                      onRequestAccess={onRequestAccess}
+                      proofMatchPlays={proofMatchPlays}
+                      proofTryScorerHits={proofTryScorerHits}
                     />
                   )}
                 </div>
@@ -5678,8 +5729,8 @@ function PredictionsPage({
                           ? `${row.fixture.day} ${row.fixture.dateLabel} @ ${row.fixture.aedt} AEST`
                           : "TBC"}
                       </span>
-                      <span className={`inline-flex shrink-0 border px-2 py-0.5 text-[8px] font-black uppercase tracking-widest ${fixtureStatus.className}`}>
-                        {fixtureStatus.label}
+                      <span className={`inline-flex shrink-0 border px-2 py-0.5 text-[8px] font-black uppercase tracking-widest ${cardStatus.className}`}>
+                        {cardStatus.label}
                       </span>
                     </div>
                     <span className="text-[#6B7280]">
@@ -5764,7 +5815,8 @@ function PredictionsPage({
                         play={premiumMarketPlay}
                         settledBet={settledPremiumBet}
                         tryScorerSignals={tryScorerSignals}
-                        onRequestAccess={onRequestAccess}
+                        proofMatchPlays={proofMatchPlays}
+                        proofTryScorerHits={proofTryScorerHits}
                       />
                     )}
                     <FreeBetrMarketsPanel
@@ -5796,11 +5848,17 @@ type PremiumMarketPlay = {
   projectedValue?: number;
 };
 
-function getSettledBetResultLabel(result: BetLogRow["result"]) {
-  if (result === "W") return "Won";
-  if (result === "L") return "Lost";
-  if (result === "P") return "Push";
-  return "Settled";
+function getProofResultClass(result: ProofResult) {
+  if (result === "Hit") return "border-[#00E676]/45 bg-[#00E676]/12 text-[#00E676]";
+  if (result === "Miss") return "border-[#FF2E63]/45 bg-[#FF2E63]/12 text-[#FF2E63]";
+  if (result === "Pending") return "border-[#FFEA00]/45 bg-[#FFEA00]/12 text-[#FFEA00]";
+  return "border-white/15 bg-white/[0.04] text-white/45";
+}
+
+function getProofMarketLabel(market: RoundProofMatchPlay["market"] | PremiumMarketPlay["type"]) {
+  if (market === "Head 2 Head") return "H2H";
+  if (market === "Line") return "Line";
+  return "Total";
 }
 
 function MatchPremiumSignalStrip({
@@ -5809,14 +5867,16 @@ function MatchPremiumSignalStrip({
   play,
   settledBet,
   tryScorerSignals,
-  onRequestAccess,
+  proofMatchPlays = [],
+  proofTryScorerHits = [],
 }: {
   matchCompleted: boolean;
   isPremium: boolean;
   play?: PremiumMarketPlay | null;
   settledBet?: BetLogRow | null;
   tryScorerSignals: { row: TryScorerRow; signal: ReturnType<typeof getTryScorerSignal> }[];
-  onRequestAccess: (targetHash?: string) => void;
+  proofMatchPlays?: RoundProofMatchPlay[];
+  proofTryScorerHits?: RoundProofTryScorer[];
 }) {
   const hasTryScorers = tryScorerSignals.length > 0;
   const scorerLabel = hasTryScorers
@@ -5828,95 +5888,138 @@ function MatchPremiumSignalStrip({
       ? `${play.selection} ${play.odds ? `@ $${play.odds.toFixed(2)}` : ""}`.trim()
       : "Premium match play";
 
-  if (matchCompleted && !settledBet && !hasTryScorers) return null;
+  if (matchCompleted) {
+    const fallbackMatchPlay = settledBet
+      ? [{
+          match: settledBet.match,
+          selection: settledBet.selection || settledBet.side || "Premium play",
+          market: "Head 2 Head" as const,
+          modelScore: "",
+          finalScore: "",
+          odds: settledBet.oddsTaken,
+          bookmaker: "Model",
+          result: settledBet.result === "W" ? "Hit" as const : settledBet.result === "L" ? "Miss" as const : "Pending" as const,
+          note: "",
+        }]
+      : [];
+    const matchPlays = proofMatchPlays.length ? proofMatchPlays : fallbackMatchPlay;
 
-  if (!matchCompleted && !isPremium) {
+    if (!matchPlays.length && !proofTryScorerHits.length) return null;
+
     return (
-      <button
-        type="button"
-        onClick={() => onRequestAccess("best-bets")}
-        className="mt-3 w-full border border-[#FFEA00]/50 bg-[#FFEA00]/10 px-3 py-3 text-left transition hover:bg-[#FFEA00]/15"
-      >
-        <div className="flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.18em] text-[#FFEA00]">
-              <Lock className="h-3.5 w-3.5 shrink-0" />
-              Premium edge ready
-            </div>
-            <div className="mt-1 text-xs font-semibold uppercase tracking-wide text-white">
-              Match play + try scorer signals
+      <div className="mt-3 flex flex-col gap-2">
+        {matchPlays.map((proof) => (
+          <div
+            key={`${proof.match}-${proof.selection}`}
+            className="border border-[#1E1E2E] bg-[#111116] px-3 py-2.5"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="mb-1 flex items-center gap-2">
+                  <Flame className="h-3.5 w-3.5 shrink-0 text-[#9CA3AF]" />
+                  <span className="text-[8px] font-black uppercase tracking-widest text-[#6B7280]">
+                    {getProofMarketLabel(proof.market)}
+                  </span>
+                </div>
+                <div className="truncate text-xs md:text-sm font-black uppercase tracking-wide text-white">
+                  {proof.selection}
+                </div>
+                {(proof.finalScore || proof.modelScore) && (
+                  <div className="mt-1 text-[9px] font-bold uppercase tracking-widest text-[#6B7280]">
+                    {proof.modelScore && `Model ${proof.modelScore}`}
+                    {proof.modelScore && proof.finalScore && " · "}
+                    {proof.finalScore && `Final ${proof.finalScore}`}
+                  </div>
+                )}
+              </div>
+              <div className="flex shrink-0 flex-col items-end gap-1.5">
+                <span className={`inline-flex border px-2 py-1 text-[8px] font-black uppercase tracking-widest ${getProofResultClass(proof.result)}`}>
+                  {proof.result}
+                </span>
+                {proof.odds > 0 && (
+                  <span className="text-[10px] font-black uppercase tracking-widest text-white/45">
+                    ${proof.odds.toFixed(2)}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
-          <div className="shrink-0 border border-white bg-white px-3 py-2 text-[9px] font-black uppercase tracking-widest text-[#0A0A0F]">
-            Unlock
+        ))}
+
+        {proofTryScorerHits.length > 0 && (
+          <div className="border border-[#1E1E2E] bg-[#111116] px-3 py-2.5">
+            <div className="mb-2 flex items-center gap-2">
+              <span className="border border-white/10 bg-[#16161D] px-2 py-1 text-[8px] font-black uppercase tracking-widest text-white">
+                ATS
+              </span>
+              <span className="text-[8px] font-black uppercase tracking-widest text-[#6B7280]">
+                Try scorer hits
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {proofTryScorerHits.map((scorer) => (
+                <span
+                  key={`${scorer.match}-${scorer.player}`}
+                  className="inline-flex max-w-full items-center gap-1.5 border border-[#00E676]/30 bg-[#00E676]/10 px-2 py-1 text-[10px] font-black uppercase tracking-wide text-[#00E676]"
+                >
+                  <CheckCircle2 className="h-3 w-3 shrink-0" />
+                  <span className="truncate">{scorer.player}</span>
+                </span>
+              ))}
+            </div>
           </div>
-        </div>
-      </button>
+        )}
+      </div>
     );
   }
 
-  const resultLabel = settledBet ? getSettledBetResultLabel(settledBet.result) : null;
-  const resultClass =
-    settledBet?.result === "W"
-      ? "text-[#4ADE80]"
-      : settledBet?.result === "L"
-        ? "text-[#FF2E63]"
-        : "text-[#9CA3AF]";
+  if (!matchCompleted && !isPremium) {
+    return null;
+  }
 
   return (
-    <div className={`mt-3 border px-3 py-3 ${
-      matchCompleted
-        ? "border-white/10 bg-[#16161D]"
-        : "border-[#00E676]/35 bg-[#00E676]/8"
-    }`}>
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.18em] text-[#9CA3AF]">
-          {matchCompleted ? <BadgeCheck className="h-3.5 w-3.5" /> : <Sparkles className="h-3.5 w-3.5" />}
-          {matchCompleted ? "Premium recap" : "Premium read"}
+    <div className="mt-3 border border-[#1E1E2E] bg-[#08080C] p-1">
+      <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
+        <div className="min-w-0 border border-[#1E1E2E] bg-[#111116] px-3 py-2">
+          <div className="mb-1 flex items-center gap-2">
+            <Flame className="h-3.5 w-3.5 shrink-0 text-[#9CA3AF]" />
+            <span className="text-[8px] font-black uppercase tracking-widest text-[#6B7280]">
+              Play
+            </span>
+          </div>
+          <div className="truncate text-xs font-black uppercase text-white">
+            {matchPlayLabel}
+          </div>
         </div>
-        {resultLabel && (
-          <span className={`text-[9px] font-black uppercase tracking-widest ${resultClass}`}>
-            {resultLabel}
-          </span>
-        )}
-      </div>
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-        {(settledBet || play || !matchCompleted) && (
-          <div className="min-w-0 border border-[#1E1E2E] bg-[#111116] px-3 py-2">
-            <div className="mb-1 text-[8px] font-black uppercase tracking-widest text-[#6B7280]">
-              Match play
-            </div>
-            <div className="truncate text-xs font-semibold uppercase text-white">
-              {matchPlayLabel}
-            </div>
+        <div className="min-w-0 border border-[#1E1E2E] bg-[#111116] px-3 py-2">
+          <div className="mb-1 flex items-center gap-2">
+            <span className="border border-white/10 bg-[#16161D] px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest text-white">
+              ATS
+            </span>
+            <span className="text-[8px] font-black uppercase tracking-widest text-[#6B7280]">
+              Scorers
+            </span>
           </div>
-        )}
-        {(hasTryScorers || !matchCompleted) && (
-          <div className="min-w-0 border border-[#1E1E2E] bg-[#111116] px-3 py-2">
-            <div className="mb-1 text-[8px] font-black uppercase tracking-widest text-[#6B7280]">
-              Try scorers
-            </div>
-            <div className="truncate text-xs font-semibold uppercase text-white">
-              {scorerLabel}
-            </div>
+          <div className="truncate text-xs font-black uppercase text-white">
+            {scorerLabel}
           </div>
-        )}
+        </div>
       </div>
-      {!matchCompleted && isPremium && !play && !hasTryScorers && (
-        <div className="text-[10px] font-medium uppercase tracking-widest text-[#9CA3AF]">
+      {isPremium && !play && !hasTryScorers && (
+        <div className="px-3 py-2 text-[9px] font-black uppercase tracking-widest text-[#6B7280]">
           Premium signals will appear as markets settle.
         </div>
       )}
-      {matchCompleted && !isPremium && (
-        <button
-          type="button"
-          onClick={() => onRequestAccess("best-bets")}
-          className="mt-2 inline-flex min-h-[32px] items-center justify-center border border-white bg-white px-3 text-[9px] font-black uppercase tracking-widest text-[#0A0A0F] transition hover:opacity-90"
-        >
-          Unlock next card
-        </button>
-      )}
     </div>
+  );
+}
+
+function PremiumResultBadge({ result }: { result?: ProofResult }) {
+  if (result !== "Hit" && result !== "Miss") return null;
+  return (
+    <span className={`inline-flex shrink-0 border px-2.5 py-1 text-[8px] md:text-[10px] font-black uppercase tracking-widest ${getProofResultClass(result)}`}>
+      {result}
+    </span>
   );
 }
 
@@ -6081,6 +6184,7 @@ function buildPremiumMarketPlays(
 function PremiumMarketPlayCard({ play, now }: { play: PremiumMarketPlay; now: number }) {
   const { row } = play;
   const fixtureStatus = getFixtureStatusBadge(row.fixture, now);
+  const proofResult = getRoundProofForPremiumPlay(play)?.result;
   const predictedScore =
     row.predictedHomeScore || row.predictedAwayScore
       ? `${Math.round(row.predictedHomeScore)}-${Math.round(row.predictedAwayScore)}`
@@ -6121,9 +6225,12 @@ function PremiumMarketPlayCard({ play, now }: { play: PremiumMarketPlay; now: nu
             </div>
           </div>
         </div>
-        <span className="shrink-0 bg-[#FF2E63] text-white px-2.5 md:px-3 py-1 md:py-1.5 text-[8px] md:text-[10px] font-black uppercase tracking-widest">
-          {play.type}
-        </span>
+        <div className="flex shrink-0 flex-col items-end gap-2">
+          <span className="bg-[#FF2E63] text-white px-2.5 md:px-3 py-1 md:py-1.5 text-[8px] md:text-[10px] font-black uppercase tracking-widest">
+            {play.type}
+          </span>
+          <PremiumResultBadge result={proofResult} />
+        </div>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 md:gap-3">
@@ -6175,171 +6282,90 @@ function PremiumMarketPlayCard({ play, now }: { play: PremiumMarketPlay; now: nu
   );
 }
 
-function getProofResultClass(result: ProofResult) {
-  if (result === "Hit") return "border-[#00E676]/45 bg-[#00E676]/12 text-[#00E676]";
-  if (result === "Miss") return "border-[#FF2E63]/45 bg-[#FF2E63]/12 text-[#FF2E63]";
-  if (result === "Pending") return "border-[#FFEA00]/45 bg-[#FFEA00]/12 text-[#FFEA00]";
-  return "border-white/15 bg-white/[0.04] text-white/45";
+function getProofPlayLogoTeam(play: RoundProofMatchPlay) {
+  if (play.market === "Total") {
+    return String(play.match || "").split(/\s+v\s+/i)[0] || play.selection;
+  }
+  return play.selection
+    .replace(/\s+[+-]\d+(\.\d+)?\s*$/i, "")
+    .replace(/\s+head-to-head\s*$/i, "")
+    .trim();
 }
 
-function getProofStats(rows: { result: ProofResult }[]) {
-  const settled = rows.filter((row) => row.result === "Hit" || row.result === "Miss");
-  const hits = settled.filter((row) => row.result === "Hit").length;
-  return {
-    hits,
-    settled: settled.length,
-    pending: rows.filter((row) => row.result === "Pending").length,
-    hitRate: settled.length ? (hits / settled.length) * 100 : 0,
-  };
-}
-
-function RoundProofModule({
-  onRequestAccess,
-  compact = false,
-}: {
-  onRequestAccess?: (targetHash?: string) => void;
-  compact?: boolean;
-}) {
-  const [tab, setTab] = useState<"match" | "scorers">("match");
-  const matchStats = getProofStats(ROUND_14_PROOF.matchPlays);
-  const scorerStats = getProofStats(ROUND_14_PROOF.tryScorers);
-  const activeRows = tab === "match" ? ROUND_14_PROOF.matchPlays : ROUND_14_PROOF.tryScorers;
-  const activeStats = tab === "match" ? matchStats : scorerStats;
-  const scorerGroups = ROUND_14_PROOF.tryScorers.reduce((groups, row) => {
-    if (!groups[row.match]) groups[row.match] = [];
-    groups[row.match].push(row);
-    return groups;
-  }, {} as Record<string, RoundProofTryScorer[]>);
+function RoundProofMarketPlayCard({ play }: { play: RoundProofMatchPlay }) {
+  const modelPct = play.modelPct || 0;
 
   return (
-    <GlassCard className={`${compact ? "p-4 md:p-5" : "p-5 md:p-6"} border-l-4 border-l-[#00E676]`}>
-      <div className="flex flex-col gap-4">
-        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-          <div>
-            <div className="text-[9px] md:text-[10px] font-black uppercase tracking-[0.22em] text-[#00E676]">
+    <GlassCard className="p-4 md:p-6 border-l-4 border-l-[#00E676]">
+      <div className="flex items-start justify-between gap-3 md:gap-4 mb-4">
+        <div className="min-w-0">
+          <div className="mb-2 flex flex-wrap items-center gap-2 text-[10px] uppercase font-black text-white/45 tracking-widest">
+            <span>{play.match}</span>
+            <span className="inline-flex shrink-0 border border-white/10 bg-[#16161D] px-2 py-0.5 text-[8px] font-black uppercase tracking-widest text-white/45">
               {ROUND_14_PROOF.label}
-            </div>
-            <h3 className="mt-1 text-xl md:text-3xl font-black uppercase tracking-tight text-white">
-              Premium Results Tracker
-            </h3>
-            <div className="mt-1 text-[10px] md:text-xs font-bold uppercase tracking-widest text-white/45">
-              Settled plays from the round card, reconciled after full time
-            </div>
+            </span>
           </div>
-          <div className="grid grid-cols-3 gap-2 md:min-w-[300px]">
-            <div className="border border-[#1E1E2E] bg-[#111116] px-3 py-2">
-              <div className="text-[8px] font-black uppercase tracking-widest text-white/35">Match</div>
-              <div className="text-sm md:text-lg font-black text-[#00E676]">{matchStats.hits}/{matchStats.settled}</div>
-            </div>
-            <div className="border border-[#1E1E2E] bg-[#111116] px-3 py-2">
-              <div className="text-[8px] font-black uppercase tracking-widest text-white/35">Scorers</div>
-              <div className="text-sm md:text-lg font-black text-[#00E676]">{scorerStats.hits}/{scorerStats.settled}</div>
-            </div>
-            <div className="border border-[#1E1E2E] bg-[#111116] px-3 py-2">
-              <div className="text-[8px] font-black uppercase tracking-widest text-white/35">Rate</div>
-              <div className="text-sm md:text-lg font-black text-white">{formatPercent(activeStats.hitRate, 0)}</div>
-            </div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 border border-[#1E1E2E] bg-[#08080C] p-1">
-          {[
-            { id: "match" as const, label: "Best Plays", count: ROUND_14_PROOF.matchPlays.length },
-            { id: "scorers" as const, label: "Try Scorers", count: ROUND_14_PROOF.tryScorers.length },
-          ].map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => setTab(item.id)}
-              className={`min-h-[38px] px-3 text-[10px] md:text-xs font-black uppercase tracking-widest transition ${
-                tab === item.id
-                  ? "bg-white text-[#0A0A0F]"
-                  : "text-white/45 hover:text-white"
-              }`}
-            >
-              {item.label} <span className="opacity-60">({item.count})</span>
-            </button>
-          ))}
-        </div>
-
-        {tab === "match" ? (
-          <div className="grid grid-cols-1 gap-2">
-            {(activeRows as RoundProofMatchPlay[]).map((row) => (
-              <div key={`${row.match}-${row.selection}`} className="grid grid-cols-1 gap-2 border border-[#1E1E2E] bg-[#111116] p-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className={`inline-flex border px-2 py-1 text-[8px] font-black uppercase tracking-widest ${getProofResultClass(row.result)}`}>
-                      {row.result}
-                    </span>
-                    <span className="text-[9px] font-black uppercase tracking-widest text-white/35">
-                      {row.market}
-                    </span>
-                  </div>
-                  <div className="mt-2 text-sm md:text-base font-black uppercase text-white">
-                    {row.selection}
-                  </div>
-                  <div className="mt-1 text-[10px] md:text-xs font-bold uppercase tracking-wider text-white/45">
-                    {row.match} · Model {row.modelScore} · Final {row.finalScore}
-                  </div>
-                </div>
-                <div className="flex items-center justify-between gap-3 md:flex-col md:items-end">
-                  <div className="text-base md:text-lg font-black text-white">
-                    {row.odds ? `$${row.odds.toFixed(2)}` : "—"}
-                  </div>
-                  <BookmakerName
-                    name={getPreviewBookmakerName(row.bookmaker)}
-                    className="text-[10px] font-black uppercase tracking-widest text-[#FFEA00]"
-                  />
-                </div>
+          <div className="flex min-w-0 items-center gap-2.5 md:gap-3">
+            <TeamLogo
+              teamName={getProofPlayLogoTeam(play)}
+              className="w-9 h-9 md:w-11 md:h-11 rounded-sm shadow-[2px_2px_0_0_rgba(255,255,255,0.1)]"
+            />
+            <div className="min-w-0">
+              <div className="text-lg md:text-3xl font-black text-white uppercase tracking-tight leading-[1.05] break-words">
+                {play.selection}
               </div>
-            ))}
+              <div className="mt-1 text-[9px] md:text-xs font-black text-[#FFEA00] uppercase tracking-widest">
+                {play.match}
+              </div>
+            </div>
           </div>
-        ) : (
-          <div className="grid grid-cols-1 gap-3">
-            {Object.entries(scorerGroups).map(([match, rows]) => {
-              const stats = getProofStats(rows);
-              return (
-                <div key={match} className="border border-[#1E1E2E] bg-[#111116] p-3">
-                  <div className="mb-3 flex items-center justify-between gap-3">
-                    <div className="min-w-0 text-xs md:text-sm font-black uppercase tracking-wide text-white truncate">
-                      {match}
-                    </div>
-                    <div className="shrink-0 text-[10px] font-black uppercase tracking-widest text-[#00E676]">
-                      {stats.hits}/{stats.settled}
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {rows.map((row) => (
-                      <div
-                        key={`${row.match}-${row.player}`}
-                        className={`inline-flex max-w-full items-center gap-2 border px-2.5 py-1.5 ${getProofResultClass(row.result)}`}
-                        title={row.note}
-                      >
-                        <span className="truncate text-[10px] md:text-xs font-black uppercase tracking-wide">
-                          {row.player}
-                        </span>
-                        <span className="shrink-0 text-[9px] font-black uppercase tracking-widest">
-                          {row.result === "Hit" ? "Hit" : row.result === "Miss" ? "Miss" : row.result}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
+        </div>
+        <div className="flex shrink-0 flex-col items-end gap-2">
+          <span className="bg-[#FF2E63] text-white px-2.5 md:px-3 py-1 md:py-1.5 text-[8px] md:text-[10px] font-black uppercase tracking-widest">
+            {play.market}
+          </span>
+          <PremiumResultBadge result={play.result} />
+        </div>
+      </div>
 
-        {onRequestAccess && (
-          <button
-            type="button"
-            onClick={() => onRequestAccess("best-bets")}
-            className="inline-flex min-h-[42px] items-center justify-center gap-2 border border-white bg-white px-4 text-[10px] md:text-xs font-black uppercase tracking-widest text-[#0A0A0F] transition hover:opacity-90"
-          >
-            Unlock the next card
-            <ArrowRight className="h-4 w-4 stroke-[3px]" />
-          </button>
-        )}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 md:gap-3">
+        <div className="bg-[#1E232B] p-2.5 md:p-3">
+          <div className="text-[9px] font-black text-white/45 uppercase tracking-widest mb-1">
+            Score
+          </div>
+          <div className="text-base md:text-lg font-black text-white">
+            {play.modelScore || "—"}
+          </div>
+        </div>
+        <div className="bg-[#1E232B] p-2.5 md:p-3">
+          <div className="text-[9px] font-black text-white/45 uppercase tracking-widest mb-1">
+            Model %
+          </div>
+          <div className="text-base md:text-lg font-black text-[#00E676]">
+            {modelPct ? formatPercent(modelPct, 1) : "—"}
+          </div>
+        </div>
+        <div className="bg-[#1E232B] p-2.5 md:p-3">
+          <div className="text-[9px] font-black text-white/45 uppercase tracking-widest mb-1">
+            Odds
+          </div>
+          <div className={isBetrBookmaker(play.bookmaker) ? "text-base md:text-lg font-black text-[#093AD3]" : "text-base md:text-lg font-black text-[#FFEA00]"}>
+            ${play.odds.toFixed(2)}
+          </div>
+        </div>
+        <div className="bg-[#1E232B] p-2.5 md:p-3">
+          <div className="text-[9px] font-black text-white/45 uppercase tracking-widest mb-1">
+            Bookie
+          </div>
+          <BookmakerName
+            name={getPreviewBookmakerName(play.bookmaker)}
+            className="text-[11px] md:text-xs font-black uppercase text-white"
+          />
+        </div>
+      </div>
+
+      <div className="mt-3 md:mt-4 text-[10px] md:text-xs font-bold text-white/45 uppercase tracking-widest leading-relaxed">
+        Final {play.finalScore}{play.note ? ` · ${play.note}` : ""}
       </div>
     </GlassCard>
   );
@@ -6387,6 +6413,14 @@ function BestBetsPage({
     () => buildPremiumMarketPlays(data, marketMap, now, canViewStartedPremiumPlays).slice(0, isAdmin ? 50 : 8),
     [data, marketMap, now, canViewStartedPremiumPlays, isAdmin],
   );
+  const proofMatchKeys = useMemo(
+    () => new Set(ROUND_14_PROOF.matchPlays.map((play) => getMatchPairKeyFromLabel(play.match))),
+    [],
+  );
+  const liveMatchReads = matchReads.filter((play) => !proofMatchKeys.has(getPredictionPairKey(play.row)));
+  const proofMatchReads = isAdmin
+    ? ROUND_14_PROOF.matchPlays
+    : ROUND_14_PROOF.matchPlays.slice(0, 8);
 
   const latestTryScorerRound = Math.max(
     0,
@@ -6436,7 +6470,6 @@ function BestBetsPage({
   if (!isPremium && !isAdmin) {
     return (
       <div className="flex flex-col gap-6 md:gap-8">
-        <RoundProofModule onRequestAccess={onRequestAccess} compact />
         <GlassCard className="p-8 md:p-12 text-center !border-[#FF2E63] !shadow-[8px_8px_0_0_#FF2E63] relative overflow-hidden">
           <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(255,46,99,0.08),transparent_55%)]" />
           <div className="relative z-10 flex flex-col items-center max-w-xl mx-auto">
@@ -6464,7 +6497,6 @@ function BestBetsPage({
 
   return (
     <div className="flex flex-col gap-6 md:gap-8">
-      <RoundProofModule />
       <div className="flex flex-col gap-4">
         <div>
           <h3 className="text-lg md:text-2xl font-black text-white uppercase tracking-tight">
@@ -6480,7 +6512,7 @@ function BestBetsPage({
               Loading live line and total prices...
             </div>
           </GlassCard>
-        ) : matchReads.length === 0 ? (
+        ) : proofMatchReads.length === 0 && liveMatchReads.length === 0 ? (
           <GlassCard className="p-4 md:p-8 text-center border-l-4 border-l-white/20">
             <div className="text-white/50 font-bold uppercase tracking-widest text-[10px] md:text-base">
               MODELLING IN PROGRESS - PREDICTIONS AVAILABLE EVERY WEDNESDAY
@@ -6488,7 +6520,10 @@ function BestBetsPage({
           </GlassCard>
         ) : (
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 md:gap-6">
-            {matchReads.map((play) => (
+            {proofMatchReads.map((play) => (
+              <RoundProofMarketPlayCard key={`${play.match}-${play.selection}`} play={play} />
+            ))}
+            {liveMatchReads.map((play) => (
               <PremiumMarketPlayCard key={play.id} play={play} now={now} />
             ))}
           </div>
@@ -6512,7 +6547,9 @@ function BestBetsPage({
           </GlassCard>
         ) : (
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 md:gap-6">
-            {tryScorerBestBets.map(({ row, signal }) => (
+            {tryScorerBestBets.map(({ row, signal }) => {
+              const proofResult = getRoundProofForTryScorer(row)?.result;
+              return (
               <GlassCard
                 key={getTryScorerKey(row)}
                 className="p-4 md:p-6 border-l-4 border-l-[#FF2E63]"
@@ -6537,9 +6574,12 @@ function BestBetsPage({
                       {row.match}
                     </div>
                   </div>
-                  <span className={`shrink-0 px-2.5 md:px-3 py-1 md:py-1.5 text-[8px] md:text-[10px] font-black uppercase tracking-widest ${getTryScorerSignalClass(signal?.label)}`}>
-                    {signal?.label || "Best Bet"}
-                  </span>
+                  <div className="flex shrink-0 flex-col items-end gap-2">
+                    <span className={`px-2.5 md:px-3 py-1 md:py-1.5 text-[8px] md:text-[10px] font-black uppercase tracking-widest ${getTryScorerSignalClass(signal?.label)}`}>
+                      {signal?.label || "Best Bet"}
+                    </span>
+                    <PremiumResultBadge result={proofResult} />
+                  </div>
                 </div>
                 <div className="mt-4 md:mt-5 grid grid-cols-3 gap-2.5 md:gap-3">
                   <div className="bg-[#1E232B] p-2.5 md:p-3">
@@ -6576,7 +6616,8 @@ function BestBetsPage({
                   className="mt-3 md:mt-4"
                 />
               </GlassCard>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -8357,7 +8398,7 @@ function AppDashboard({
         </div>
       </div>
 
-      <div className="xl:hidden fixed bottom-0 left-0 right-0 bg-[#0A0A0F] border-t border-[#1E1E2E] z-[100] px-2 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2">
+      <div className="rightedge-mobile-bottom-nav xl:hidden fixed bottom-0 left-0 right-0 bg-[#0A0A0F] border-t border-[#1E1E2E] z-[100] px-2 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2">
         <div
           className="grid gap-1 items-stretch"
           style={{ gridTemplateColumns: `repeat(${mobilePages.length}, minmax(0, 1fr))` }}
