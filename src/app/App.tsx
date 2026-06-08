@@ -1187,6 +1187,46 @@ function getTryScorerSignalClass(label?: string) {
   return "bg-[#16161D] border border-[#1E1E2E] text-[#9CA3AF]";
 }
 
+function getMatchPairKeyFromLabel(match: string) {
+  const parts = String(match || "").split(/\s+v\s+/i);
+  if (parts.length === 2) return buildTeamPairKey(parts[0], parts[1]);
+  return String(match || "").trim().toLowerCase();
+}
+
+function getPredictionPairKey(row: PredictionRow) {
+  return buildTeamPairKey(row.homeTeam, row.awayTeam);
+}
+
+function getSettledBetForPrediction(data: DashboardData, row: PredictionRow) {
+  const pairKey = getPredictionPairKey(row);
+  return data.betLog
+    .filter((bet) => getMatchPairKeyFromLabel(bet.match) === pairKey)
+    .filter((bet) => bet.result === "W" || bet.result === "L" || bet.result === "P")
+    .sort((a, b) => Math.abs(b.profit || 0) - Math.abs(a.profit || 0))[0] || null;
+}
+
+function getTryScorerSignalsForPrediction(data: DashboardData, row: PredictionRow, limit = 2) {
+  const pairKey = getPredictionPairKey(row);
+  const players = data.tryScorers.filter((player) => {
+    if (row.roundNumber && player.round && player.round !== row.roundNumber) return false;
+    return getMatchPairKeyFromLabel(player.match) === pairKey;
+  });
+  const bestBetKeys = getMatchBestBetKeys(players);
+
+  return players
+    .map((player) => ({
+      row: player,
+      signal: getTryScorerSignal(player, bestBetKeys),
+    }))
+    .filter(({ row: player, signal }) => signal || bestBetKeys.has(getTryScorerKey(player)))
+    .sort((a, b) =>
+      (b.signal?.sortRank || 0) - (a.signal?.sortRank || 0) ||
+      b.row.statsInsiderPct - a.row.statsInsiderPct ||
+      b.row.edgePct - a.row.edgePct
+    )
+    .slice(0, limit);
+}
+
 function getFeaturedPrediction(predictions: PredictionRow[]) {
   if (!predictions.length) return null;
 
@@ -5193,6 +5233,25 @@ function PredictionsPage({
 }) {
   const now = useMinuteNow();
   const rows = [...data.predictions].sort(sortPredictionsByFixture);
+  const [marketMap, setMarketMap] = useState<SgmMarketMap>({});
+
+  useEffect(() => {
+    let isMounted = true;
+
+    fetchLiveOddsCached()
+      .then((rawOdds) => {
+        if (!isMounted) return;
+        setMarketMap(buildSgmMarketMap(rawOdds));
+      })
+      .catch(() => {
+        if (!isMounted) return;
+        setMarketMap({});
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   return (
     <div className="flex flex-col gap-6 md:gap-8">
@@ -5216,6 +5275,9 @@ function PredictionsPage({
           const awayColors = getTeamColors(row.awayTeam);
           const fixtureStatus = getFixtureStatusBadge(row.fixture, now);
           const matchCompleted = isFixtureCompleted(row.fixture, now);
+          const premiumMarketPlay = getBestPremiumMarketPlayForMatch(row, marketMap);
+          const settledPremiumBet = getSettledBetForPrediction(data, row);
+          const tryScorerSignals = getTryScorerSignalsForPrediction(data, row);
 
           if (matchCompleted) {
             return (
@@ -5281,6 +5343,14 @@ function PredictionsPage({
                       </div>
                     </div>
                   </div>
+                  <MatchPremiumSignalStrip
+                    matchCompleted={matchCompleted}
+                    isPremium={isPremium}
+                    play={premiumMarketPlay}
+                    settledBet={settledPremiumBet}
+                    tryScorerSignals={tryScorerSignals}
+                    onRequestAccess={onRequestAccess}
+                  />
                 </div>
               </GlassCard>
             );
@@ -5379,6 +5449,14 @@ function PredictionsPage({
                         </div>
                       </div>
                     </div>
+                    <MatchPremiumSignalStrip
+                      matchCompleted={matchCompleted}
+                      isPremium={isPremium}
+                      play={premiumMarketPlay}
+                      settledBet={settledPremiumBet}
+                      tryScorerSignals={tryScorerSignals}
+                      onRequestAccess={onRequestAccess}
+                    />
                     <FreeBetrMarketsPanel
                       row={row}
                       isPremium={isPremium}
@@ -5407,6 +5485,130 @@ type PremiumMarketPlay = {
   marketPoint?: number;
   projectedValue?: number;
 };
+
+function getSettledBetResultLabel(result: BetLogRow["result"]) {
+  if (result === "W") return "Won";
+  if (result === "L") return "Lost";
+  if (result === "P") return "Push";
+  return "Settled";
+}
+
+function MatchPremiumSignalStrip({
+  matchCompleted,
+  isPremium,
+  play,
+  settledBet,
+  tryScorerSignals,
+  onRequestAccess,
+}: {
+  matchCompleted: boolean;
+  isPremium: boolean;
+  play?: PremiumMarketPlay | null;
+  settledBet?: BetLogRow | null;
+  tryScorerSignals: { row: TryScorerRow; signal: ReturnType<typeof getTryScorerSignal> }[];
+  onRequestAccess: (targetHash?: string) => void;
+}) {
+  const hasTryScorers = tryScorerSignals.length > 0;
+  const scorerLabel = hasTryScorers
+    ? tryScorerSignals.map(({ row }) => row.player).join(" / ")
+    : "Try scorer signals";
+  const matchPlayLabel = settledBet
+    ? `${settledBet.selection || settledBet.side || "Premium play"} ${settledBet.oddsTaken ? `@ $${settledBet.oddsTaken.toFixed(2)}` : ""}`.trim()
+    : play
+      ? `${play.selection} ${play.odds ? `@ $${play.odds.toFixed(2)}` : ""}`.trim()
+      : "Premium match play";
+
+  if (matchCompleted && !settledBet && !hasTryScorers) return null;
+
+  if (!matchCompleted && !isPremium) {
+    return (
+      <button
+        type="button"
+        onClick={() => onRequestAccess("best-bets")}
+        className="mt-3 w-full border border-[#FFEA00]/50 bg-[#FFEA00]/10 px-3 py-3 text-left transition hover:bg-[#FFEA00]/15"
+      >
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.18em] text-[#FFEA00]">
+              <Lock className="h-3.5 w-3.5 shrink-0" />
+              Premium edge ready
+            </div>
+            <div className="mt-1 text-xs font-semibold uppercase tracking-wide text-white">
+              Match play + try scorer signals
+            </div>
+          </div>
+          <div className="shrink-0 border border-white bg-white px-3 py-2 text-[9px] font-black uppercase tracking-widest text-[#0A0A0F]">
+            Unlock
+          </div>
+        </div>
+      </button>
+    );
+  }
+
+  const resultLabel = settledBet ? getSettledBetResultLabel(settledBet.result) : null;
+  const resultClass =
+    settledBet?.result === "W"
+      ? "text-[#4ADE80]"
+      : settledBet?.result === "L"
+        ? "text-[#FF2E63]"
+        : "text-[#9CA3AF]";
+
+  return (
+    <div className={`mt-3 border px-3 py-3 ${
+      matchCompleted
+        ? "border-white/10 bg-[#16161D]"
+        : "border-[#00E676]/35 bg-[#00E676]/8"
+    }`}>
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.18em] text-[#9CA3AF]">
+          {matchCompleted ? <BadgeCheck className="h-3.5 w-3.5" /> : <Sparkles className="h-3.5 w-3.5" />}
+          {matchCompleted ? "Premium recap" : "Premium read"}
+        </div>
+        {resultLabel && (
+          <span className={`text-[9px] font-black uppercase tracking-widest ${resultClass}`}>
+            {resultLabel}
+          </span>
+        )}
+      </div>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        {(settledBet || play || !matchCompleted) && (
+          <div className="min-w-0 border border-[#1E1E2E] bg-[#111116] px-3 py-2">
+            <div className="mb-1 text-[8px] font-black uppercase tracking-widest text-[#6B7280]">
+              Match play
+            </div>
+            <div className="truncate text-xs font-semibold uppercase text-white">
+              {matchPlayLabel}
+            </div>
+          </div>
+        )}
+        {(hasTryScorers || !matchCompleted) && (
+          <div className="min-w-0 border border-[#1E1E2E] bg-[#111116] px-3 py-2">
+            <div className="mb-1 text-[8px] font-black uppercase tracking-widest text-[#6B7280]">
+              Try scorers
+            </div>
+            <div className="truncate text-xs font-semibold uppercase text-white">
+              {scorerLabel}
+            </div>
+          </div>
+        )}
+      </div>
+      {!matchCompleted && isPremium && !play && !hasTryScorers && (
+        <div className="text-[10px] font-medium uppercase tracking-widest text-[#9CA3AF]">
+          Premium signals will appear as markets settle.
+        </div>
+      )}
+      {matchCompleted && !isPremium && (
+        <button
+          type="button"
+          onClick={() => onRequestAccess("best-bets")}
+          className="mt-2 inline-flex min-h-[32px] items-center justify-center border border-white bg-white px-3 text-[9px] font-black uppercase tracking-widest text-[#0A0A0F] transition hover:opacity-90"
+        >
+          Unlock next card
+        </button>
+      )}
+    </div>
+  );
+}
 
 function probabilityFromEdge(edge: number, scale = 7.5) {
   return Math.max(1, Math.min(99, (1 / (1 + Math.exp(-(edge / scale)))) * 100));
