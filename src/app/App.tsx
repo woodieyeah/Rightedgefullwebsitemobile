@@ -3700,11 +3700,11 @@ function TryScorerTicker({ data }: { data: DashboardData | null }) {
     <div className="relative h-[44px] overflow-hidden border-y border-[#1E1E2E] bg-[#16161D]">
       <div
         className="pointer-events-none absolute inset-y-0 left-0 z-10 w-16"
-        style={{ background: "linear-gradient(90deg, #16161D 0%, rgba(22,22,29,0) 100%)" }}
+        style={{ background: "linear-gradient(90deg, #F6F6F3 0%, rgba(246,246,243,0) 100%)" }}
       />
       <div
         className="pointer-events-none absolute inset-y-0 right-0 z-10 w-16"
-        style={{ background: "linear-gradient(270deg, #16161D 0%, rgba(22,22,29,0) 100%)" }}
+        style={{ background: "linear-gradient(270deg, #F6F6F3 0%, rgba(246,246,243,0) 100%)" }}
       />
       <div className="try-scorer-ticker-track flex h-full w-max items-center">
         <div className="flex h-full shrink-0 items-center pr-10">
@@ -9254,9 +9254,7 @@ export default function App() {
     "inLanguage": "en-AU"
   })}</script>
 </Helmet>
-    <div className={`min-h-screen bg-background text-foreground relative overflow-x-clip font-sans ${
-      isAdmin || authState.email === "elliott@woodbry.com" ? "rightedge-admin-editorial-theme" : ""
-    }`}>
+    <div className="rightedge-admin-editorial-theme min-h-screen bg-background text-foreground relative overflow-x-clip font-sans">
       <div className="absolute inset-0 pointer-events-none" />
 
       <div
