@@ -327,6 +327,312 @@ type TryScorerRow = {
   value: string;
 };
 
+type ProofResult = "Hit" | "Miss" | "Pending" | "Needs Check";
+
+type RoundProofMatchPlay = {
+  match: string;
+  selection: string;
+  market: "Head 2 Head" | "Line" | "Total";
+  modelScore: string;
+  finalScore: string;
+  odds: number;
+  bookmaker: string;
+  result: ProofResult;
+  note: string;
+};
+
+type RoundProofTryScorer = {
+  match: string;
+  player: string;
+  team: string;
+  odds: number;
+  bookmaker: string;
+  result: ProofResult;
+  note: string;
+};
+
+const ROUND_14_PROOF: {
+  round: number;
+  label: string;
+  matchPlays: RoundProofMatchPlay[];
+  tryScorers: RoundProofTryScorer[];
+} = {
+  round: 14,
+  label: "Round 14 proof",
+  matchPlays: [
+    {
+      match: "Sea Eagles v Rabbitohs",
+      selection: "Sea Eagles head-to-head",
+      market: "Head 2 Head",
+      modelScore: "28-23",
+      finalScore: "28-14",
+      odds: 1.62,
+      bookmaker: "BetOnline",
+      result: "Hit",
+      note: "Model side won outright.",
+    },
+    {
+      match: "Storm v Knights",
+      selection: "Knights +3.5",
+      market: "Line",
+      modelScore: "26-24",
+      finalScore: "26-24",
+      odds: 2,
+      bookmaker: "TAB",
+      result: "Hit",
+      note: "Knights stayed inside the number.",
+    },
+    {
+      match: "Raiders v Roosters",
+      selection: "Under 60.5",
+      market: "Total",
+      modelScore: "22-26",
+      finalScore: "0-26",
+      odds: 1.82,
+      bookmaker: "Sportsbet",
+      result: "Hit",
+      note: "Final total landed well under.",
+    },
+    {
+      match: "Cowboys v Dolphins",
+      selection: "Cowboys +5.5",
+      market: "Line",
+      modelScore: "25-24",
+      finalScore: "14-40",
+      odds: 1.9,
+      bookmaker: "Betr",
+      result: "Miss",
+      note: "Dolphins cleared the line.",
+    },
+    {
+      match: "Broncos v Titans",
+      selection: "Under 51.5",
+      market: "Total",
+      modelScore: "25-20",
+      finalScore: "23-28",
+      odds: 1.9,
+      bookmaker: "Sportsbet",
+      result: "Hit",
+      note: "Final total was 51.",
+    },
+    {
+      match: "Wests Tigers v Panthers",
+      selection: "Tigers +14.5",
+      market: "Line",
+      modelScore: "19-29",
+      finalScore: "0-68",
+      odds: 1.82,
+      bookmaker: "Sportsbet",
+      result: "Miss",
+      note: "Panthers cleared the line.",
+    },
+    {
+      match: "Sharks v Dragons",
+      selection: "Sharks -10.5",
+      market: "Line",
+      modelScore: "32-18",
+      finalScore: "34-12",
+      odds: 1.91,
+      bookmaker: "Sportsbet",
+      result: "Hit",
+      note: "Sharks covered comfortably.",
+    },
+    {
+      match: "Bulldogs v Eels",
+      selection: "Bulldogs head-to-head",
+      market: "Head 2 Head",
+      modelScore: "29-21",
+      finalScore: "Pending",
+      odds: 1.53,
+      bookmaker: "TAB",
+      result: "Pending",
+      note: "Awaiting full-time result.",
+    },
+  ],
+  tryScorers: [
+    {
+      match: "Storm v Knights",
+      player: "Dominic Young",
+      team: "Knights",
+      odds: 2,
+      bookmaker: "Pointsbet",
+      result: "Miss",
+      note: "Storm v Knights result: 3/5.",
+    },
+    {
+      match: "Storm v Knights",
+      player: "Moses Leo",
+      team: "Storm",
+      odds: 2,
+      bookmaker: "BetRight",
+      result: "Hit",
+      note: "Storm v Knights result: 3/5.",
+    },
+    {
+      match: "Storm v Knights",
+      player: "Will Warbrick",
+      team: "Storm",
+      odds: 0,
+      bookmaker: "Model",
+      result: "Hit",
+      note: "Storm v Knights result: 3/5.",
+    },
+    {
+      match: "Storm v Knights",
+      player: "Harry Grant",
+      team: "Storm",
+      odds: 0,
+      bookmaker: "Model",
+      result: "Miss",
+      note: "Storm v Knights result: 3/5.",
+    },
+    {
+      match: "Storm v Knights",
+      player: "Manaia Waitere",
+      team: "Storm",
+      odds: 0,
+      bookmaker: "Model",
+      result: "Hit",
+      note: "Storm v Knights result: 3/5.",
+    },
+    {
+      match: "Raiders v Roosters",
+      player: "Hudson Young",
+      team: "Raiders",
+      odds: 0,
+      bookmaker: "Model",
+      result: "Miss",
+      note: "Raiders v Roosters result: 0/1.",
+    },
+    {
+      match: "Cowboys v Dolphins",
+      player: "Murray Taulagi",
+      team: "Cowboys",
+      odds: 1.9,
+      bookmaker: "BetRight",
+      result: "Hit",
+      note: "Cowboys v Dolphins result: 2/4.",
+    },
+    {
+      match: "Cowboys v Dolphins",
+      player: "Jaxon Purdue",
+      team: "Cowboys",
+      odds: 0,
+      bookmaker: "Model",
+      result: "Miss",
+      note: "Cowboys v Dolphins result: 2/4.",
+    },
+    {
+      match: "Cowboys v Dolphins",
+      player: "Hamiso Tabuai-Fidow",
+      team: "Dolphins",
+      odds: 0,
+      bookmaker: "Model",
+      result: "Hit",
+      note: "Cowboys v Dolphins result: 2/4.",
+    },
+    {
+      match: "Cowboys v Dolphins",
+      player: "Herbie Farnworth",
+      team: "Dolphins",
+      odds: 0,
+      bookmaker: "Model",
+      result: "Miss",
+      note: "Cowboys v Dolphins result: 2/4.",
+    },
+    {
+      match: "Broncos v Titans",
+      player: "Kotoni Staggs",
+      team: "Broncos",
+      odds: 2.3,
+      bookmaker: "TAB",
+      result: "Hit",
+      note: "Broncos v Titans result: 2/3.",
+    },
+    {
+      match: "Broncos v Titans",
+      player: "Phillip Sami",
+      team: "Titans",
+      odds: 0,
+      bookmaker: "Model",
+      result: "Hit",
+      note: "Broncos v Titans result: 2/3.",
+    },
+    {
+      match: "Broncos v Titans",
+      player: "AJ Brimson",
+      team: "Titans",
+      odds: 0,
+      bookmaker: "Model",
+      result: "Miss",
+      note: "Broncos v Titans result: 2/3.",
+    },
+    {
+      match: "Wests Tigers v Panthers",
+      player: "Thomas Jenkins",
+      team: "Panthers",
+      odds: 0,
+      bookmaker: "Model",
+      result: "Hit",
+      note: "Tigers v Panthers result: 1/1.",
+    },
+    {
+      match: "Sharks v Dragons",
+      player: "Ronaldo Mulitalo",
+      team: "Sharks",
+      odds: 0,
+      bookmaker: "Model",
+      result: "Hit",
+      note: "Sharks v Dragons result: 2/5.",
+    },
+    {
+      match: "Sharks v Dragons",
+      player: "Braydon Trindall",
+      team: "Sharks",
+      odds: 0,
+      bookmaker: "Model",
+      result: "Hit",
+      note: "Sharks v Dragons result: 2/5.",
+    },
+    {
+      match: "Sharks v Dragons",
+      player: "Mawene Hiroti",
+      team: "Sharks",
+      odds: 0,
+      bookmaker: "Model",
+      result: "Miss",
+      note: "Sharks v Dragons result: 2/5.",
+    },
+    {
+      match: "Sharks v Dragons",
+      player: "Clinton Gutherson",
+      team: "Dragons",
+      odds: 0,
+      bookmaker: "Model",
+      result: "Miss",
+      note: "Sharks v Dragons result: 2/5.",
+    },
+    {
+      match: "Sharks v Dragons",
+      player: "Jacob Liddle",
+      team: "Dragons",
+      odds: 0,
+      bookmaker: "Model",
+      result: "Miss",
+      note: "Sharks v Dragons result: 2/5.",
+    },
+    {
+      match: "Bulldogs v Eels",
+      player: "Josh Addo-Carr",
+      team: "Bulldogs",
+      odds: 1.9,
+      bookmaker: "Pointsbet",
+      result: "Pending",
+      note: "Awaiting full-time scorer list.",
+    },
+  ],
+};
+
 type RoundSummary = {
   round: string;
   bets: number;
@@ -5865,6 +6171,176 @@ function PremiumMarketPlayCard({ play, now }: { play: PremiumMarketPlay; now: nu
   );
 }
 
+function getProofResultClass(result: ProofResult) {
+  if (result === "Hit") return "border-[#00E676]/45 bg-[#00E676]/12 text-[#00E676]";
+  if (result === "Miss") return "border-[#FF2E63]/45 bg-[#FF2E63]/12 text-[#FF2E63]";
+  if (result === "Pending") return "border-[#FFEA00]/45 bg-[#FFEA00]/12 text-[#FFEA00]";
+  return "border-white/15 bg-white/[0.04] text-white/45";
+}
+
+function getProofStats(rows: { result: ProofResult }[]) {
+  const settled = rows.filter((row) => row.result === "Hit" || row.result === "Miss");
+  const hits = settled.filter((row) => row.result === "Hit").length;
+  return {
+    hits,
+    settled: settled.length,
+    pending: rows.filter((row) => row.result === "Pending").length,
+    hitRate: settled.length ? (hits / settled.length) * 100 : 0,
+  };
+}
+
+function RoundProofModule({
+  onRequestAccess,
+  compact = false,
+}: {
+  onRequestAccess?: (targetHash?: string) => void;
+  compact?: boolean;
+}) {
+  const [tab, setTab] = useState<"match" | "scorers">("match");
+  const matchStats = getProofStats(ROUND_14_PROOF.matchPlays);
+  const scorerStats = getProofStats(ROUND_14_PROOF.tryScorers);
+  const activeRows = tab === "match" ? ROUND_14_PROOF.matchPlays : ROUND_14_PROOF.tryScorers;
+  const activeStats = tab === "match" ? matchStats : scorerStats;
+  const scorerGroups = ROUND_14_PROOF.tryScorers.reduce((groups, row) => {
+    if (!groups[row.match]) groups[row.match] = [];
+    groups[row.match].push(row);
+    return groups;
+  }, {} as Record<string, RoundProofTryScorer[]>);
+
+  return (
+    <GlassCard className={`${compact ? "p-4 md:p-5" : "p-5 md:p-6"} border-l-4 border-l-[#00E676]`}>
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div>
+            <div className="text-[9px] md:text-[10px] font-black uppercase tracking-[0.22em] text-[#00E676]">
+              {ROUND_14_PROOF.label}
+            </div>
+            <h3 className="mt-1 text-xl md:text-3xl font-black uppercase tracking-tight text-white">
+              Premium Results Tracker
+            </h3>
+            <div className="mt-1 text-[10px] md:text-xs font-bold uppercase tracking-widest text-white/45">
+              Settled plays from the round card, reconciled after full time
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-2 md:min-w-[300px]">
+            <div className="border border-[#1E1E2E] bg-[#111116] px-3 py-2">
+              <div className="text-[8px] font-black uppercase tracking-widest text-white/35">Match</div>
+              <div className="text-sm md:text-lg font-black text-[#00E676]">{matchStats.hits}/{matchStats.settled}</div>
+            </div>
+            <div className="border border-[#1E1E2E] bg-[#111116] px-3 py-2">
+              <div className="text-[8px] font-black uppercase tracking-widest text-white/35">Scorers</div>
+              <div className="text-sm md:text-lg font-black text-[#00E676]">{scorerStats.hits}/{scorerStats.settled}</div>
+            </div>
+            <div className="border border-[#1E1E2E] bg-[#111116] px-3 py-2">
+              <div className="text-[8px] font-black uppercase tracking-widest text-white/35">Rate</div>
+              <div className="text-sm md:text-lg font-black text-white">{formatPercent(activeStats.hitRate, 0)}</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 border border-[#1E1E2E] bg-[#08080C] p-1">
+          {[
+            { id: "match" as const, label: "Best Plays", count: ROUND_14_PROOF.matchPlays.length },
+            { id: "scorers" as const, label: "Try Scorers", count: ROUND_14_PROOF.tryScorers.length },
+          ].map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => setTab(item.id)}
+              className={`min-h-[38px] px-3 text-[10px] md:text-xs font-black uppercase tracking-widest transition ${
+                tab === item.id
+                  ? "bg-white text-[#0A0A0F]"
+                  : "text-white/45 hover:text-white"
+              }`}
+            >
+              {item.label} <span className="opacity-60">({item.count})</span>
+            </button>
+          ))}
+        </div>
+
+        {tab === "match" ? (
+          <div className="grid grid-cols-1 gap-2">
+            {(activeRows as RoundProofMatchPlay[]).map((row) => (
+              <div key={`${row.match}-${row.selection}`} className="grid grid-cols-1 gap-2 border border-[#1E1E2E] bg-[#111116] p-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className={`inline-flex border px-2 py-1 text-[8px] font-black uppercase tracking-widest ${getProofResultClass(row.result)}`}>
+                      {row.result}
+                    </span>
+                    <span className="text-[9px] font-black uppercase tracking-widest text-white/35">
+                      {row.market}
+                    </span>
+                  </div>
+                  <div className="mt-2 text-sm md:text-base font-black uppercase text-white">
+                    {row.selection}
+                  </div>
+                  <div className="mt-1 text-[10px] md:text-xs font-bold uppercase tracking-wider text-white/45">
+                    {row.match} · Model {row.modelScore} · Final {row.finalScore}
+                  </div>
+                </div>
+                <div className="flex items-center justify-between gap-3 md:flex-col md:items-end">
+                  <div className="text-base md:text-lg font-black text-white">
+                    {row.odds ? `$${row.odds.toFixed(2)}` : "—"}
+                  </div>
+                  <BookmakerName
+                    name={getPreviewBookmakerName(row.bookmaker)}
+                    className="text-[10px] font-black uppercase tracking-widest text-[#FFEA00]"
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-3">
+            {Object.entries(scorerGroups).map(([match, rows]) => {
+              const stats = getProofStats(rows);
+              return (
+                <div key={match} className="border border-[#1E1E2E] bg-[#111116] p-3">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <div className="min-w-0 text-xs md:text-sm font-black uppercase tracking-wide text-white truncate">
+                      {match}
+                    </div>
+                    <div className="shrink-0 text-[10px] font-black uppercase tracking-widest text-[#00E676]">
+                      {stats.hits}/{stats.settled}
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {rows.map((row) => (
+                      <div
+                        key={`${row.match}-${row.player}`}
+                        className={`inline-flex max-w-full items-center gap-2 border px-2.5 py-1.5 ${getProofResultClass(row.result)}`}
+                        title={row.note}
+                      >
+                        <span className="truncate text-[10px] md:text-xs font-black uppercase tracking-wide">
+                          {row.player}
+                        </span>
+                        <span className="shrink-0 text-[9px] font-black uppercase tracking-widest">
+                          {row.result === "Hit" ? "Hit" : row.result === "Miss" ? "Miss" : row.result}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {onRequestAccess && (
+          <button
+            type="button"
+            onClick={() => onRequestAccess("best-bets")}
+            className="inline-flex min-h-[42px] items-center justify-center gap-2 border border-white bg-white px-4 text-[10px] md:text-xs font-black uppercase tracking-widest text-[#0A0A0F] transition hover:opacity-90"
+          >
+            Unlock the next card
+            <ArrowRight className="h-4 w-4 stroke-[3px]" />
+          </button>
+        )}
+      </div>
+    </GlassCard>
+  );
+}
+
 function BestBetsPage({
   data,
   onRequestAccess,
@@ -5956,6 +6432,7 @@ function BestBetsPage({
   if (!isPremium && !isAdmin) {
     return (
       <div className="flex flex-col gap-6 md:gap-8">
+        <RoundProofModule onRequestAccess={onRequestAccess} compact />
         <GlassCard className="p-8 md:p-12 text-center !border-[#FF2E63] !shadow-[8px_8px_0_0_#FF2E63] relative overflow-hidden">
           <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(255,46,99,0.08),transparent_55%)]" />
           <div className="relative z-10 flex flex-col items-center max-w-xl mx-auto">
@@ -5983,6 +6460,7 @@ function BestBetsPage({
 
   return (
     <div className="flex flex-col gap-6 md:gap-8">
+      <RoundProofModule />
       <div className="flex flex-col gap-4">
         <div>
           <h3 className="text-lg md:text-2xl font-black text-white uppercase tracking-tight">
