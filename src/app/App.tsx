@@ -449,12 +449,12 @@ const ROUND_14_PROOF: {
       selection: "Bulldogs head-to-head",
       market: "Head 2 Head",
       modelScore: "29-21",
-      finalScore: "Pending",
+      finalScore: "12-10",
       modelPct: 66.7,
       odds: 1.53,
       bookmaker: "TAB",
-      result: "Pending",
-      note: "Awaiting full-time result.",
+      result: "Hit",
+      note: "Bulldogs won 12-10.",
     },
   ],
   tryScorers: [
@@ -631,12 +631,12 @@ const ROUND_14_PROOF: {
     },
     {
       match: "Bulldogs v Eels",
-      player: "Josh Addo-Carr",
+      player: "Sitili Tupouniua",
       team: "Bulldogs",
-      odds: 1.9,
-      bookmaker: "Pointsbet",
-      result: "Pending",
-      note: "Awaiting full-time scorer list.",
+      odds: 3.35,
+      bookmaker: "Sportsbet",
+      result: "Hit",
+      note: "Bulldogs v Eels result: 1 scorer hit.",
     },
   ],
 };
@@ -4502,8 +4502,10 @@ function OriginMarketBoard({ row }: { row: PredictionRow }) {
 
 function FeaturedMatchPreview({
   row,
+  onRequestPremium,
 }: {
   row: PredictionRow | null;
+  onRequestPremium: (source: string) => void;
 }) {
   if (!row) return null;
 
@@ -4672,6 +4674,29 @@ function FeaturedMatchPreview({
           </div>
         </div>
       </HomeCard>
+      <button
+        type="button"
+        onClick={() => onRequestPremium("home_featured_match_premium_cta")}
+        className="mt-3 w-full border border-[#1E1E2E] bg-[#08080C] p-1 text-left transition hover:border-white/25 hover:bg-[#111116]"
+      >
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border border-[#1E1E2E] bg-[#111116] px-4 py-4 sm:px-5">
+          <div className="min-w-0">
+            <div className="mb-1 flex items-center gap-2">
+              <Lock className="h-4 w-4 shrink-0 text-[#9CA3AF]" />
+              <span className="text-[9px] font-black uppercase tracking-[0.18em] text-[#6B7280]">
+                Premium
+              </span>
+            </div>
+            <div className="text-sm font-black uppercase tracking-wide text-white sm:text-base">
+              Unlock best plays and try scorers
+            </div>
+          </div>
+          <span className="inline-flex min-h-[38px] shrink-0 items-center justify-center gap-2 border border-white bg-white px-3 text-[10px] font-black uppercase tracking-widest text-[#0A0A0F] sm:px-4">
+            Unlock
+            <ArrowRight className="h-4 w-4 stroke-[3px]" />
+          </span>
+        </div>
+      </button>
     </div>
   );
 }
@@ -4914,9 +4939,11 @@ function HomeMethodology() {
 function HomePage({
   data,
   onGoApp,
+  onRequestPremium,
 }: {
   data: DashboardData | null;
   onGoApp: (source: string) => void;
+  onRequestPremium: (source: string) => void;
 }) {
   const featured = getFeaturedPrediction(
     data?.predictions || [],
@@ -4930,6 +4957,7 @@ function HomePage({
       <div id="featured-match-section">
         <FeaturedMatchPreview
           row={featured}
+          onRequestPremium={onRequestPremium}
         />
       </div>
       <HomeMethodology />
@@ -9237,6 +9265,7 @@ export default function App() {
           <HomePage
             data={data}
             onGoApp={navigateToApp}
+            onRequestPremium={requestPremiumAccess}
           />
         )}
 
