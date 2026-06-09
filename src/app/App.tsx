@@ -2606,6 +2606,7 @@ function setStoredFavoriteTeam(team: string) {
 }
 
 const DEFAULT_PREMIUM_CHECKOUT_PLAN = "weekly";
+const PREMIUM_CHECKOUT_RETURN_GUARD_KEY = "rightedge_premium_checkout_return_guard";
 
 function PaymentGateModal({
   open,
@@ -2743,6 +2744,9 @@ function PaymentGateModal({
           section: returnHash,
           plan: DEFAULT_PREMIUM_CHECKOUT_PLAN,
         });
+        try {
+          sessionStorage.setItem(PREMIUM_CHECKOUT_RETURN_GUARD_KEY, returnHash);
+        } catch {}
         window.location.href = checkoutData.url;
         return;
       }
@@ -9312,6 +9316,9 @@ export default function App() {
           plan: DEFAULT_PREMIUM_CHECKOUT_PLAN,
           flow: "known_email",
         });
+        try {
+          sessionStorage.setItem(PREMIUM_CHECKOUT_RETURN_GUARD_KEY, safeReturnHash);
+        } catch {}
         window.location.href = checkoutData.url;
         return;
       }
@@ -9384,6 +9391,22 @@ export default function App() {
         setPaidAccessState(hasPaidAccess());
         setShowPaymentGate(false);
       } else if (hasEmailAccess() && getUserEmail()) {
+        let shouldSuppressCheckoutReturn = false;
+        try {
+          shouldSuppressCheckoutReturn = Boolean(sessionStorage.getItem(PREMIUM_CHECKOUT_RETURN_GUARD_KEY));
+          if (shouldSuppressCheckoutReturn) {
+            sessionStorage.removeItem(PREMIUM_CHECKOUT_RETURN_GUARD_KEY);
+          }
+        } catch {}
+
+        if (shouldSuppressCheckoutReturn) {
+          setPaidAccessState(false);
+          setShowPaymentGate(false);
+          window.history.replaceState({}, document.title, `${window.location.pathname}#matches`);
+          setSitePage("app");
+          return;
+        }
+
         setPaidAccessState(false);
         void startPremiumCheckoutForEmail(getUserEmail()!, hash, "direct_hash");
       } else {
@@ -9448,6 +9471,9 @@ export default function App() {
         const data = await res.json().catch(() => ({}));
 
         if (res.ok && data.success && data.email) {
+          try {
+            sessionStorage.removeItem(PREMIUM_CHECKOUT_RETURN_GUARD_KEY);
+          } catch {}
           const nextAuthState = await refreshAuthSession();
           if (nextAuthState.tier !== "premium") {
             (window as any).trackAnalyticsEvent?.("premium_checkout_confirm_failed", {
