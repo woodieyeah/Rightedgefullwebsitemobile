@@ -9245,6 +9245,94 @@ export default function App() {
     }
   };
 
+  const startPremiumCheckoutForEmail = async (
+    email: string,
+    returnHash: string,
+    source: string,
+  ) => {
+    const trimmedEmail = email.trim().toLowerCase();
+    const safeReturnHash = ["matches", "origin", "best-bets", "try-scorers"].includes(returnHash)
+      ? returnHash
+      : "best-bets";
+    const returnUrl = `${window.location.origin}${window.location.pathname}`;
+    const cancelUrl = `${window.location.origin}${window.location.pathname}#matches`;
+
+    setShowEmailGate(false);
+    setShowPaymentGate(false);
+
+    (window as any).trackAnalyticsEvent?.("premium_checkout_start", {
+      email: trimmedEmail,
+      section: safeReturnHash,
+      cta_source: source,
+      plan: DEFAULT_PREMIUM_CHECKOUT_PLAN,
+      flow: "known_email",
+    });
+
+    try {
+      await fetch(`/api/register-checkout-lead`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${publicAnonKey}`,
+        },
+        body: JSON.stringify({
+          email: trimmedEmail,
+          source: `premium_${safeReturnHash}`,
+          return_hash: safeReturnHash,
+          plan: DEFAULT_PREMIUM_CHECKOUT_PLAN,
+        }),
+      });
+    } catch (leadErr) {
+      console.warn("[RightEdge] Failed to save checkout lead:", leadErr);
+    }
+
+    try {
+      const checkoutRes = await fetch(`/api/create-checkout-session`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${publicAnonKey}`,
+        },
+        body: JSON.stringify({
+          email: trimmedEmail,
+          returnUrl,
+          returnHash: safeReturnHash,
+          plan: DEFAULT_PREMIUM_CHECKOUT_PLAN,
+          cancelUrl,
+          cancel_url: cancelUrl,
+        }),
+      });
+
+      const checkoutData = await checkoutRes.json().catch(() => ({}));
+      if (checkoutRes.ok && checkoutData.url) {
+        (window as any).trackAnalyticsEvent?.("premium_checkout_redirect", {
+          email: trimmedEmail,
+          section: safeReturnHash,
+          cta_source: source,
+          plan: DEFAULT_PREMIUM_CHECKOUT_PLAN,
+          flow: "known_email",
+        });
+        window.location.href = checkoutData.url;
+        return;
+      }
+
+      (window as any).trackAnalyticsEvent?.("premium_checkout_start_failed", {
+        email: trimmedEmail,
+        section: safeReturnHash,
+        cta_source: source,
+        error: checkoutData.error || "unknown",
+      });
+      alert(checkoutData.error || "Could not start checkout. Please try again.");
+    } catch (err) {
+      (window as any).trackAnalyticsEvent?.("premium_checkout_start_error", {
+        email: trimmedEmail,
+        section: safeReturnHash,
+        cta_source: source,
+      });
+      alert("Network error. Please check your connection and try again.");
+    }
+  };
+
   const requestPremiumAccess = (source: string = 'unknown') => {
     const targetHash = ["matches", "origin", "best-bets", "try-scorers"].includes(source)
       ? source
@@ -9255,6 +9343,17 @@ export default function App() {
     if (hasPaidAccess() || isUserAdmin()) {
       setPaidAccessState(hasPaidAccess());
       setShowPaymentGate(false);
+      return;
+    }
+
+    const knownEmail = getUserEmail();
+    if (hasEmailAccess() && knownEmail) {
+      (window as any).trackAnalyticsEvent?.("premium_known_email_checkout", {
+        email: knownEmail,
+        section: targetHash,
+        cta_source: source,
+      });
+      void startPremiumCheckoutForEmail(knownEmail, targetHash, source);
       return;
     }
 
@@ -9284,6 +9383,9 @@ export default function App() {
       if (hasPaidAccess() || isUserAdmin()) {
         setPaidAccessState(hasPaidAccess());
         setShowPaymentGate(false);
+      } else if (hasEmailAccess() && getUserEmail()) {
+        setPaidAccessState(false);
+        void startPremiumCheckoutForEmail(getUserEmail()!, hash, "direct_hash");
       } else {
         setPaidAccessState(false);
         (window as any).trackAnalyticsEvent?.("premium_paywall_open", {
@@ -9580,6 +9682,17 @@ export default function App() {
               if (hasPaidAccess()) {
                 setPaidAccessState(true);
                 setShowEmailGate(false);
+                return;
+              }
+              const knownEmail = getUserEmail();
+              if (hasEmailAccess() && knownEmail) {
+                setPaidAccessState(false);
+                (window as any).trackAnalyticsEvent?.("premium_known_email_checkout", {
+                  email: knownEmail,
+                  section: targetHash,
+                  cta_source: targetHash,
+                });
+                void startPremiumCheckoutForEmail(knownEmail, targetHash, targetHash);
                 return;
               }
               (window as any).trackAnalyticsEvent?.("premium_paywall_open", {
