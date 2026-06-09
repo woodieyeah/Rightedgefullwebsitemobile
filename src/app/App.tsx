@@ -351,14 +351,94 @@ type RoundProofTryScorer = {
   note: string;
 };
 
-const ROUND_14_PROOF: {
+type RoundArchiveFixture = {
+  match: string;
+  day: string;
+  dateISO: string;
+  dateLabel: string;
+  aedt: string;
+  stadium: string;
+};
+
+type RoundArchive = {
   round: number;
   label: string;
+  status: "Live" | "Results";
+  fixtures: RoundArchiveFixture[];
   matchPlays: RoundProofMatchPlay[];
   tryScorers: RoundProofTryScorer[];
-} = {
+};
+
+const ROUND_14_PROOF: RoundArchive = {
   round: 14,
-  label: "Round 14 proof",
+  label: "Round 14 Results",
+  status: "Results",
+  fixtures: [
+    {
+      match: "Sea Eagles v Rabbitohs",
+      day: "Thursday",
+      dateISO: "2026-06-04",
+      dateLabel: "Jun 4",
+      aedt: "7:50 PM",
+      stadium: "4 Pines Park",
+    },
+    {
+      match: "Storm v Knights",
+      day: "Friday",
+      dateISO: "2026-06-05",
+      dateLabel: "Jun 5",
+      aedt: "6:00 PM",
+      stadium: "AAMI Park",
+    },
+    {
+      match: "Raiders v Roosters",
+      day: "Friday",
+      dateISO: "2026-06-05",
+      dateLabel: "Jun 5",
+      aedt: "8:00 PM",
+      stadium: "GIO Stadium",
+    },
+    {
+      match: "Cowboys v Dolphins",
+      day: "Saturday",
+      dateISO: "2026-06-06",
+      dateLabel: "Jun 6",
+      aedt: "5:30 PM",
+      stadium: "QLD Country Bank Stadium",
+    },
+    {
+      match: "Broncos v Titans",
+      day: "Saturday",
+      dateISO: "2026-06-06",
+      dateLabel: "Jun 6",
+      aedt: "7:30 PM",
+      stadium: "Suncorp Stadium",
+    },
+    {
+      match: "Wests Tigers v Panthers",
+      day: "Sunday",
+      dateISO: "2026-06-07",
+      dateLabel: "Jun 7",
+      aedt: "2:00 PM",
+      stadium: "CommBank Stadium",
+    },
+    {
+      match: "Sharks v Dragons",
+      day: "Sunday",
+      dateISO: "2026-06-07",
+      dateLabel: "Jun 7",
+      aedt: "4:05 PM",
+      stadium: "Cronulla Stadium",
+    },
+    {
+      match: "Bulldogs v Eels",
+      day: "Monday",
+      dateISO: "2026-06-08",
+      dateLabel: "Jun 8",
+      aedt: "4:05 PM",
+      stadium: "Accor Stadium",
+    },
+  ],
   matchPlays: [
     {
       match: "Sea Eagles v Rabbitohs",
@@ -640,6 +720,83 @@ const ROUND_14_PROOF: {
     },
   ],
 };
+
+const ROUND_ARCHIVES: RoundArchive[] = [ROUND_14_PROOF];
+
+function splitMatchTeams(match: string) {
+  const [home = "", away = ""] = String(match || "").split(/\s+v\s+/i);
+  return {
+    homeTeam: normalizeTeamName(home),
+    awayTeam: normalizeTeamName(away),
+  };
+}
+
+function parseScorePair(score: string) {
+  const match = String(score || "").match(/(\d+)\s*[-–]\s*(\d+)/);
+  if (!match) return { homeScore: 0, awayScore: 0 };
+  return {
+    homeScore: Number(match[1]),
+    awayScore: Number(match[2]),
+  };
+}
+
+function getArchiveFixture(archive: RoundArchive, match: string): FixtureRow | null {
+  const fixture = archive.fixtures.find(
+    (candidate) => getMatchPairKeyFromLabel(candidate.match) === getMatchPairKeyFromLabel(match),
+  );
+  if (!fixture) return null;
+
+  const { homeTeam, awayTeam } = splitMatchTeams(fixture.match);
+  return {
+    roundNumber: archive.round,
+    roundLabel: `Round ${archive.round}`,
+    day: fixture.day,
+    dateISO: fixture.dateISO,
+    dateLabel: fixture.dateLabel,
+    tz: "AEST",
+    homeTeam,
+    awayTeam,
+    stadium: fixture.stadium,
+    network: "",
+    aedt: fixture.aedt,
+    local: fixture.aedt,
+  };
+}
+
+function buildArchivedPredictionRows(archive: RoundArchive): PredictionRow[] {
+  return archive.matchPlays.map((play) => {
+    const { homeTeam, awayTeam } = splitMatchTeams(play.match);
+    const { homeScore, awayScore } = parseScorePair(play.finalScore || play.modelScore);
+    const predictedWinner =
+      homeScore > awayScore
+        ? homeTeam
+        : awayScore > homeScore
+          ? awayTeam
+          : normalizeTeamName(play.selection);
+
+    return {
+      match: `${homeTeam} v ${awayTeam}`,
+      roundNumber: archive.round,
+      homeTeam,
+      awayTeam,
+      predictedWinner,
+      predictedHomeScore: homeScore,
+      predictedAwayScore: awayScore,
+      modelHomeOdds: 0,
+      modelAwayOdds: 0,
+      marketHomeOdds: 0,
+      marketAwayOdds: 0,
+      homeOverlay: 0,
+      awayOverlay: 0,
+      bestBet: play.selection,
+      side: "",
+      stake: 0,
+      confidence: "Value",
+      fixture: getArchiveFixture(archive, play.match),
+      bestEdge: 0,
+    };
+  });
+}
 
 type RoundSummary = {
   round: string;
@@ -1541,22 +1698,24 @@ function getTryScorerSignalsForPrediction(data: DashboardData, row: PredictionRo
     .slice(0, limit);
 }
 
-function getRoundProofMatchPlaysForPrediction(row: PredictionRow) {
+function getRoundProofMatchPlaysForPrediction(row: PredictionRow, archive: RoundArchive | null = ROUND_14_PROOF) {
+  if (!archive) return [];
   const pairKey = getPredictionPairKey(row);
-  return ROUND_14_PROOF.matchPlays.filter(
+  return archive.matchPlays.filter(
     (play) => getMatchPairKeyFromLabel(play.match) === pairKey,
   );
 }
 
-function getRoundProofTryScorerHitsForPrediction(row: PredictionRow) {
+function getRoundProofTryScorerHitsForPrediction(row: PredictionRow, archive: RoundArchive | null = ROUND_14_PROOF) {
+  if (!archive) return [];
   const pairKey = getPredictionPairKey(row);
-  return ROUND_14_PROOF.tryScorers.filter(
+  return archive.tryScorers.filter(
     (scorer) => scorer.result === "Hit" && getMatchPairKeyFromLabel(scorer.match) === pairKey,
   );
 }
 
-function hasSettledRoundProofForPrediction(row: PredictionRow) {
-  return getRoundProofMatchPlaysForPrediction(row).some(
+function hasSettledRoundProofForPrediction(row: PredictionRow, archive: RoundArchive | null = ROUND_14_PROOF) {
+  return getRoundProofMatchPlaysForPrediction(row, archive).some(
     (play) => play.result === "Hit" || play.result === "Miss",
   );
 }
@@ -5606,16 +5765,28 @@ function PredictionsPage({
   data,
   onRequestAccess,
   isPremium,
+  selectedArchive,
 }: {
   data: DashboardData;
   onRequestAccess: (targetHash?: string) => void;
   isPremium: boolean;
+  selectedArchive?: RoundArchive | null;
 }) {
   const now = useMinuteNow();
-  const rows = [...data.predictions].sort(sortPredictionsByFixture);
+  const rows = useMemo(
+    () => selectedArchive
+      ? buildArchivedPredictionRows(selectedArchive).sort(sortPredictionsByFixture)
+      : [...data.predictions].sort(sortPredictionsByFixture),
+    [data.predictions, selectedArchive],
+  );
   const [marketMap, setMarketMap] = useState<SgmMarketMap>({});
 
   useEffect(() => {
+    if (selectedArchive) {
+      setMarketMap({});
+      return;
+    }
+
     let isMounted = true;
 
     fetchLiveOddsCached()
@@ -5631,11 +5802,29 @@ function PredictionsPage({
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [selectedArchive]);
 
   return (
     <div className="flex flex-col gap-6 md:gap-8">
       <ResponsibleGamblingNotice />
+
+      {selectedArchive && (
+        <GlassCard className="p-4 md:p-5 border-l-4 border-l-[#00E676]">
+          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <div>
+              <div className="text-[10px] font-black uppercase tracking-widest text-[#6B7280]">
+                Previous round results
+              </div>
+              <div className="mt-1 text-lg md:text-2xl font-black uppercase tracking-tight text-white">
+                {selectedArchive.label}
+              </div>
+            </div>
+            <div className="text-[10px] md:text-xs font-black uppercase tracking-widest text-white/45">
+              {selectedArchive.matchPlays.filter((play) => play.result === "Hit").length}/{selectedArchive.matchPlays.length} match plays hit
+            </div>
+          </div>
+        </GlassCard>
+      )}
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 md:gap-8">
         {rows.map((row, i) => {
@@ -5653,12 +5842,12 @@ function PredictionsPage({
           const hasPredictedWinner = homeIsPredictedWinner || awayIsPredictedWinner;
           const homeColors = getTeamColors(row.homeTeam);
           const awayColors = getTeamColors(row.awayTeam);
-          const premiumMarketPlay = getBestPremiumMarketPlayForMatch(row, marketMap);
-          const settledPremiumBet = getSettledBetForPrediction(data, row);
-          const tryScorerSignals = getTryScorerSignalsForPrediction(data, row);
-          const proofMatchPlays = getRoundProofMatchPlaysForPrediction(row);
-          const proofTryScorerHits = getRoundProofTryScorerHitsForPrediction(row);
-          const matchCompleted = isFixtureCompleted(row.fixture, now) || hasSettledRoundProofForPrediction(row);
+          const premiumMarketPlay = selectedArchive ? null : getBestPremiumMarketPlayForMatch(row, marketMap);
+          const settledPremiumBet = selectedArchive ? null : getSettledBetForPrediction(data, row);
+          const tryScorerSignals = selectedArchive ? [] : getTryScorerSignalsForPrediction(data, row);
+          const proofMatchPlays = getRoundProofMatchPlaysForPrediction(row, selectedArchive);
+          const proofTryScorerHits = getRoundProofTryScorerHitsForPrediction(row, selectedArchive);
+          const matchCompleted = Boolean(selectedArchive) || isFixtureCompleted(row.fixture, now) || hasSettledRoundProofForPrediction(row, selectedArchive);
           const fixtureStatus = matchCompleted
             ? {
                 label: "Completed",
@@ -8120,6 +8309,77 @@ function AnalyticsPage({ data }: { data: DashboardData }) {
   );
 }
 
+function RoundSwitcher({
+  liveLabel,
+  selectedArchiveRound,
+  onSelectArchiveRound,
+}: {
+  liveLabel: string;
+  selectedArchiveRound: number | null;
+  onSelectArchiveRound: (round: number | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const selectedArchive = ROUND_ARCHIVES.find((archive) => archive.round === selectedArchiveRound) || null;
+  const label = selectedArchive ? selectedArchive.label : `${liveLabel} Live`;
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        className="inline-flex items-center gap-2 bg-[#16161D] px-3 md:px-4 py-1.5 md:py-2 border border-[#1E1E2E] text-left transition hover:border-white/25"
+      >
+        {!selectedArchive && (
+          <span className="relative flex h-2.5 w-2.5">
+            <span className="absolute inline-flex h-full w-full animate-ping-pong rounded-full bg-[#4ADE80] opacity-70" />
+            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-[#4ADE80]" />
+          </span>
+        )}
+        <span>{label}</span>
+        <ChevronDown className={`h-3.5 w-3.5 transition ${open ? "rotate-180" : ""}`} />
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-[calc(100%+0.5rem)] z-50 w-[220px] border border-[#1E1E2E] bg-[#111116] p-1 shadow-[0_18px_45px_rgba(0,0,0,0.35)]">
+          <button
+            type="button"
+            onClick={() => {
+              onSelectArchiveRound(null);
+              setOpen(false);
+            }}
+            className={`flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest transition ${
+              !selectedArchive
+                ? "bg-white text-[#0A0A0F]"
+                : "text-[#9CA3AF] hover:bg-white/[0.05] hover:text-white"
+            }`}
+          >
+            <span>{liveLabel} Live</span>
+            <span className="h-2 w-2 bg-[#4ADE80]" />
+          </button>
+          {ROUND_ARCHIVES.map((archive) => (
+            <button
+              key={archive.round}
+              type="button"
+              onClick={() => {
+                onSelectArchiveRound(archive.round);
+                setOpen(false);
+              }}
+              className={`mt-1 flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest transition ${
+                selectedArchive?.round === archive.round
+                  ? "bg-white text-[#0A0A0F]"
+                  : "text-[#9CA3AF] hover:bg-white/[0.05] hover:text-white"
+              }`}
+            >
+              <span>{archive.label}</span>
+              <span className="text-[8px] opacity-70">{archive.matchPlays.length} plays</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AppDashboard({
   data,
   loading,
@@ -8160,6 +8420,11 @@ function AppDashboard({
     }
     return "matches";
   });
+  const [selectedArchiveRound, setSelectedArchiveRound] = useState<number | null>(null);
+  const selectedRoundArchive = useMemo(
+    () => ROUND_ARCHIVES.find((archive) => archive.round === selectedArchiveRound) || null,
+    [selectedArchiveRound],
+  );
 
   useEffect(() => {
     const handleHashChange = () => {
@@ -8371,13 +8636,21 @@ function AppDashboard({
               </button>
             </div>
             <div className="flex flex-wrap items-center gap-2 md:gap-4 text-[10px] md:text-sm text-white font-medium uppercase tracking-wider mt-2 xl:mt-0">
-              <span className="inline-flex items-center gap-2 bg-[#16161D] px-3 md:px-4 py-1.5 md:py-2 border border-[#1E1E2E]">
-                <span className="relative flex h-2.5 w-2.5">
-                  <span className="absolute inline-flex h-full w-full animate-ping-pong rounded-full bg-[#4ADE80] opacity-70" />
-                  <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-[#4ADE80]" />
+              {page === "matches" ? (
+                <RoundSwitcher
+                  liveLabel={data?.currentRoundLabel || "Round 1"}
+                  selectedArchiveRound={selectedArchiveRound}
+                  onSelectArchiveRound={setSelectedArchiveRound}
+                />
+              ) : (
+                <span className="inline-flex items-center gap-2 bg-[#16161D] px-3 md:px-4 py-1.5 md:py-2 border border-[#1E1E2E]">
+                  <span className="relative flex h-2.5 w-2.5">
+                    <span className="absolute inline-flex h-full w-full animate-ping-pong rounded-full bg-[#4ADE80] opacity-70" />
+                    <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-[#4ADE80]" />
+                  </span>
+                  <span>{data?.currentRoundLabel || "Round 1"} Live</span>
                 </span>
-                <span>{data?.currentRoundLabel || "Round 1"} Live</span>
-              </span>
+              )}
             </div>
           </div>
 
@@ -8427,6 +8700,7 @@ function AppDashboard({
                   data={data}
                   onRequestAccess={onRequestAccess}
                   isPremium={isPremium || isAdmin}
+                  selectedArchive={selectedRoundArchive}
                 />
               )}
               {page === "origin" && (
