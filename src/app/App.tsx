@@ -2624,7 +2624,10 @@ function PaymentGateModal({
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
+  const storedEmail = getUserEmail();
+  const checkoutEmail = (storedEmail || email).trim().toLowerCase();
   const trimmedEmail = email.trim().toLowerCase();
+  const hasStoredEmail = Boolean(storedEmail);
 
   useEffect(() => {
     if (!open) return;
@@ -2642,7 +2645,7 @@ function PaymentGateModal({
 
   const handleEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!trimmedEmail || !trimmedEmail.includes("@") || !trimmedEmail.includes(".")) {
+    if (!checkoutEmail || !checkoutEmail.includes("@") || !checkoutEmail.includes(".")) {
       setErrorMsg("Enter a valid email address.");
       return;
     }
@@ -2658,7 +2661,7 @@ function PaymentGateModal({
           Authorization: `Bearer ${publicAnonKey}`,
         },
         credentials: "include",
-        body: JSON.stringify({ email: trimmedEmail }),
+        body: JSON.stringify({ email: checkoutEmail }),
       });
 
       const verifyData = await verifyRes.json().catch(() => ({}));
@@ -2671,7 +2674,7 @@ function PaymentGateModal({
       );
 
       if (verifyRes.ok && isActiveSubscriber) {
-        const verifiedEmail = (verifyData.email || trimmedEmail).trim().toLowerCase();
+        const verifiedEmail = (verifyData.email || checkoutEmail).trim().toLowerCase();
         const nextAuthState = await onSessionRefresh();
         if (nextAuthState.tier !== "premium") {
           setErrorMsg("We verified your email, but could not restore the secure session. Please try again.");
@@ -2689,36 +2692,36 @@ function PaymentGateModal({
         ? currentPremiumHash
         : "best-bets";
       const returnUrl = `${window.location.origin}${window.location.pathname}`;
-      const cancelUrl = `${window.location.origin}${window.location.pathname}#${returnHash}`;
+      const cancelUrl = `${window.location.origin}${window.location.pathname}#matches`;
 
       (window as any).trackAnalyticsEvent?.("premium_email_submit", {
-        email: trimmedEmail,
+        email: checkoutEmail,
         section: returnHash,
         plan: DEFAULT_PREMIUM_CHECKOUT_PLAN,
+        flow: hasStoredEmail ? "known_email_button" : "email_form",
       });
 
-      try {
-        await fetch(`/api/register-checkout-lead`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${publicAnonKey}`,
-          },
-          body: JSON.stringify({
-            email: trimmedEmail,
-            source: `premium_${returnHash}`,
-            return_hash: returnHash,
-            plan: DEFAULT_PREMIUM_CHECKOUT_PLAN,
-          }),
-        });
-      } catch (leadErr) {
+      void fetch(`/api/register-checkout-lead`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${publicAnonKey}`,
+        },
+        body: JSON.stringify({
+          email: checkoutEmail,
+          source: `premium_${returnHash}`,
+          return_hash: returnHash,
+          plan: DEFAULT_PREMIUM_CHECKOUT_PLAN,
+        }),
+      }).catch((leadErr) => {
         console.warn("[RightEdge] Failed to save checkout lead:", leadErr);
-      }
+      });
 
       (window as any).trackAnalyticsEvent?.("premium_checkout_start", {
-        email: trimmedEmail,
+        email: checkoutEmail,
         section: returnHash,
         plan: DEFAULT_PREMIUM_CHECKOUT_PLAN,
+        flow: hasStoredEmail ? "known_email_button" : "email_form",
       });
 
       const checkoutRes = await fetch(`/api/create-checkout-session`, {
@@ -2728,7 +2731,7 @@ function PaymentGateModal({
           Authorization: `Bearer ${publicAnonKey}`,
         },
         body: JSON.stringify({
-          email: trimmedEmail,
+          email: checkoutEmail,
           returnUrl,
           returnHash,
           plan: DEFAULT_PREMIUM_CHECKOUT_PLAN,
@@ -2740,9 +2743,10 @@ function PaymentGateModal({
       const checkoutData = await checkoutRes.json().catch(() => ({}));
       if (checkoutRes.ok && checkoutData.url) {
         (window as any).trackAnalyticsEvent?.("premium_checkout_redirect", {
-          email: trimmedEmail,
+          email: checkoutEmail,
           section: returnHash,
           plan: DEFAULT_PREMIUM_CHECKOUT_PLAN,
+          flow: hasStoredEmail ? "known_email_button" : "email_form",
         });
         try {
           sessionStorage.setItem(PREMIUM_CHECKOUT_RETURN_GUARD_KEY, returnHash);
@@ -2790,7 +2794,9 @@ function PaymentGateModal({
         </div>
 
         <p className="text-sm text-[#9CA3AF] font-normal leading-relaxed mb-6">
-          Already Premium? Enter your subscriber email and we’ll unlock access instantly. New here? Use the same email to continue to secure Stripe checkout.
+          {hasStoredEmail
+            ? "Unlock the premium read for this round. We’ll use your saved email and send you straight to secure Stripe checkout."
+            : "Already Premium? Enter your subscriber email and we’ll unlock access instantly. New here? Use the same email to continue to secure Stripe checkout."}
         </p>
 
         {step === "processing" ? (
@@ -2803,6 +2809,41 @@ function PaymentGateModal({
               Secure checkout is opening now.
             </p>
           </div>
+        ) : hasStoredEmail ? (
+          <form
+            onSubmit={handleEmailSubmit}
+            className="flex flex-col gap-4"
+          >
+            <div className="bg-[#0A0A0F] border border-[#1E1E2E] px-4 py-3">
+              <div className="text-[10px] text-[#9CA3AF] font-medium uppercase tracking-widest mb-1">
+                Checkout email
+              </div>
+              <div className="text-white text-sm font-semibold truncate">
+                {storedEmail}
+              </div>
+            </div>
+
+            {errorMsg && (
+              <p className="text-[#F87171] text-xs font-medium uppercase tracking-wider">
+                {errorMsg}
+              </p>
+            )}
+
+            <button
+              type="submit"
+              disabled={submitting}
+              className="w-full re-primary-cta border py-4 text-base font-medium uppercase tracking-wider hover:opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              {submitting ? (
+                <RefreshCw className="w-5 h-5 animate-spin" />
+              ) : (
+                <>
+                  Unlock Premium — $9/week
+                  <ArrowRight className="w-5 h-5 stroke-[3px]" />
+                </>
+              )}
+            </button>
+          </form>
         ) : (
           <form
             onSubmit={handleEmailSubmit}
@@ -9249,97 +9290,6 @@ export default function App() {
     }
   };
 
-  const startPremiumCheckoutForEmail = async (
-    email: string,
-    returnHash: string,
-    source: string,
-  ) => {
-    const trimmedEmail = email.trim().toLowerCase();
-    const safeReturnHash = ["matches", "origin", "best-bets", "try-scorers"].includes(returnHash)
-      ? returnHash
-      : "best-bets";
-    const returnUrl = `${window.location.origin}${window.location.pathname}`;
-    const cancelUrl = `${window.location.origin}${window.location.pathname}#matches`;
-
-    setShowEmailGate(false);
-    setShowPaymentGate(false);
-
-    (window as any).trackAnalyticsEvent?.("premium_checkout_start", {
-      email: trimmedEmail,
-      section: safeReturnHash,
-      cta_source: source,
-      plan: DEFAULT_PREMIUM_CHECKOUT_PLAN,
-      flow: "known_email",
-    });
-
-    try {
-      await fetch(`/api/register-checkout-lead`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${publicAnonKey}`,
-        },
-        body: JSON.stringify({
-          email: trimmedEmail,
-          source: `premium_${safeReturnHash}`,
-          return_hash: safeReturnHash,
-          plan: DEFAULT_PREMIUM_CHECKOUT_PLAN,
-        }),
-      });
-    } catch (leadErr) {
-      console.warn("[RightEdge] Failed to save checkout lead:", leadErr);
-    }
-
-    try {
-      const checkoutRes = await fetch(`/api/create-checkout-session`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${publicAnonKey}`,
-        },
-        body: JSON.stringify({
-          email: trimmedEmail,
-          returnUrl,
-          returnHash: safeReturnHash,
-          plan: DEFAULT_PREMIUM_CHECKOUT_PLAN,
-          cancelUrl,
-          cancel_url: cancelUrl,
-        }),
-      });
-
-      const checkoutData = await checkoutRes.json().catch(() => ({}));
-      if (checkoutRes.ok && checkoutData.url) {
-        (window as any).trackAnalyticsEvent?.("premium_checkout_redirect", {
-          email: trimmedEmail,
-          section: safeReturnHash,
-          cta_source: source,
-          plan: DEFAULT_PREMIUM_CHECKOUT_PLAN,
-          flow: "known_email",
-        });
-        try {
-          sessionStorage.setItem(PREMIUM_CHECKOUT_RETURN_GUARD_KEY, safeReturnHash);
-        } catch {}
-        window.location.href = checkoutData.url;
-        return;
-      }
-
-      (window as any).trackAnalyticsEvent?.("premium_checkout_start_failed", {
-        email: trimmedEmail,
-        section: safeReturnHash,
-        cta_source: source,
-        error: checkoutData.error || "unknown",
-      });
-      alert(checkoutData.error || "Could not start checkout. Please try again.");
-    } catch (err) {
-      (window as any).trackAnalyticsEvent?.("premium_checkout_start_error", {
-        email: trimmedEmail,
-        section: safeReturnHash,
-        cta_source: source,
-      });
-      alert("Network error. Please check your connection and try again.");
-    }
-  };
-
   const requestPremiumAccess = (source: string = 'unknown') => {
     const targetHash = ["matches", "origin", "best-bets", "try-scorers"].includes(source)
       ? source
@@ -9355,12 +9305,13 @@ export default function App() {
 
     const knownEmail = getUserEmail();
     if (hasEmailAccess() && knownEmail) {
-      (window as any).trackAnalyticsEvent?.("premium_known_email_checkout", {
+      (window as any).trackAnalyticsEvent?.("premium_paywall_open", {
         email: knownEmail,
         section: targetHash,
         cta_source: source,
+        flow: "known_email_button",
       });
-      void startPremiumCheckoutForEmail(knownEmail, targetHash, source);
+      setShowPaymentGate(true);
       return;
     }
 
@@ -9408,7 +9359,13 @@ export default function App() {
         }
 
         setPaidAccessState(false);
-        void startPremiumCheckoutForEmail(getUserEmail()!, hash, "direct_hash");
+        (window as any).trackAnalyticsEvent?.("premium_paywall_open", {
+          email: getUserEmail(),
+          section: hash,
+          cta_source: "direct_hash",
+          flow: "known_email_button",
+        });
+        setShowPaymentGate(true);
       } else {
         setPaidAccessState(false);
         (window as any).trackAnalyticsEvent?.("premium_paywall_open", {
@@ -9713,12 +9670,13 @@ export default function App() {
               const knownEmail = getUserEmail();
               if (hasEmailAccess() && knownEmail) {
                 setPaidAccessState(false);
-                (window as any).trackAnalyticsEvent?.("premium_known_email_checkout", {
+                (window as any).trackAnalyticsEvent?.("premium_paywall_open", {
                   email: knownEmail,
                   section: targetHash,
                   cta_source: targetHash,
+                  flow: "known_email_button",
                 });
-                void startPremiumCheckoutForEmail(knownEmail, targetHash, targetHash);
+                setShowPaymentGate(true);
                 return;
               }
               (window as any).trackAnalyticsEvent?.("premium_paywall_open", {
