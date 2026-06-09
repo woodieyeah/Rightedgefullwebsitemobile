@@ -6665,14 +6665,6 @@ function BestBetsPage({
     () => buildPremiumMarketPlays(data, marketMap, now, canViewStartedPremiumPlays).slice(0, isAdmin ? 50 : 8),
     [data, marketMap, now, canViewStartedPremiumPlays, isAdmin],
   );
-  const proofMatchKeys = useMemo(
-    () => new Set(ROUND_14_PROOF.matchPlays.map((play) => getMatchPairKeyFromLabel(play.match))),
-    [],
-  );
-  const liveMatchReads = matchReads.filter((play) => !proofMatchKeys.has(getPredictionPairKey(play.row)));
-  const proofMatchReads = isAdmin
-    ? ROUND_14_PROOF.matchPlays
-    : ROUND_14_PROOF.matchPlays.slice(0, 8);
 
   const latestTryScorerRound = Math.max(
     0,
@@ -6764,7 +6756,7 @@ function BestBetsPage({
               Loading live line and total prices...
             </div>
           </GlassCard>
-        ) : proofMatchReads.length === 0 && liveMatchReads.length === 0 ? (
+        ) : matchReads.length === 0 ? (
           <GlassCard className="p-4 md:p-8 text-center border-l-4 border-l-white/20">
             <div className="text-white/50 font-bold uppercase tracking-widest text-[10px] md:text-base">
               MODELLING IN PROGRESS - PREDICTIONS AVAILABLE EVERY WEDNESDAY
@@ -6772,10 +6764,7 @@ function BestBetsPage({
           </GlassCard>
         ) : (
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 md:gap-6">
-            {proofMatchReads.map((play) => (
-              <RoundProofMarketPlayCard key={`${play.match}-${play.selection}`} play={play} />
-            ))}
-            {liveMatchReads.map((play) => (
+            {matchReads.map((play) => (
               <PremiumMarketPlayCard key={play.id} play={play} now={now} />
             ))}
           </div>
