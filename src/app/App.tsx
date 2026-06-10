@@ -4719,9 +4719,8 @@ function FeaturedMatchPreview({
 }) {
   if (!row) return null;
 
-  const isOfficialPlay = isModelAlignedOfficialPlay(row);
   const selectedTeam = normalizeTeamName(
-    isOfficialPlay ? row.bestBet : row.predictedWinner,
+    row.predictedWinner,
   );
   const selectedOdds =
     selectedTeam === normalizeTeamName(row.homeTeam)
@@ -4753,13 +4752,8 @@ function FeaturedMatchPreview({
         ? "text-[#4ADE80]"
         : "text-[#F87171]";
 
-  const featuredWinPct =
-    isOfficialPlay
-      ? getRowSideWinPct(row)
-      : getPredictedWinnerWinPct(row);
+  const featuredWinPct = getPredictedWinnerWinPct(row);
 
-  const displayBestBet =
-    row.bestBet?.replace("Sydney", "Roosters") || row.bestBet;
   const homeScore = Math.round(row.predictedHomeScore);
   const awayScore = Math.round(row.predictedAwayScore);
   const homeWinsProjection = homeScore > awayScore;
@@ -4835,18 +4829,6 @@ function FeaturedMatchPreview({
               isWinner={awayWinsProjection || homeScore === awayScore}
             />
           </div>
-
-          {isOfficialPlay && (
-            <div className="border border-[#1E1E2E] bg-[#16161D] p-4 sm:p-5">
-              <div className="mb-2 flex items-center gap-2 text-[10px] font-medium uppercase tracking-[0.14em] text-[#9CA3AF]">
-                <Lock className="h-3.5 w-3.5" />
-                Premium model play
-              </div>
-              <div className="text-2xl font-semibold uppercase tracking-tight text-white sm:text-3xl">
-                {displayBestBet}
-              </div>
-            </div>
-          )}
 
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
             <div className="border border-[#1E1E2E] bg-[#16161D] p-4">
