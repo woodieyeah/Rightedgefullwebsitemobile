@@ -17,6 +17,8 @@ const AUTH_SESSION_COOKIE = "rightedge_session";
 const AUTH_SESSION_MAX_AGE_SECONDS = 7_776_000;
 const DEFAULT_STRIPE_PREMIUM_WEEKLY_PRICE_ID = "price_1TE76qHbbDQt0kPBF1BrLgdQ";
 const DEFAULT_STRIPE_PREMIUM_MONTHLY_PRICE_ID = "price_1TeeatHbbDQt0kPBBQ3xzV1d";
+const STRIPE_PREMIUM_EXPECTED_PRODUCT_ID = "prod_UCW96IffvVLL3c";
+const STRIPE_CHECKOUT_VERSION = "2026-06-05-current-premium-product";
 
 type AuthSessionTier = "free" | "premium";
 type PremiumCheckoutPlan = "weekly" | "monthly";
@@ -56,7 +58,7 @@ function normalizePremiumCheckoutPlan(plan: unknown): PremiumCheckoutPlan {
   return String(plan || "").trim().toLowerCase() === "monthly" ? "monthly" : "weekly";
 }
 
-function getPremiumStripePriceId(plan: PremiumCheckoutPlan = "weekly") {
+function getConfiguredPremiumStripePriceId(plan: PremiumCheckoutPlan = "weekly") {
   if (plan === "monthly") {
     return (
       Deno.env.get("STRIPE_PREMIUM_MONTHLY_PRICE_ID")?.trim() ||
@@ -68,6 +70,48 @@ function getPremiumStripePriceId(plan: PremiumCheckoutPlan = "weekly") {
     Deno.env.get("STRIPE_PREMIUM_WEEKLY_PRICE_ID")?.trim() ||
     DEFAULT_STRIPE_PREMIUM_WEEKLY_PRICE_ID
   );
+}
+
+function getDefaultPremiumStripePriceId(plan: PremiumCheckoutPlan = "weekly") {
+  return plan === "monthly"
+    ? DEFAULT_STRIPE_PREMIUM_MONTHLY_PRICE_ID
+    : DEFAULT_STRIPE_PREMIUM_WEEKLY_PRICE_ID;
+}
+
+function getStripePriceProductId(price: any) {
+  const product = price?.product;
+  return typeof product === "string" ? product : product?.id || "";
+}
+
+async function resolvePremiumStripePriceId(stripe: Stripe, plan: PremiumCheckoutPlan = "weekly") {
+  const configuredPriceId = getConfiguredPremiumStripePriceId(plan);
+  const fallbackPriceId = getDefaultPremiumStripePriceId(plan);
+
+  try {
+    const configuredPrice = await stripe.prices.retrieve(configuredPriceId);
+    const configuredProductId = getStripePriceProductId(configuredPrice);
+
+    if (configuredPrice.active !== false && configuredProductId === STRIPE_PREMIUM_EXPECTED_PRODUCT_ID) {
+      return configuredPriceId;
+    }
+
+    console.warn(
+      `[Stripe] Ignoring configured ${plan} price ${configuredPriceId}; product=${configuredProductId || "unknown"} active=${configuredPrice.active}`
+    );
+  } catch (err: any) {
+    console.warn(`[Stripe] Could not validate configured ${plan} price ${configuredPriceId}:`, err?.message || err);
+  }
+
+  const fallbackPrice = await stripe.prices.retrieve(fallbackPriceId);
+  const fallbackProductId = getStripePriceProductId(fallbackPrice);
+
+  if (fallbackPrice.active === false || fallbackProductId !== STRIPE_PREMIUM_EXPECTED_PRODUCT_ID) {
+    throw new Error(
+      `Fallback ${plan} price ${fallbackPriceId} is not usable for expected product ${STRIPE_PREMIUM_EXPECTED_PRODUCT_ID}.`
+    );
+  }
+
+  return fallbackPriceId;
 }
 
 function normalizeStripeSubscriptionStatus(status: unknown) {
@@ -610,53 +654,135 @@ function rightEdgeEmailShell(preheader: string, label: string, innerHtml: string
 }
 
 function freeWelcomeHtml() {
-  return rightEdgeEmailShell(
-    "View this week's match simulations and score projections.",
-    "Free Access",
-    `
-        <div style="background:#111116;border:1px solid #1E1E2E;margin-top:24px;padding:28px 26px;">
-          <div style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:34px;line-height:1.05;color:#ffffff;font-weight:600;letter-spacing:-0.02em;text-transform:uppercase;">Welcome to RightEdge.</div>
-          <div style="margin-top:12px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:18px;line-height:1.4;color:#ffffff;font-weight:500;letter-spacing:-0.01em;">Your free round access is ready.</div>
-          <div style="margin-top:18px;max-width:560px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:16px;line-height:1.6;color:#9CA3AF;font-weight:400;">
-            Your account is set up and you now have full access to our standard match simulations and score projections.<br/><br/>
-            Since you went straight into the live dashboard when you signed up, you are already logged in on your current browser. If you ever close the tab, log out, or want to view the data on a different device, just use the button below to head back to the site.
-          </div>
-          ${emailCtaHtml("https://www.rightedge.com.au/#matches", "View Round Predictions &rarr;")}
-          <div style="margin-top:12px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:12px;line-height:1.6;color:#6B7280;font-weight:400;">
-            <em>Note: RightEdge is completely passwordless. If your browser session expires, simply type your email on the homepage to jump straight back into your dashboard instantly.</em>
-          </div>
+  return `
+    <!doctype html>
+    <html lang="en">
+      <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="color-scheme" content="light" />
+        <meta name="supported-color-schemes" content="light" />
+        <title>RightEdge Free Access</title>
+      </head>
+      <body style="margin:0; padding:0; background:#ffffff;">
+        <div style="display:none; overflow:hidden; line-height:1px; opacity:0; max-height:0; max-width:0;">
+          Your free RightEdge model access is ready.
         </div>
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse; background:#ffffff;">
+          <tr>
+            <td align="center" style="padding:0;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse; max-width:640px; background:#e7e7e4; color:#0a0a0a; font-family:Inter, Arial, Helvetica, sans-serif;">
+                <tr>
+                  <td style="padding:32px 32px 0;">
+                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;">
+                      <tr>
+                        <td style="font-size:22px; line-height:1; font-weight:900; letter-spacing:-0.03em; color:#0a0a0a;">RightEdge</td>
+                        <td align="right" style="font-size:11px; line-height:1; font-weight:800; letter-spacing:0.18em; text-transform:uppercase; color:#8a8a86;">Free Access</td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
 
-        <div style="margin-top:28px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:14px;line-height:1.2;color:#ffffff;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;">How the model works</div>
+                <tr>
+                  <td style="padding:44px 32px 0;">
+                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse; border:1px solid #cfcfca; background:#f4f4f1;">
+                      <tr>
+                        <td style="padding:34px 32px 30px;">
+                          <div style="margin:0 0 16px; color:#777773; font-size:11px; line-height:1; font-weight:900; letter-spacing:0.2em; text-transform:uppercase;">Account ready</div>
+                          <h1 style="margin:0 0 20px; color:#0a0a0a; font-size:48px; line-height:0.96; letter-spacing:-0.045em; font-weight:900;">Welcome to<br />RightEdge.</h1>
+                          <p style="margin:0; color:#5e5e5a; font-size:17px; line-height:1.65; font-weight:500;">
+                            Your free round access is ready. Jump into the live predictions board for projected scores, model probabilities, and the next NRL fixtures.
+                          </p>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding:0 32px 34px;">
+                          <a href="https://www.rightedge.com.au/#matches" target="_blank" rel="noopener noreferrer" style="display:block; box-sizing:border-box; width:100%; padding:18px 22px; background:#ffffff; border:1px solid #c9c9c4; color:#0a0a0a; text-decoration:none; font-size:15px; line-height:1; font-weight:900; letter-spacing:0.08em; text-transform:uppercase; text-align:center;">View Round Predictions &rarr;</a>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
 
-        <div style="background:#111116;border:1px solid #1E1E2E;margin-top:14px;padding:22px 24px;">
-          <div style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:12px;line-height:1.2;color:#ffffff;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;">01 / Data Simulation</div>
-          <div style="margin-top:10px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:14px;line-height:1.7;color:#9CA3AF;font-weight:400;">We run 10,000 algorithmic simulations for every NRL match&mdash;processing team metrics and roster changes to map out clean NRL predictions, picks and plays.</div>
-        </div>
+                <tr>
+                  <td style="padding:30px 32px 0;">
+                    <div style="height:1px; line-height:1px; background:#d2d2cd;">&nbsp;</div>
+                  </td>
+                </tr>
 
-        <div style="background:#111116;border:1px solid #1E1E2E;margin-top:12px;padding:22px 24px;">
-          <div style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:12px;line-height:1.2;color:#ffffff;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;">02 / Value Detection</div>
-          <div style="margin-top:10px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:14px;line-height:1.7;color:#9CA3AF;font-weight:400;">The model automatically converts those probabilities into mathematical "true odds," giving you a clear baseline to compare against bookmaker prices.</div>
-        </div>
+                <tr>
+                  <td style="padding:30px 32px 0;">
+                    <h2 style="margin:0 0 18px; color:#0a0a0a; font-size:22px; line-height:1.1; font-weight:900; letter-spacing:-0.03em;">How the model works</h2>
+                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;">
+                      <tr>
+                        <td style="padding:20px 18px; border:1px solid #cfcfca; background:#eeeeeb;">
+                          <div style="margin:0 0 10px; color:#8a8a86; font-size:10px; font-weight:900; letter-spacing:0.18em; text-transform:uppercase;">01 / Simulation</div>
+                          <p style="margin:0; color:#4e4e4a; font-size:14px; line-height:1.55;">Thousands of matchup simulations convert team inputs into projected score and win probability.</p>
+                        </td>
+                      </tr>
+                      <tr><td style="height:12px; line-height:12px; font-size:1px;">&nbsp;</td></tr>
+                      <tr>
+                        <td style="padding:20px 18px; border:1px solid #cfcfca; background:#eeeeeb;">
+                          <div style="margin:0 0 10px; color:#8a8a86; font-size:10px; font-weight:900; letter-spacing:0.18em; text-transform:uppercase;">02 / True price</div>
+                          <p style="margin:0; color:#4e4e4a; font-size:14px; line-height:1.55;">The model&rsquo;s probability is converted into fair odds so you can compare it against the live market.</p>
+                        </td>
+                      </tr>
+                      <tr><td style="height:12px; line-height:12px; font-size:1px;">&nbsp;</td></tr>
+                      <tr>
+                        <td style="padding:20px 18px; border:1px solid #cfcfca; background:#eeeeeb;">
+                          <div style="margin:0 0 10px; color:#8a8a86; font-size:10px; font-weight:900; letter-spacing:0.18em; text-transform:uppercase;">03 / Premium plays</div>
+                          <p style="margin:0; color:#4e4e4a; font-size:14px; line-height:1.55;">Premium unlocks the model&rsquo;s best match plays, try scorer value, live bookmaker prices, and staking guidance.</p>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
 
-        <div style="background:#111116;border:1px solid #1E1E2E;margin-top:12px;padding:22px 24px;">
-          <div style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:12px;line-height:1.2;color:#ffffff;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;">03 / Premium Plays</div>
-          <div style="margin-top:10px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:14px;line-height:1.7;color:#9CA3AF;font-weight:400;">Standard access gives you score projections for every match of each round. When the gap between the bookmaker price and the model's odds creates a heavy mathematical edge, the system flags it as a Premium Play. Premium Plays include H2H, Line, Total and Try Scorers.</div>
-        </div>
+                <tr>
+                  <td style="padding:34px 32px 0;">
+                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse; border:1px solid #cfcfca; background:#0a0a0a;">
+                      <tr>
+                        <td style="padding:28px 26px;">
+                          <div style="margin:0 0 14px; color:#7adf8f; font-size:11px; font-weight:900; letter-spacing:0.2em; text-transform:uppercase;">Premium</div>
+                          <h2 style="margin:0 0 14px; color:#ffffff; font-size:28px; line-height:1.05; letter-spacing:-0.04em; font-weight:900;">Free sees the projection.<br />Premium sees the edge.</h2>
+                          <p style="margin:0 0 22px; color:#b9b9b4; font-size:15px; line-height:1.6;">Unlock best match plays, try scorer value, and the live market prices the model is targeting each round.</p>
+                          <a href="https://www.rightedge.com.au/#best-bets" target="_blank" rel="noopener noreferrer" style="display:block; box-sizing:border-box; width:100%; padding:16px 20px; background:#ffffff; border:1px solid #ffffff; color:#0a0a0a; text-decoration:none; font-size:14px; line-height:1; font-weight:900; letter-spacing:0.1em; text-transform:uppercase; text-align:center;">See Premium &rarr;</a>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
 
-        <div style="background:#111116;border:1px solid #1E1E2E;margin-top:16px;padding:22px 24px;">
-          <div style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:13px;line-height:1.7;color:#9CA3AF;">
-            The RightEdge matches dashboard is, and always will be, 100% free to use.<br/><br/>
-            Our Premium tier functions as an automated upgrade for users who don't want to track data shifts manually&mdash;unlocking our highest-conviction model plays, precise staking metrics, and live Try Scorer value signals the exact second a market price moves.
-          </div>
-          ${emailCtaHtml("https://www.rightedge.com.au/#best-bets", "See How Premium Works &rarr;", "secondary")}
-        </div>
+                <tr>
+                  <td style="padding:34px 32px 32px;">
+                    <p style="margin:0 0 14px; color:#5e5e5a; font-size:13px; line-height:1.6; font-weight:700;">RightEdge Analytics. Backed by data, not guesswork.</p>
+                    <p style="margin:0 0 22px; color:#777773; font-size:13px; line-height:1.6;">
+                      You&rsquo;re receiving this because you requested free RightEdge access. RightEdge is passwordless, so this email links you back to the live board.
+                    </p>
 
-        <div style="margin-top:20px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:12px;line-height:1.7;color:#6B7280;font-weight:400;">
-          RightEdge Analytics. Data-driven probabilities with zero media bias.<br/>
-          You are receiving this email because you created a free account at rightedge.com.au.
-        </div>`
-  );
+                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse; border:1px solid #cfcfca; background:#ffffff;">
+                      <tr>
+                        <td style="padding:16px 18px;">
+                          <p style="margin:0; color:#0a0a0a; font-size:12px; line-height:1.55; font-weight:900; text-transform:uppercase; letter-spacing:0.1em;">Think. Is this a bet you really want to place?</p>
+                          <p style="margin:8px 0 0; color:#555550; font-size:12px; line-height:1.55;">
+                            Imagine what you could be buying instead. For free and confidential support call 1800 858 858 or visit <a href="https://www.gamblinghelponline.org.au/" target="_blank" rel="noopener noreferrer" style="color:#0a0a0a; text-decoration:underline; font-weight:800;">gamblinghelponline.org.au</a>. 18+ only.
+                          </p>
+                        </td>
+                      </tr>
+                    </table>
+
+                    <p style="margin:20px 0 0; color:#8a8a86; font-size:11px; line-height:1.55;">
+                      RightEdge provides model-based sports information and does not guarantee outcomes. RightEdge is independent and is not affiliated with, endorsed by, or licensed by the National Rugby League or its clubs.
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+      </body>
+    </html>
+  `;
 }
 
 
@@ -740,7 +866,7 @@ async function sendWelcomeEmail(type: "free" | "premium", email: string) {
 
   const subject =
     type === "free"
-      ? "Welcome to RightEdge | Your NRL Predictions Link"
+      ? "Your free RightEdge model access is ready"
       : "You’re in — RightEdge Premium is live";
 
   const html =
@@ -2696,7 +2822,7 @@ app.post("/create-checkout-session", async (c) => {
 
     const stripe = new Stripe(stripeKey, { apiVersion: "2023-10-16" });
     const { activeSubscription, customerId } = await findActiveStripeSubscription(stripe, email);
-    const premiumPriceId = getPremiumStripePriceId(plan);
+    const premiumPriceId = await resolvePremiumStripePriceId(stripe, plan);
 
     if (activeSubscription) {
       const url = await createInstantAccessUrl(email, returnUrl, returnHash, customerId, activeSubscription);
@@ -2727,6 +2853,9 @@ app.post("/create-checkout-session", async (c) => {
         email,
         returnHash,
         plan,
+        priceId: premiumPriceId,
+        checkoutVersion: STRIPE_CHECKOUT_VERSION,
+        expectedProductId: STRIPE_PREMIUM_EXPECTED_PRODUCT_ID,
         source: body?.source || `premium_${returnHash}`,
       },
       subscription_data: {
@@ -2734,6 +2863,9 @@ app.post("/create-checkout-session", async (c) => {
           email,
           returnHash,
           plan,
+          priceId: premiumPriceId,
+          checkoutVersion: STRIPE_CHECKOUT_VERSION,
+          expectedProductId: STRIPE_PREMIUM_EXPECTED_PRODUCT_ID,
           source: body?.source || `premium_${returnHash}`,
         },
       },
@@ -2746,8 +2878,14 @@ app.post("/create-checkout-session", async (c) => {
       cancel_url: `${returnUrl}?canceled=true&return_hash=${encodeURIComponent(returnHash)}#${returnHash}`,
     });
 
-    console.log(`[Stripe] Created ${plan} checkout session for ${email} returning to #${returnHash}`);
-    return c.json({ url: session.url, sessionId: session.id });
+    console.log(`[Stripe] Created ${plan} checkout session ${session.id} using ${premiumPriceId} for ${email} returning to #${returnHash}`);
+    return c.json({
+      url: session.url,
+      sessionId: session.id,
+      plan,
+      priceId: premiumPriceId,
+      checkoutVersion: STRIPE_CHECKOUT_VERSION,
+    });
   } catch (err: any) {
     console.error("[Stripe] Error creating checkout session:", err);
     return c.json({ error: "Failed to create checkout session." }, 500);
