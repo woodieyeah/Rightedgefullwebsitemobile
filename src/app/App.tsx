@@ -6309,6 +6309,16 @@ function probabilityFromEdge(edge: number, scale = 7.5) {
   return Math.max(1, Math.min(99, (1 / (1 + Math.exp(-(edge / scale)))) * 100));
 }
 
+const MIN_PREMIUM_MATCH_VALUE_EDGE_PCT = 0.5;
+
+function getPremiumMatchValueEdgePct(modelPct: number, odds: number) {
+  return modelPct - getImpliedWinPctFromOdds(odds);
+}
+
+function hasPremiumMatchValueEdge(modelPct: number, odds: number) {
+  return getPremiumMatchValueEdgePct(modelPct, odds) >= MIN_PREMIUM_MATCH_VALUE_EDGE_PCT;
+}
+
 function getBestPremiumMarketPlayForMatch(
   row: PredictionRow,
   marketMap: SgmMarketMap,
@@ -6333,7 +6343,7 @@ function getBestPremiumMarketPlayForMatch(
       const coverEdge = projectedTeamMargin + spread.point;
       const modelPct = probabilityFromEdge(coverEdge, 7.5);
 
-      if (modelPct < 53 || spread.odds < 1.55) return;
+      if (modelPct < 53 || spread.odds < 1.55 || !hasPremiumMatchValueEdge(modelPct, spread.odds)) return;
 
       candidates.push({
         id: `${row.match}-${bookKey}-line-${team}-${spread.point}`,
@@ -6358,7 +6368,7 @@ function getBestPremiumMarketPlayForMatch(
           : total.point - projectedTotal;
       const modelPct = probabilityFromEdge(edge, 8);
 
-      if (modelPct < 53 || total.odds < 1.55) return;
+      if (modelPct < 53 || total.odds < 1.55 || !hasPremiumMatchValueEdge(modelPct, total.odds)) return;
 
       candidates.push({
         id: `${row.match}-${bookKey}-total-${total.side}-${total.point}`,
@@ -6376,7 +6386,7 @@ function getBestPremiumMarketPlayForMatch(
 
     Object.entries(bookData.h2h).forEach(([team, odds]) => {
       if (normalizeTeamName(team) !== predictedWinner) return;
-      if (winnerWinPct < 55 || odds < 1.35) return;
+      if (winnerWinPct < 55 || odds < 1.35 || !hasPremiumMatchValueEdge(winnerWinPct, odds)) return;
 
       candidates.push({
         id: `${row.match}-${bookKey}-h2h-${team}`,
@@ -6397,7 +6407,10 @@ function getBestPremiumMarketPlayForMatch(
       .filter((candidate) => candidate.type === "Head 2 Head")
       .sort((a, b) => b.odds - a.odds)[0];
 
-    if (!bestLiveH2hCandidate || sheetWinnerMarketOdds > bestLiveH2hCandidate.odds) {
+    if (
+      hasPremiumMatchValueEdge(winnerWinPct, sheetWinnerMarketOdds) &&
+      (!bestLiveH2hCandidate || sheetWinnerMarketOdds > bestLiveH2hCandidate.odds)
+    ) {
       candidates.push({
         id: `${row.match}-sheet-best-h2h`,
         row,
@@ -6414,7 +6427,7 @@ function getBestPremiumMarketPlayForMatch(
 
   if (!candidates.length) {
     const odds = sheetWinnerMarketOdds;
-    if (winnerWinPct >= 55 && odds >= 1.35) {
+    if (winnerWinPct >= 55 && odds >= 1.35 && hasPremiumMatchValueEdge(winnerWinPct, odds)) {
       return {
         id: `${row.match}-fallback-h2h`,
         row,
@@ -6433,10 +6446,14 @@ function getBestPremiumMarketPlayForMatch(
   const rankedCandidates = candidates.sort((a, b) => {
     const typeRank = (play: PremiumMarketPlay) =>
       play.type === "Line" ? 3 : play.type === "Total" ? 2 : 1;
-    const aScore = a.modelPct + Math.min(8, Math.max(0, (a.odds - 1.8) * 6)) + typeRank(a);
-    const bScore = b.modelPct + Math.min(8, Math.max(0, (b.odds - 1.8) * 6)) + typeRank(b);
+    const aValueEdge = getPremiumMatchValueEdgePct(a.modelPct, a.odds);
+    const bValueEdge = getPremiumMatchValueEdgePct(b.modelPct, b.odds);
+    const aScore = (aValueEdge * 2) + a.modelPct + Math.min(8, Math.max(0, (a.odds - 1.8) * 6)) + typeRank(a);
+    const bScore = (bValueEdge * 2) + b.modelPct + Math.min(8, Math.max(0, (b.odds - 1.8) * 6)) + typeRank(b);
     const scoreDiff = bScore - aScore;
     if (Math.abs(scoreDiff) > 0.001) return scoreDiff;
+    const valueEdgeDiff = bValueEdge - aValueEdge;
+    if (Math.abs(valueEdgeDiff) > 0.001) return valueEdgeDiff;
     return b.odds - a.odds;
   });
 
