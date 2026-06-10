@@ -6854,7 +6854,7 @@ function BestBetsPage({
             </div>
           </GlassCard>
         ) : (
-          <div className="grid grid-cols-1 2xl:grid-cols-2 gap-5 md:gap-6">
+          <div className="grid grid-cols-1 gap-5 md:gap-6">
             {matchReads.map((play) => (
               <PremiumMarketPlayCard key={play.id} play={play} now={now} />
             ))}
@@ -6878,7 +6878,7 @@ function BestBetsPage({
             </div>
           </GlassCard>
         ) : (
-          <div className="grid grid-cols-1 2xl:grid-cols-2 gap-5 md:gap-6">
+          <div className="grid grid-cols-1 gap-5 md:gap-6">
             {tryScorerBestBets.map(({ row, signal }) => {
               const proofResult = getRoundProofForTryScorer(row)?.result;
               return (
