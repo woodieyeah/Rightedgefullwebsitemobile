@@ -6319,6 +6319,33 @@ function hasPremiumMatchValueEdge(modelPct: number, odds: number) {
   return getPremiumMatchValueEdgePct(modelPct, odds) >= MIN_PREMIUM_MATCH_VALUE_EDGE_PCT;
 }
 
+function formatPremiumMatchEdge(modelPct: number, odds: number) {
+  if (!modelPct || !odds) return "—";
+  const edgePct = getPremiumMatchValueEdgePct(modelPct, odds);
+  return `${edgePct >= 0 ? "+" : ""}${formatPercent(edgePct, 1)}`;
+}
+
+function isSamePremiumMarketOffer(a: PremiumMarketPlay, b: PremiumMarketPlay) {
+  if (a.type !== b.type) return false;
+  if (Math.abs(a.odds - b.odds) > 0.005) return false;
+
+  if (a.type === "Head 2 Head") {
+    return normalizeTeamName(a.selection) === normalizeTeamName(b.selection);
+  }
+
+  return (
+    normalizeTeamName(a.selection) === normalizeTeamName(b.selection) &&
+    Math.abs((a.marketPoint || 0) - (b.marketPoint || 0)) <= 0.01
+  );
+}
+
+function compareBetrPreferenceForSameOffer(a: PremiumMarketPlay, b: PremiumMarketPlay) {
+  if (!isSamePremiumMarketOffer(a, b)) return 0;
+  if (isBetrBookmaker(a.bookmaker) && !isBetrBookmaker(b.bookmaker)) return -1;
+  if (!isBetrBookmaker(a.bookmaker) && isBetrBookmaker(b.bookmaker)) return 1;
+  return 0;
+}
+
 function getBestPremiumMarketPlayForMatch(
   row: PredictionRow,
   marketMap: SgmMarketMap,
@@ -6452,6 +6479,8 @@ function getBestPremiumMarketPlayForMatch(
     const bScore = (bValueEdge * 2) + b.modelPct + Math.min(8, Math.max(0, (b.odds - 1.8) * 6)) + typeRank(b);
     const scoreDiff = bScore - aScore;
     if (Math.abs(scoreDiff) > 0.001) return scoreDiff;
+    const betrPreference = compareBetrPreferenceForSameOffer(a, b);
+    if (betrPreference) return betrPreference;
     const valueEdgeDiff = bValueEdge - aValueEdge;
     if (Math.abs(valueEdgeDiff) > 0.001) return valueEdgeDiff;
     return b.odds - a.odds;
@@ -6484,6 +6513,7 @@ function PremiumMarketPlayCard({ play, now }: { play: PremiumMarketPlay; now: nu
   const { row } = play;
   const fixtureStatus = getFixtureStatusBadge(row.fixture, now);
   const proofResult = getRoundProofForPremiumPlay(play)?.result;
+  const edgeLabel = formatPremiumMatchEdge(play.modelPct, play.odds);
   const predictedScore =
     row.predictedHomeScore || row.predictedAwayScore
       ? `${Math.round(row.predictedHomeScore)}-${Math.round(row.predictedAwayScore)}`
@@ -6532,7 +6562,7 @@ function PremiumMarketPlayCard({ play, now }: { play: PremiumMarketPlay; now: nu
         </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 md:gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-2.5 md:gap-3">
         <div className="bg-[#1E232B] p-2.5 md:p-3">
           <div className="text-[9px] font-black text-white/45 uppercase tracking-widest mb-1">
             Score
@@ -6547,6 +6577,14 @@ function PremiumMarketPlayCard({ play, now }: { play: PremiumMarketPlay; now: nu
           </div>
           <div className="text-base md:text-lg font-black text-[#00E676]">
             {formatPercent(play.modelPct, 1)}
+          </div>
+        </div>
+        <div className="bg-[#1E232B] p-2.5 md:p-3">
+          <div className="text-[9px] font-black text-white/45 uppercase tracking-widest mb-1">
+            Edge
+          </div>
+          <div className="text-base md:text-lg font-black text-[#00E676]">
+            {edgeLabel}
           </div>
         </div>
         <div className="bg-[#1E232B] p-2.5 md:p-3">
@@ -6593,6 +6631,7 @@ function getProofPlayLogoTeam(play: RoundProofMatchPlay) {
 
 function RoundProofMarketPlayCard({ play }: { play: RoundProofMatchPlay }) {
   const modelPct = play.modelPct || 0;
+  const edgeLabel = formatPremiumMatchEdge(modelPct, play.odds);
 
   return (
     <GlassCard className="p-4 md:p-6 border-l-4 border-l-[#00E676]">
@@ -6624,7 +6663,7 @@ function RoundProofMarketPlayCard({ play }: { play: RoundProofMatchPlay }) {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 md:gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-2.5 md:gap-3">
         <div className="bg-[#1E232B] p-2.5 md:p-3">
           <div className="text-[9px] font-black text-white/45 uppercase tracking-widest mb-1">
             Score
@@ -6639,6 +6678,14 @@ function RoundProofMarketPlayCard({ play }: { play: RoundProofMatchPlay }) {
           </div>
           <div className="text-base md:text-lg font-black text-[#00E676]">
             {modelPct ? formatPercent(modelPct, 1) : "—"}
+          </div>
+        </div>
+        <div className="bg-[#1E232B] p-2.5 md:p-3">
+          <div className="text-[9px] font-black text-white/45 uppercase tracking-widest mb-1">
+            Edge
+          </div>
+          <div className="text-base md:text-lg font-black text-[#00E676]">
+            {edgeLabel}
           </div>
         </div>
         <div className="bg-[#1E232B] p-2.5 md:p-3">
