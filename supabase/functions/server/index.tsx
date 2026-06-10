@@ -655,133 +655,360 @@ function rightEdgeEmailShell(preheader: string, label: string, innerHtml: string
 
 function freeWelcomeHtml() {
   return `
-    <!doctype html>
-    <html lang="en">
-      <head>
-        <meta charset="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <meta name="color-scheme" content="light" />
-        <meta name="supported-color-schemes" content="light" />
-        <title>RightEdge Free Access</title>
-      </head>
-      <body style="margin:0; padding:0; background:#ffffff;">
-        <div style="display:none; overflow:hidden; line-height:1px; opacity:0; max-height:0; max-width:0;">
-          Your free RightEdge model access is ready.
-        </div>
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse; background:#ffffff;">
-          <tr>
-            <td align="center" style="padding:0;">
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse; max-width:640px; background:#e7e7e4; color:#0a0a0a; font-family:Inter, Arial, Helvetica, sans-serif;">
-                <tr>
-                  <td style="padding:32px 32px 0;">
-                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;">
-                      <tr>
-                        <td style="font-size:22px; line-height:1; font-weight:900; letter-spacing:-0.03em; color:#0a0a0a;">RightEdge</td>
-                        <td align="right" style="font-size:11px; line-height:1; font-weight:800; letter-spacing:0.18em; text-transform:uppercase; color:#8a8a86;">Free Access</td>
-                      </tr>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html dir="ltr" lang="en">
+  <head>
+    <meta content="width=device-width" name="viewport" />
+    <meta content="text/html; charset=UTF-8" http-equiv="Content-Type" />
+    <meta name="x-apple-disable-message-reformatting" />
+    <meta content="IE=edge" http-equiv="X-UA-Compatible" />
+    <meta name="x-apple-disable-message-reformatting" />
+    <meta
+      content="telephone=no,address=no,email=no,date=no,url=no"
+      name="format-detection" />
+  </head>
+  <body style="background-color:#ffffff">
+    <!--$--><!--html--><!--head--><!--body-->
+    <table
+      border="0"
+      width="100%"
+      cellpadding="0"
+      cellspacing="0"
+      role="presentation"
+      align="center">
+      <tbody>
+        <tr>
+          <td style="background-color:#ffffff">
+            <table
+              align="left"
+              width="100%"
+              border="0"
+              cellpadding="0"
+              cellspacing="0"
+              role="presentation"
+              style="max-width:600px;align:left;width:100%;color:#000000;background-color:#ffffff;border-radius:0px;border-color:#000000">
+              <tbody>
+                <tr style="width:100%">
+                  <td
+                    style="padding-top:0px;padding-right:0px;padding-bottom:0px;padding-left:0px">
+                    <div
+                      style="margin:0;padding:0;display:none;overflow:hidden;line-height:1px;opacity:0;max-height:0;max-width:0">
+                      <p style="margin:0;padding:0">
+                        Your free RightEdge model access is ready.
+                      </p>
+                    </div>
+                    <table
+                      width="100%"
+                      border="0"
+                      cellpadding="0"
+                      cellspacing="0"
+                      role="presentation"
+                      style="margin-top:0;margin-right:0;margin-bottom:0;margin-left:0;padding-top:0;padding-right:0;padding-bottom:0;padding-left:0;background:#E7E7E4">
+                      <tbody>
+                        <tr style="margin:0;padding:0">
+                          <td
+                            align="center"
+                            data-id="__react-email-column"
+                            style="margin:0;padding:0">
+                            <table
+                              width="100%"
+                              border="0"
+                              cellpadding="0"
+                              cellspacing="0"
+                              role="presentation"
+                              style="margin-top:0;margin-right:0;margin-bottom:0;margin-left:0;padding-top:0;padding-right:0;padding-bottom:0;padding-left:0;max-width:640px;background:#E7E7E4;color:#0A0A0A">
+                              <tbody>
+                                <tr style="margin:0;padding:0">
+                                  <td
+                                    data-id="__react-email-column"
+                                    style="margin:0;padding:28px 24px 18px 24px;border-bottom:1px solid #C7C7C2">
+                                    <table
+                                      width="100%"
+                                      border="0"
+                                      cellpadding="0"
+                                      cellspacing="0"
+                                      role="presentation"
+                                      style="margin-top:0;margin-right:0;margin-bottom:0;margin-left:0;padding-top:0;padding-right:0;padding-bottom:0;padding-left:0">
+                                      <tbody>
+                                        <tr style="margin:0;padding:0">
+                                          <td
+                                            align="left"
+                                            data-id="__react-email-column"
+                                            style="margin:0;padding:0;font-size:20px;font-weight:900;letter-spacing:-0.04em">
+                                            <p style="margin:0;padding:0">
+                                              RightEdge
+                                            </p>
+                                          </td>
+                                          <td
+                                            align="right"
+                                            data-id="__react-email-column"
+                                            style="margin:0;padding:0;font-size:11px;color:#6A6A65;text-transform:uppercase;letter-spacing:0.14em;font-weight:900">
+                                            <p style="margin:0;padding:0">
+                                              Free Access
+                                            </p>
+                                          </td>
+                                        </tr>
+                                      </tbody>
+                                    </table>
+                                  </td>
+                                </tr>
+                                <tr style="margin:0;padding:0">
+                                  <td
+                                    data-id="__react-email-column"
+                                    style="margin:0;padding:34px 24px 20px 24px">
+                                    <div
+                                      style="margin:0;padding:30px 26px;background:#F1F1EF;border:1px solid #C7C7C2">
+                                      <div
+                                        style="margin:0;padding:0;font-size:11px;color:#6A6A65;text-transform:uppercase;letter-spacing:0.16em;font-weight:900;margin-bottom:18px">
+                                        <p style="margin:0;padding:0">
+                                          Account ready
+                                        </p>
+                                      </div>
+                                      <h1
+                                        style="margin:0;padding:0;color:#0A0A0A;font-size:46px;line-height:0.96;font-weight:900;letter-spacing:-0.055em;text-transform:uppercase">
+                                        Welcome to<br />RightEdge.
+                                      </h1>
+                                      <p
+                                        style="margin:22px 0 0 0;padding:0;color:#0A0A0A;font-size:18px;line-height:1.45;font-weight:800">
+                                        Your free round access is ready.
+                                      </p>
+                                      <p
+                                        style="margin:18px 0 0 0;padding:0;color:#6A6A65;font-size:16px;line-height:1.6">
+                                        You now have access to RightEdge’s
+                                        standard NRL match simulations,
+                                        projected scores and model win
+                                        probabilities.
+                                      </p>
+                                      <p
+                                        style="margin:14px 0 0 0;padding:0;color:#6A6A65;font-size:16px;line-height:1.6">
+                                        Since you went straight into the
+                                        dashboard when you signed up, you should
+                                        already be logged in on your current
+                                        browser. If you close the tab, log out,
+                                        or want to view the model on another
+                                        device, use the button below to get back
+                                        in.
+                                      </p>
+                                      <table
+                                        border="0"
+                                        cellpadding="0"
+                                        cellspacing="0"
+                                        role="presentation"
+                                        style="margin-top:26px;margin-right:0;margin-bottom:0;margin-left:0;padding-top:0;padding-right:0;padding-bottom:0;padding-left:0">
+                                        <tbody>
+                                          <tr style="margin:0;padding:0">
+                                            <td
+                                              data-id="__react-email-column"
+                                              style="margin:0;padding:0;background:#0A0A0A;border:1px solid #0A0A0A">
+                                              <p style="margin:0;padding:0">
+                                                <a
+                                                  href="https://www.rightedge.com.au/#matches"
+                                                  rel="noopener noreferrer nofollow"
+                                                  style="color:#ffffff;text-decoration-line:none;text-decoration:none;display:inline-block;padding:15px 22px;font-size:13px;font-weight:900;text-transform:uppercase;letter-spacing:0.08em"
+                                                  target="_blank"
+                                                  >View Round Predictions →</a
+                                                >
+                                              </p>
+                                            </td>
+                                          </tr>
+                                        </tbody>
+                                      </table>
+                                      <p
+                                        style="margin:18px 0 0 0;padding:0;color:#6A6A65;font-size:13px;line-height:1.6">
+                                        RightEdge is passwordless. If your
+                                        browser session expires, enter your
+                                        email on the homepage to jump straight
+                                        back into your dashboard.
+                                      </p>
+                                    </div>
+                                  </td>
+                                </tr>
+                                <tr style="margin:0;padding:0">
+                                  <td
+                                    data-id="__react-email-column"
+                                    style="margin:0;padding:10px 24px 0 24px">
+                                    <div
+                                      style="margin:0;padding:0;font-size:11px;color:#6A6A65;text-transform:uppercase;letter-spacing:0.16em;font-weight:900;margin-bottom:12px">
+                                      <p style="margin:0;padding:0">
+                                        How the model works
+                                      </p>
+                                    </div>
+                                    <div
+                                      style="margin:0;padding:22px 24px;background:#F6F6F3;border:1px solid #C7C7C2;margin-bottom:12px">
+                                      <div
+                                        style="margin:0;padding:0;font-size:12px;color:#0A0A0A;font-weight:900;letter-spacing:0.12em;text-transform:uppercase">
+                                        <p style="margin:0;padding:0">
+                                          01 / Data Simulation
+                                        </p>
+                                      </div>
+                                      <p
+                                        style="margin:10px 0 0 0;padding:0;color:#6A6A65;font-size:14px;line-height:1.7">
+                                        RightEdge simulates every NRL matchup
+                                        thousands of times, processing team
+                                        metrics and roster changes to map
+                                        projected scores and win probabilities.
+                                      </p>
+                                    </div>
+                                    <div
+                                      style="margin:0;padding:22px 24px;background:#F6F6F3;border:1px solid #C7C7C2;margin-bottom:12px">
+                                      <div
+                                        style="margin:0;padding:0;font-size:12px;color:#0A0A0A;font-weight:900;letter-spacing:0.12em;text-transform:uppercase">
+                                        <p style="margin:0;padding:0">
+                                          02 / True Price
+                                        </p>
+                                      </div>
+                                      <p
+                                        style="margin:10px 0 0 0;padding:0;color:#6A6A65;font-size:14px;line-height:1.7">
+                                        The model converts projected
+                                        probabilities into model odds, giving
+                                        you a cleaner baseline to compare
+                                        against the market.
+                                      </p>
+                                    </div>
+                                    <div
+                                      style="margin:0;padding:22px 24px;background:#F6F6F3;border:1px solid #C7C7C2">
+                                      <div
+                                        style="margin:0;padding:0;font-size:12px;color:#0A0A0A;font-weight:900;letter-spacing:0.12em;text-transform:uppercase">
+                                        <p style="margin:0;padding:0">
+                                          03 / Premium Plays
+                                        </p>
+                                      </div>
+                                      <p
+                                        style="margin:10px 0 0 0;padding:0;color:#6A6A65;font-size:14px;line-height:1.7">
+                                        Free users see projected scores and win
+                                        probabilities. Premium members get H2H,
+                                        line, total and try scorer plays before
+                                        kickoff.
+                                      </p>
+                                    </div>
+                                  </td>
+                                </tr>
+                                <tr style="margin:0;padding:0">
+                                  <td
+                                    data-id="__react-email-column"
+                                    style="margin:0;padding:24px 24px 0 24px">
+                                    <div
+                                      style="margin:0;padding:24px;background:#F1F1EF;border:1px solid #C7C7C2">
+                                      <h2
+                                        style="margin:0;padding:0;color:#0A0A0A;font-size:30px;line-height:1;font-weight:900;letter-spacing:-0.05em;text-transform:uppercase">
+                                        Free sees the projection.<br />Premium
+                                        sees the edge.
+                                      </h2>
+                                      <p
+                                        style="margin:16px 0 0 0;padding:0;color:#6A6A65;font-size:15px;line-height:1.6">
+                                        The matches dashboard is free to use.
+                                        Premium is for users who want the
+                                        model’s strongest plays and try scorer
+                                        signals before kickoff.
+                                      </p>
+                                      <table
+                                        border="0"
+                                        cellpadding="0"
+                                        cellspacing="0"
+                                        role="presentation"
+                                        style="margin-top:22px;margin-right:0;margin-bottom:0;margin-left:0;padding-top:0;padding-right:0;padding-bottom:0;padding-left:0">
+                                        <tbody>
+                                          <tr style="margin:0;padding:0">
+                                            <td
+                                              data-id="__react-email-column"
+                                              style="margin:0;padding:0;background:#093AD3;border:1px solid #093AD3">
+                                              <p style="margin:0;padding:0">
+                                                <a
+                                                  href="https://www.rightedge.com.au/#best-bets"
+                                                  rel="noopener noreferrer nofollow"
+                                                  style="color:#ffffff;text-decoration-line:none;text-decoration:none;display:inline-block;padding:15px 22px;font-size:13px;font-weight:900;text-transform:uppercase;letter-spacing:0.08em"
+                                                  target="_blank"
+                                                  >See Premium →</a
+                                                >
+                                              </p>
+                                            </td>
+                                          </tr>
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  </td>
+                                </tr>
+                                <tr style="margin:0;padding:0">
+                                  <td
+                                    data-id="__react-email-column"
+                                    style="margin:0;padding:26px 24px 32px 24px">
+                                    <p
+                                      style="margin:0 0 10px 0;padding:0;color:#6A6A65;font-size:12px;line-height:1.6">
+                                      RightEdge Analytics. Backed by data, not
+                                      guesswork.
+                                    </p>
+                                    <p
+                                      style="margin:0 0 10px 0;padding:0;color:#6A6A65;font-size:12px;line-height:1.6">
+                                      You are receiving this email because you
+                                      created a free account at
+                                      rightedge.com.au.
+                                    </p>
+                                    <div
+                                      style="margin:0;padding:16px 18px;margin-top:22px;background:#ffffff;border:1px solid #0A0A0A">
+                                      <div
+                                        style="margin:0;padding:0;font-size:14px;line-height:1.3;color:#0A0A0A;font-weight:900;text-transform:uppercase">
+                                        <p style="margin:0;padding:0">
+                                          Imagine what you could be buying
+                                          instead.
+                                        </p>
+                                      </div>
+                                      <div
+                                        style="margin:0;padding:0;margin-top:8px;font-size:13px;line-height:1.6;color:#0A0A0A;font-weight:700">
+                                        <p style="margin:0;padding:0">
+                                          For free and confidential support call
+                                          <a
+                                            href="tel:1800858858"
+                                            rel="noopener noreferrer nofollow"
+                                            style="color:#0A0A0A;text-decoration-line:none;text-decoration:underline;font-weight:900"
+                                            target="_blank"
+                                            ><u>1800 858 858</u></a
+                                          >
+                                          or visit
+                                          <a
+                                            href="https://www.gamblinghelponline.org.au/"
+                                            rel="noopener noreferrer"
+                                            style="color:#0A0A0A;text-decoration-line:none;text-decoration:underline;font-weight:900"
+                                            target="_blank"
+                                            ><u>gamblinghelponline.org.au</u></a
+                                          >.
+                                        </p>
+                                      </div>
+                                      <div
+                                        style="margin:0;padding:0;margin-top:10px;font-size:11px;line-height:1.2;color:#0A0A0A;font-weight:900;letter-spacing:1.5px;text-transform:uppercase">
+                                        <p style="margin:0;padding:0">
+                                          18+ only
+                                        </p>
+                                      </div>
+                                    </div>
+                                    <p
+                                      style="margin:18px 0 0 0;padding:0;color:#6A6A65;font-size:12px;line-height:1.6">
+                                      RightEdge provides model-based information
+                                      and does not guarantee outcomes. RightEdge
+                                      is independent and is not affiliated with,
+                                      endorsed by, or licensed by the National
+                                      Rugby League or its clubs
+                                    </p>
+                                  </td>
+                                </tr>
+                              </tbody>
+                            </table>
+                          </td>
+                        </tr>
+                      </tbody>
                     </table>
+                    <p style="margin:0;padding:0"><br /></p>
                   </td>
                 </tr>
+              </tbody>
+            </table>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <!--/$-->
+  </body>
+</html>
 
-                <tr>
-                  <td style="padding:44px 32px 0;">
-                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse; border:1px solid #cfcfca; background:#f4f4f1;">
-                      <tr>
-                        <td style="padding:34px 32px 30px;">
-                          <div style="margin:0 0 16px; color:#777773; font-size:11px; line-height:1; font-weight:900; letter-spacing:0.2em; text-transform:uppercase;">Account ready</div>
-                          <h1 style="margin:0 0 20px; color:#0a0a0a; font-size:48px; line-height:0.96; letter-spacing:-0.045em; font-weight:900;">Welcome to<br />RightEdge.</h1>
-                          <p style="margin:0; color:#5e5e5a; font-size:17px; line-height:1.65; font-weight:500;">
-                            Your free round access is ready. Jump into the live predictions board for projected scores, model probabilities, and the next NRL fixtures.
-                          </p>
-                        </td>
-                      </tr>
-                      <tr>
-                        <td style="padding:0 32px 34px;">
-                          <a href="https://www.rightedge.com.au/#matches" target="_blank" rel="noopener noreferrer" style="display:block; box-sizing:border-box; width:100%; padding:18px 22px; background:#ffffff; border:1px solid #c9c9c4; color:#0a0a0a; text-decoration:none; font-size:15px; line-height:1; font-weight:900; letter-spacing:0.08em; text-transform:uppercase; text-align:center;">View Round Predictions &rarr;</a>
-                        </td>
-                      </tr>
-                    </table>
-                  </td>
-                </tr>
-
-                <tr>
-                  <td style="padding:30px 32px 0;">
-                    <div style="height:1px; line-height:1px; background:#d2d2cd;">&nbsp;</div>
-                  </td>
-                </tr>
-
-                <tr>
-                  <td style="padding:30px 32px 0;">
-                    <h2 style="margin:0 0 18px; color:#0a0a0a; font-size:22px; line-height:1.1; font-weight:900; letter-spacing:-0.03em;">How the model works</h2>
-                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;">
-                      <tr>
-                        <td style="padding:20px 18px; border:1px solid #cfcfca; background:#eeeeeb;">
-                          <div style="margin:0 0 10px; color:#8a8a86; font-size:10px; font-weight:900; letter-spacing:0.18em; text-transform:uppercase;">01 / Simulation</div>
-                          <p style="margin:0; color:#4e4e4a; font-size:14px; line-height:1.55;">Thousands of matchup simulations convert team inputs into projected score and win probability.</p>
-                        </td>
-                      </tr>
-                      <tr><td style="height:12px; line-height:12px; font-size:1px;">&nbsp;</td></tr>
-                      <tr>
-                        <td style="padding:20px 18px; border:1px solid #cfcfca; background:#eeeeeb;">
-                          <div style="margin:0 0 10px; color:#8a8a86; font-size:10px; font-weight:900; letter-spacing:0.18em; text-transform:uppercase;">02 / True price</div>
-                          <p style="margin:0; color:#4e4e4a; font-size:14px; line-height:1.55;">The model&rsquo;s probability is converted into fair odds so you can compare it against the live market.</p>
-                        </td>
-                      </tr>
-                      <tr><td style="height:12px; line-height:12px; font-size:1px;">&nbsp;</td></tr>
-                      <tr>
-                        <td style="padding:20px 18px; border:1px solid #cfcfca; background:#eeeeeb;">
-                          <div style="margin:0 0 10px; color:#8a8a86; font-size:10px; font-weight:900; letter-spacing:0.18em; text-transform:uppercase;">03 / Premium plays</div>
-                          <p style="margin:0; color:#4e4e4a; font-size:14px; line-height:1.55;">Premium unlocks the model&rsquo;s best match plays, try scorer value, live bookmaker prices, and staking guidance.</p>
-                        </td>
-                      </tr>
-                    </table>
-                  </td>
-                </tr>
-
-                <tr>
-                  <td style="padding:34px 32px 0;">
-                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse; border:1px solid #cfcfca; background:#0a0a0a;">
-                      <tr>
-                        <td style="padding:28px 26px;">
-                          <div style="margin:0 0 14px; color:#7adf8f; font-size:11px; font-weight:900; letter-spacing:0.2em; text-transform:uppercase;">Premium</div>
-                          <h2 style="margin:0 0 14px; color:#ffffff; font-size:28px; line-height:1.05; letter-spacing:-0.04em; font-weight:900;">Free sees the projection.<br />Premium sees the edge.</h2>
-                          <p style="margin:0 0 22px; color:#b9b9b4; font-size:15px; line-height:1.6;">Unlock best match plays, try scorer value, and the live market prices the model is targeting each round.</p>
-                          <a href="https://www.rightedge.com.au/#best-bets" target="_blank" rel="noopener noreferrer" style="display:block; box-sizing:border-box; width:100%; padding:16px 20px; background:#ffffff; border:1px solid #ffffff; color:#0a0a0a; text-decoration:none; font-size:14px; line-height:1; font-weight:900; letter-spacing:0.1em; text-transform:uppercase; text-align:center;">See Premium &rarr;</a>
-                        </td>
-                      </tr>
-                    </table>
-                  </td>
-                </tr>
-
-                <tr>
-                  <td style="padding:34px 32px 32px;">
-                    <p style="margin:0 0 14px; color:#5e5e5a; font-size:13px; line-height:1.6; font-weight:700;">RightEdge Analytics. Backed by data, not guesswork.</p>
-                    <p style="margin:0 0 22px; color:#777773; font-size:13px; line-height:1.6;">
-                      You&rsquo;re receiving this because you requested free RightEdge access. RightEdge is passwordless, so this email links you back to the live board.
-                    </p>
-
-                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse; border:1px solid #cfcfca; background:#ffffff;">
-                      <tr>
-                        <td style="padding:16px 18px;">
-                          <p style="margin:0; color:#0a0a0a; font-size:12px; line-height:1.55; font-weight:900; text-transform:uppercase; letter-spacing:0.1em;">Think. Is this a bet you really want to place?</p>
-                          <p style="margin:8px 0 0; color:#555550; font-size:12px; line-height:1.55;">
-                            Imagine what you could be buying instead. For free and confidential support call 1800 858 858 or visit <a href="https://www.gamblinghelponline.org.au/" target="_blank" rel="noopener noreferrer" style="color:#0a0a0a; text-decoration:underline; font-weight:800;">gamblinghelponline.org.au</a>. 18+ only.
-                          </p>
-                        </td>
-                      </tr>
-                    </table>
-
-                    <p style="margin:20px 0 0; color:#8a8a86; font-size:11px; line-height:1.55;">
-                      RightEdge provides model-based sports information and does not guarantee outcomes. RightEdge is independent and is not affiliated with, endorsed by, or licensed by the National Rugby League or its clubs.
-                    </p>
-                  </td>
-                </tr>
-              </table>
-            </td>
-          </tr>
-        </table>
-      </body>
-    </html>
   `;
 }
 

@@ -6528,7 +6528,7 @@ function PremiumMarketPlayCard({ play, now }: { play: PremiumMarketPlay; now: nu
   return (
     <GlassCard className="p-4 md:p-6 border-l-4 border-l-[#00E676]">
       <div className="flex items-start justify-between gap-3 md:gap-4 mb-4">
-        <div>
+        <div className="min-w-0 flex-1">
           <div className="mb-2 flex flex-wrap items-center gap-2 text-[10px] uppercase font-black text-white/45 tracking-widest">
             <span>
               {row.fixture
@@ -6563,7 +6563,7 @@ function PremiumMarketPlayCard({ play, now }: { play: PremiumMarketPlay; now: nu
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-5 gap-2.5 md:gap-3">
-        <div className="bg-[#1E232B] p-2.5 md:p-3">
+        <div className="min-w-0 bg-[#1E232B] p-2.5 md:p-3">
           <div className="text-[9px] font-black text-white/45 uppercase tracking-widest mb-1">
             Score
           </div>
@@ -6571,7 +6571,7 @@ function PremiumMarketPlayCard({ play, now }: { play: PremiumMarketPlay; now: nu
             {predictedScore}
           </div>
         </div>
-        <div className="bg-[#1E232B] p-2.5 md:p-3">
+        <div className="min-w-0 bg-[#1E232B] p-2.5 md:p-3">
           <div className="text-[9px] font-black text-white/45 uppercase tracking-widest mb-1">
             Model %
           </div>
@@ -6579,7 +6579,7 @@ function PremiumMarketPlayCard({ play, now }: { play: PremiumMarketPlay; now: nu
             {formatPercent(play.modelPct, 1)}
           </div>
         </div>
-        <div className="bg-[#1E232B] p-2.5 md:p-3">
+        <div className="min-w-0 bg-[#1E232B] p-2.5 md:p-3">
           <div className="text-[9px] font-black text-white/45 uppercase tracking-widest mb-1">
             Edge
           </div>
@@ -6587,7 +6587,7 @@ function PremiumMarketPlayCard({ play, now }: { play: PremiumMarketPlay; now: nu
             {edgeLabel}
           </div>
         </div>
-        <div className="bg-[#1E232B] p-2.5 md:p-3">
+        <div className="min-w-0 bg-[#1E232B] p-2.5 md:p-3">
           <div className="text-[9px] font-black text-white/45 uppercase tracking-widest mb-1">
             Odds
           </div>
@@ -6595,13 +6595,13 @@ function PremiumMarketPlayCard({ play, now }: { play: PremiumMarketPlay; now: nu
             ${play.odds.toFixed(2)}
           </div>
         </div>
-        <div className="bg-[#1E232B] p-2.5 md:p-3">
+        <div className="min-w-0 bg-[#1E232B] p-2.5 md:p-3">
           <div className="text-[9px] font-black text-white/45 uppercase tracking-widest mb-1">
             Bookie
           </div>
           <BookmakerName
             name={getPreviewBookmakerName(play.bookmaker)}
-            className="text-[11px] md:text-xs font-black uppercase text-white"
+            className="break-words text-[11px] md:text-xs font-black uppercase leading-tight text-white"
           />
         </div>
       </div>
@@ -6664,7 +6664,7 @@ function RoundProofMarketPlayCard({ play }: { play: RoundProofMatchPlay }) {
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-5 gap-2.5 md:gap-3">
-        <div className="bg-[#1E232B] p-2.5 md:p-3">
+        <div className="min-w-0 bg-[#1E232B] p-2.5 md:p-3">
           <div className="text-[9px] font-black text-white/45 uppercase tracking-widest mb-1">
             Score
           </div>
@@ -6672,7 +6672,7 @@ function RoundProofMarketPlayCard({ play }: { play: RoundProofMatchPlay }) {
             {play.modelScore || "—"}
           </div>
         </div>
-        <div className="bg-[#1E232B] p-2.5 md:p-3">
+        <div className="min-w-0 bg-[#1E232B] p-2.5 md:p-3">
           <div className="text-[9px] font-black text-white/45 uppercase tracking-widest mb-1">
             Model %
           </div>
@@ -6680,7 +6680,7 @@ function RoundProofMarketPlayCard({ play }: { play: RoundProofMatchPlay }) {
             {modelPct ? formatPercent(modelPct, 1) : "—"}
           </div>
         </div>
-        <div className="bg-[#1E232B] p-2.5 md:p-3">
+        <div className="min-w-0 bg-[#1E232B] p-2.5 md:p-3">
           <div className="text-[9px] font-black text-white/45 uppercase tracking-widest mb-1">
             Edge
           </div>
@@ -6688,7 +6688,7 @@ function RoundProofMarketPlayCard({ play }: { play: RoundProofMatchPlay }) {
             {edgeLabel}
           </div>
         </div>
-        <div className="bg-[#1E232B] p-2.5 md:p-3">
+        <div className="min-w-0 bg-[#1E232B] p-2.5 md:p-3">
           <div className="text-[9px] font-black text-white/45 uppercase tracking-widest mb-1">
             Odds
           </div>
@@ -6696,13 +6696,13 @@ function RoundProofMarketPlayCard({ play }: { play: RoundProofMatchPlay }) {
             ${play.odds.toFixed(2)}
           </div>
         </div>
-        <div className="bg-[#1E232B] p-2.5 md:p-3">
+        <div className="min-w-0 bg-[#1E232B] p-2.5 md:p-3">
           <div className="text-[9px] font-black text-white/45 uppercase tracking-widest mb-1">
             Bookie
           </div>
           <BookmakerName
             name={getPreviewBookmakerName(play.bookmaker)}
-            className="text-[11px] md:text-xs font-black uppercase text-white"
+            className="break-words text-[11px] md:text-xs font-black uppercase leading-tight text-white"
           />
         </div>
       </div>
@@ -6854,7 +6854,7 @@ function BestBetsPage({
             </div>
           </GlassCard>
         ) : (
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 md:gap-6">
+          <div className="grid grid-cols-1 2xl:grid-cols-2 gap-5 md:gap-6">
             {matchReads.map((play) => (
               <PremiumMarketPlayCard key={play.id} play={play} now={now} />
             ))}
@@ -6878,7 +6878,7 @@ function BestBetsPage({
             </div>
           </GlassCard>
         ) : (
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 md:gap-6">
+          <div className="grid grid-cols-1 2xl:grid-cols-2 gap-5 md:gap-6">
             {tryScorerBestBets.map(({ row, signal }) => {
               const proofResult = getRoundProofForTryScorer(row)?.result;
               return (
@@ -6893,8 +6893,8 @@ function BestBetsPage({
                         teamName={row.team}
                         className="w-8 h-8 md:w-9 md:h-9 rounded-sm"
                       />
-                      <div>
-                        <div className="text-lg md:text-2xl font-black text-white tracking-tight leading-[1.05]">
+                      <div className="min-w-0">
+                        <div className="break-words text-lg md:text-2xl font-black text-white tracking-tight leading-[1.05]">
                           {row.player}
                         </div>
                         <div className="mt-1 text-[9px] md:text-xs font-black text-[#FFEA00] uppercase tracking-widest">
@@ -6914,7 +6914,7 @@ function BestBetsPage({
                   </div>
                 </div>
                 <div className="mt-4 md:mt-5 grid grid-cols-3 gap-2.5 md:gap-3">
-                  <div className="bg-[#1E232B] p-2.5 md:p-3">
+                  <div className="min-w-0 bg-[#1E232B] p-2.5 md:p-3">
                     <div className="text-[9px] font-black text-white/45 uppercase tracking-widest mb-1">
                       Model %
                     </div>
@@ -6922,7 +6922,7 @@ function BestBetsPage({
                       {formatPercent(row.statsInsiderPct, 1)}
                     </div>
                   </div>
-                  <div className="bg-[#1E232B] p-2.5 md:p-3">
+                  <div className="min-w-0 bg-[#1E232B] p-2.5 md:p-3">
                     <div className="text-[9px] font-black text-white/45 uppercase tracking-widest mb-1">
                       Odds
                     </div>
@@ -6930,13 +6930,13 @@ function BestBetsPage({
                       ${row.bestOdds.toFixed(2)}
                     </div>
                   </div>
-                  <div className="bg-[#1E232B] p-2.5 md:p-3">
+                  <div className="min-w-0 bg-[#1E232B] p-2.5 md:p-3">
                     <div className="text-[9px] font-black text-white/45 uppercase tracking-widest mb-1">
                       Bookie
                     </div>
                     <BookmakerName
                       name={getPreviewBookmakerName(row.bookmaker)}
-                      className="text-[11px] md:text-xs font-black uppercase text-[#FFEA00]"
+                      className="break-words text-[11px] md:text-xs font-black uppercase leading-tight text-[#FFEA00]"
                     />
                   </div>
                 </div>
