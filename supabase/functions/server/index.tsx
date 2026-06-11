@@ -3019,7 +3019,7 @@ app.post("/apply-retention-offer", async (c) => {
 
     const couponId = await resolveRetentionCouponId(stripe);
     const updatedSubscription = await stripe.subscriptions.update(activeSubscription.id, {
-      coupon: couponId,
+      discounts: [{ coupon: couponId }],
       cancel_at_period_end: false,
       metadata: {
         ...(activeSubscription.metadata || {}),
@@ -3390,13 +3390,8 @@ async function updateRetentionOfferUsage(stripe: Stripe, subscription: any, invo
   };
 
   if (nextRemaining <= 0) {
-    try {
-      await (stripe.subscriptions as any).deleteDiscount(subscription.id);
-    } catch (err: any) {
-      console.warn("[Stripe] Could not remove retention discount:", err?.message || err);
-    }
-
     await stripe.subscriptions.update(subscription.id, {
+      discounts: [],
       metadata: {
         ...nextMetadata,
         rightedgeRetentionOfferActive: "false",

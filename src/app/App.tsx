@@ -3045,7 +3045,7 @@ function RetentionOfferModal({
               <button
                 type="button"
                 onClick={onClose}
-                className="bg-[#090909] px-5 py-4 text-sm font-black uppercase tracking-[0.18em] text-white transition hover:opacity-85"
+                className="bg-[#093AD3] px-5 py-4 text-sm font-black uppercase tracking-[0.18em] text-[#E7E7E4] transition hover:opacity-85"
               >
                 Back to Premium
               </button>
@@ -3054,7 +3054,7 @@ function RetentionOfferModal({
                 type="button"
                 onClick={handleClaimOffer}
                 disabled={submitting || openingPortal}
-                className="bg-[#090909] px-5 py-4 text-sm font-black uppercase tracking-[0.18em] text-white transition hover:opacity-85 disabled:cursor-wait disabled:opacity-60"
+                className="bg-[#093AD3] px-5 py-4 text-sm font-black uppercase tracking-[0.18em] text-[#E7E7E4] transition hover:opacity-85 disabled:cursor-wait disabled:opacity-60"
               >
                 {submitting ? "Applying..." : "Keep Premium"}
               </button>
@@ -8760,6 +8760,10 @@ function AppDashboard({
   };
 
   const handleManageSubscription = () => {
+    void openCustomerPortal();
+  };
+
+  const handleCancelPremiumClick = () => {
     const email = getUserEmail();
     if (!email) {
       alert("Could not find your email. Please try logging in again.");
@@ -8873,6 +8877,12 @@ function AppDashboard({
             >
               Manage Subscription
             </button>
+            <button
+              onClick={handleCancelPremiumClick}
+              className="mt-3 w-full flex items-center justify-center gap-2 border border-[#1E1E2E] py-3 text-[10px] font-medium uppercase tracking-widest text-[#9CA3AF] transition hover:border-[#C74343]/50 hover:text-[#C74343]"
+            >
+              Cancel Premium
+            </button>
           </div>
         </GlassCard>
 
@@ -8885,12 +8895,20 @@ function AppDashboard({
               >
                 <ChevronLeft className="w-4 h-4" /> Back to Home
               </button>
-              <button
-                onClick={handleManageSubscription}
-                className="text-[#6B7280] text-[10px] font-medium uppercase tracking-widest hover:text-white transition-colors"
-              >
-                Manage Subscription
-              </button>
+              <div className="flex flex-col items-end gap-1.5">
+                <button
+                  onClick={handleManageSubscription}
+                  className="text-[#6B7280] text-[10px] font-medium uppercase tracking-widest hover:text-white transition-colors"
+                >
+                  Manage Subscription
+                </button>
+                <button
+                  onClick={handleCancelPremiumClick}
+                  className="text-[#8D2323] text-[10px] font-medium uppercase tracking-widest hover:text-[#C74343] transition-colors"
+                >
+                  Cancel Premium
+                </button>
+              </div>
             </div>
           </div>
           <div className="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-4 md:gap-6 pb-4 md:pb-6 border-b border-[#1E1E2E]">
