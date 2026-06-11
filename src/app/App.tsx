@@ -2896,6 +2896,184 @@ function PaymentGateModal({
   );
 }
 
+function RetentionOfferModal({
+  open,
+  onClose,
+  onContinueToBilling,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onContinueToBilling: () => Promise<void>;
+}) {
+  const [submitting, setSubmitting] = useState(false);
+  const [openingPortal, setOpeningPortal] = useState(false);
+  const [accepted, setAccepted] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
+
+  useEffect(() => {
+    if (!open) return;
+    setSubmitting(false);
+    setOpeningPortal(false);
+    setAccepted(false);
+    setErrorMsg("");
+    (window as any).trackAnalyticsEvent?.("retention_offer_view", {
+      offer: "50_percent_off_2_rounds",
+    });
+  }, [open]);
+
+  if (!open) return null;
+
+  const handleClaimOffer = async () => {
+    const email = getUserEmail();
+    if (!email) {
+      setErrorMsg("Could not find your email. Please log in again.");
+      return;
+    }
+
+    setSubmitting(true);
+    setErrorMsg("");
+
+    try {
+      const res = await fetch(`/api/apply-retention-offer`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${publicAnonKey}`,
+        },
+        body: JSON.stringify({ email }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        setErrorMsg(data.error || "Could not apply the offer. Please try again.");
+        setSubmitting(false);
+        return;
+      }
+
+      (window as any).trackAnalyticsEvent?.("retention_offer_accepted", {
+        offer: "50_percent_off_2_rounds",
+        invoices_remaining: data.invoicesRemaining,
+      });
+      setAccepted(true);
+      setSubmitting(false);
+    } catch {
+      setErrorMsg("Network error. Please try again.");
+      setSubmitting(false);
+    }
+  };
+
+  const handleContinueToBilling = async () => {
+    setOpeningPortal(true);
+    setErrorMsg("");
+    (window as any).trackAnalyticsEvent?.("retention_offer_declined", {
+      offer: "50_percent_off_2_rounds",
+    });
+    try {
+      await onContinueToBilling();
+    } catch {
+      setErrorMsg("Could not open billing. Please try again.");
+      setOpeningPortal(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/65 px-4 py-8 backdrop-blur-sm">
+      <div className="w-full max-w-[520px] border border-[#D4D4CF] bg-[#F4F4F1] text-[#090909] shadow-[0_24px_80px_rgba(0,0,0,0.35)]">
+        <div className="flex items-start justify-between gap-4 border-b border-[#D4D4CF] px-5 py-4 md:px-7">
+          <div>
+            <div className="text-[10px] font-black uppercase tracking-[0.28em] text-[#6F6F6A]">
+              Before you cancel
+            </div>
+            <h2 className="mt-2 text-3xl font-black uppercase leading-none tracking-tight">
+              Stay for half price.
+            </h2>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="border border-[#D4D4CF] p-2 text-[#6F6F6A] transition hover:border-[#090909] hover:text-[#090909]"
+            aria-label="Close retention offer"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="space-y-5 px-5 py-5 md:px-7">
+          {accepted ? (
+            <div className="border border-[#6CD98B] bg-[#E7F6EA] p-4">
+              <div className="text-[10px] font-black uppercase tracking-[0.24em] text-[#2F7D44]">
+                Applied
+              </div>
+              <p className="mt-2 text-xl font-black uppercase leading-tight">
+                You have 50% off Premium for the next 2 rounds.
+              </p>
+              <p className="mt-3 text-sm font-semibold leading-relaxed text-[#555550]">
+                Your premium access stays active and the discount will remove itself after two successful renewals.
+              </p>
+            </div>
+          ) : (
+            <>
+              <p className="text-base font-semibold leading-relaxed text-[#555550]">
+                Keep Premium for the next two rounds at 50% off. No new checkout,
+                no re-entering card details. We will apply it to your existing subscription.
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="border border-[#D4D4CF] bg-white/45 p-4">
+                  <div className="text-[10px] font-black uppercase tracking-[0.22em] text-[#6F6F6A]">
+                    Offer
+                  </div>
+                  <div className="mt-2 text-2xl font-black">50% off</div>
+                </div>
+                <div className="border border-[#D4D4CF] bg-white/45 p-4">
+                  <div className="text-[10px] font-black uppercase tracking-[0.22em] text-[#6F6F6A]">
+                    Duration
+                  </div>
+                  <div className="mt-2 text-2xl font-black">2 rounds</div>
+                </div>
+              </div>
+            </>
+          )}
+
+          {errorMsg && (
+            <div className="border border-[#C74343] bg-[#F8E6E6] px-4 py-3 text-sm font-bold text-[#8D2323]">
+              {errorMsg}
+            </div>
+          )}
+
+          <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+            {accepted ? (
+              <button
+                type="button"
+                onClick={onClose}
+                className="bg-[#090909] px-5 py-4 text-sm font-black uppercase tracking-[0.18em] text-white transition hover:opacity-85"
+              >
+                Back to Premium
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleClaimOffer}
+                disabled={submitting || openingPortal}
+                className="bg-[#090909] px-5 py-4 text-sm font-black uppercase tracking-[0.18em] text-white transition hover:opacity-85 disabled:cursor-wait disabled:opacity-60"
+              >
+                {submitting ? "Applying..." : "Keep Premium"}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={handleContinueToBilling}
+              disabled={submitting || openingPortal}
+              className="border border-[#D4D4CF] px-5 py-4 text-sm font-black uppercase tracking-[0.18em] text-[#555550] transition hover:border-[#090909] hover:text-[#090909] disabled:cursor-wait disabled:opacity-60"
+            >
+              {openingPortal ? "Opening..." : "Continue to billing"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function EmailGateModal({
   open,
   onClose,
@@ -8501,6 +8679,7 @@ function AppDashboard({
     return "matches";
   });
   const [selectedArchiveRound, setSelectedArchiveRound] = useState<number | null>(null);
+  const [showRetentionOffer, setShowRetentionOffer] = useState(false);
   const selectedRoundArchive = useMemo(
     () => ROUND_ARCHIVES.find((archive) => archive.round === selectedArchiveRound) || null,
     [selectedArchiveRound],
@@ -8546,7 +8725,7 @@ function AppDashboard({
     document.body.scrollTop = 0;
   }, [page]);
 
-  const handleManageSubscription = async () => {
+  const openCustomerPortal = async () => {
     try {
       const email = getUserEmail();
       if (!email) {
@@ -8569,12 +8748,25 @@ function AppDashboard({
       const data = await res.json();
       if (res.ok && data.url) {
         window.location.href = data.url;
+        return;
       } else {
-        alert(data.error || "Failed to open subscription portal.");
+        throw new Error(data.error || "Failed to open subscription portal.");
       }
     } catch (err) {
-      alert("Network error. Please try again later.");
+      const message = err instanceof Error ? err.message : "Network error. Please try again later.";
+      alert(message);
+      throw err;
     }
+  };
+
+  const handleManageSubscription = () => {
+    const email = getUserEmail();
+    if (!email) {
+      alert("Could not find your email. Please try logging in again.");
+      return;
+    }
+
+    setShowRetentionOffer(true);
   };
 
   const pageTitle = useMemo(() => {
@@ -8617,6 +8809,11 @@ function AppDashboard({
 
   return (
     <>
+      <RetentionOfferModal
+        open={showRetentionOffer}
+        onClose={() => setShowRetentionOffer(false)}
+        onContinueToBilling={openCustomerPortal}
+      />
       <div className="grid grid-cols-1 xl:grid-cols-[300px_minmax(0,1fr)] gap-8 pb-24 xl:pb-0">
         <GlassCard className="hidden xl:block p-6 h-fit xl:sticky xl:top-6">
           <div className="flex items-center gap-4 pb-6 border-b border-[#1E1E2E] mb-6">

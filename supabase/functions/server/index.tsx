@@ -19,6 +19,8 @@ const DEFAULT_STRIPE_PREMIUM_WEEKLY_PRICE_ID = "price_1TE76qHbbDQt0kPBF1BrLgdQ";
 const DEFAULT_STRIPE_PREMIUM_MONTHLY_PRICE_ID = "price_1TeeatHbbDQt0kPBBQ3xzV1d";
 const STRIPE_PREMIUM_EXPECTED_PRODUCT_ID = "prod_UCW96IffvVLL3c";
 const STRIPE_CHECKOUT_VERSION = "2026-06-05-current-premium-product";
+const STRIPE_RETENTION_COUPON_KV_KEY = "stripe_retention_coupon_id";
+const STRIPE_RETENTION_OFFER_INVOICES = 2;
 
 type AuthSessionTier = "free" | "premium";
 type PremiumCheckoutPlan = "weekly" | "monthly";
@@ -52,6 +54,34 @@ function getStripeClient() {
   const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
   if (!stripeKey) throw new Error("STRIPE_SECRET_KEY not configured");
   return new Stripe(stripeKey, { apiVersion: "2023-10-16" });
+}
+
+async function resolveRetentionCouponId(stripe: Stripe) {
+  const configuredCouponId = Deno.env.get("STRIPE_RETENTION_COUPON_ID")?.trim();
+  if (configuredCouponId) return configuredCouponId;
+
+  const storedCouponId = String((await kv.get(STRIPE_RETENTION_COUPON_KV_KEY)) || "").trim();
+  if (storedCouponId) {
+    try {
+      const coupon = await stripe.coupons.retrieve(storedCouponId);
+      if (!coupon.deleted && coupon.valid !== false) return storedCouponId;
+    } catch (err: any) {
+      console.warn("[Stripe] Stored retention coupon could not be retrieved:", err?.message || err);
+    }
+  }
+
+  const coupon = await stripe.coupons.create({
+    percent_off: 50,
+    duration: "forever",
+    name: "RightEdge retention - 50% off next 2 rounds",
+    metadata: {
+      rightedge_offer: "cancel_retention",
+      invoices_to_apply: String(STRIPE_RETENTION_OFFER_INVOICES),
+    },
+  });
+
+  await kv.set(STRIPE_RETENTION_COUPON_KV_KEY, coupon.id);
+  return coupon.id;
 }
 
 function normalizePremiumCheckoutPlan(plan: unknown): PremiumCheckoutPlan {
@@ -2970,6 +3000,50 @@ app.post("/create-customer-portal", async (c) => {
   }
 });
 
+app.post("/apply-retention-offer", async (c) => {
+  try {
+    const body = await c.req.json();
+    const email = body?.email?.trim()?.toLowerCase();
+
+    if (!email) return c.json({ error: "Email required" }, 400);
+
+    const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
+    if (!stripeKey) return c.json({ error: "Stripe not configured" }, 500);
+
+    const stripe = new Stripe(stripeKey, { apiVersion: "2023-10-16" });
+    const { activeSubscription } = await findActiveStripeSubscription(stripe, email);
+
+    if (!activeSubscription) {
+      return c.json({ error: "No active subscription found for this email." }, 404);
+    }
+
+    const couponId = await resolveRetentionCouponId(stripe);
+    const updatedSubscription = await stripe.subscriptions.update(activeSubscription.id, {
+      coupon: couponId,
+      cancel_at_period_end: false,
+      metadata: {
+        ...(activeSubscription.metadata || {}),
+        rightedgeRetentionOfferActive: "true",
+        rightedgeRetentionOfferCouponId: couponId,
+        rightedgeRetentionOfferInvoicesRemaining: String(STRIPE_RETENTION_OFFER_INVOICES),
+        rightedgeRetentionOfferAppliedAt: new Date().toISOString(),
+      },
+    } as any);
+
+    await syncStripeSubscriptionStatus(stripe, updatedSubscription, "retention_offer_applied");
+
+    return c.json({
+      success: true,
+      subscriptionId: updatedSubscription.id,
+      invoicesRemaining: STRIPE_RETENTION_OFFER_INVOICES,
+      message: "50% off has been applied for your next 2 rounds.",
+    });
+  } catch (err: any) {
+    console.error("[Stripe] Error applying retention offer:", err?.message || err);
+    return c.json({ error: "Failed to apply retention offer" }, 500);
+  }
+});
+
 app.post("/stripe-webhook", async (c) => {
   const signature = c.req.header("stripe-signature");
   const webhookSecret = Deno.env.get("STRIPE_WEBHOOK_SECRET");
@@ -3287,7 +3361,54 @@ async function syncStripeInvoiceSubscription(stripe: Stripe, invoice: any, sourc
   }
 
   const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+  await updateRetentionOfferUsage(stripe, subscription, invoice, source);
   return syncStripeSubscriptionStatus(stripe, subscription, source);
+}
+
+async function updateRetentionOfferUsage(stripe: Stripe, subscription: any, invoice: any, source: string) {
+  if (source !== "invoice.payment_succeeded") return;
+
+  const metadata = subscription?.metadata || {};
+  if (metadata.rightedgeRetentionOfferActive !== "true") return;
+
+  const invoiceId = String(invoice?.id || "");
+  if (invoiceId && metadata.rightedgeRetentionOfferLastInvoiceId === invoiceId) return;
+
+  const remaining = Math.max(
+    0,
+    Number.parseInt(String(metadata.rightedgeRetentionOfferInvoicesRemaining || "0"), 10) || 0,
+  );
+
+  if (remaining <= 0) return;
+
+  const nextRemaining = remaining - 1;
+  const nextMetadata = {
+    ...metadata,
+    rightedgeRetentionOfferInvoicesRemaining: String(nextRemaining),
+    rightedgeRetentionOfferLastInvoiceId: invoiceId,
+    rightedgeRetentionOfferLastInvoiceAt: new Date().toISOString(),
+  };
+
+  if (nextRemaining <= 0) {
+    try {
+      await (stripe.subscriptions as any).deleteDiscount(subscription.id);
+    } catch (err: any) {
+      console.warn("[Stripe] Could not remove retention discount:", err?.message || err);
+    }
+
+    await stripe.subscriptions.update(subscription.id, {
+      metadata: {
+        ...nextMetadata,
+        rightedgeRetentionOfferActive: "false",
+        rightedgeRetentionOfferCompletedAt: new Date().toISOString(),
+      },
+    });
+    return;
+  }
+
+  await stripe.subscriptions.update(subscription.id, {
+    metadata: nextMetadata,
+  });
 }
 
 async function syncStripeCheckoutSession(stripe: Stripe, session: any) {
