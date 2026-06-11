@@ -2014,6 +2014,8 @@ app.get("/kv-namespace-scan", async (c) => {
 
 function normalizeNrlTeamName(team: string) {
   const t = String(team || "").toLowerCase();
+  if (t.includes("new south wales") || /\bnsw\b/.test(t) || t.includes("blues")) return "New South Wales Blues";
+  if (t.includes("queensland maroons") || /\bqld\b/.test(t) || t.includes("maroons")) return "Queensland Maroons";
   if (t.includes("bronco") || t.includes("brisbane")) return "Brisbane Broncos";
   if (t.includes("rabbitoh") || t.includes("south")) return "South Sydney Rabbitohs";
   if (t.includes("rooster") || t.includes("sydney")) return "Sydney Roosters";
