@@ -2292,6 +2292,18 @@ function selectBlueBetPrimaryTotalOutcomes(outcomes: any[]) {
   return primary ? [primary.pair.over, primary.pair.under] : [];
 }
 
+function normalizeBlueBetTryScorerPlayerName(outcomeName: string) {
+  return String(outcomeName || "")
+    .replace(/\b(anytime|any time)\s+try\s*scorer\b/gi, "")
+    .replace(/\btry\s*scorer\b/gi, "")
+    .replace(/\bto\s+score\s+a\s+try\b/gi, "")
+    .replace(/\bscore\s+a\s+try\b/gi, "")
+    .replace(/\b(yes|no)\b/gi, "")
+    .replace(/\s*[-–:]\s*/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function buildBlueBetEventOdds(payload: any) {
   const masterEvent = payload?.MasterEvent || {};
   const masterEventName = masterEvent.MasterEventName || "";
@@ -2301,12 +2313,20 @@ function buildBlueBetEventOdds(payload: any) {
   const h2hOutcomes: any[] = [];
   const spreadOutcomes: any[] = [];
   const totalOutcomes: any[] = [];
+  const tryScorerOutcomes: any[] = [];
   const seen = new Set<string>();
 
   for (const event of asBlueBetArray(payload?.Events)) {
     const eventName = String(event?.EventName || "");
     const eventClass = String(event?.EventClass || "");
-    const isTotalsEvent = `${eventName} ${eventClass}`.toLowerCase().includes("total points over/under");
+    const eventText = `${eventName} ${eventClass}`.toLowerCase();
+    const isTotalsEvent = eventText.includes("total points over/under");
+    const isTryScorerEvent =
+      eventText.includes("try scorer") ||
+      eventText.includes("tryscorer") ||
+      eventText.includes("anytime try") ||
+      eventText.includes("any time try") ||
+      eventText.includes("score a try");
 
     for (const outcome of asBlueBetArray(event?.Outcomes)) {
       const price = Number(outcome?.Price);
@@ -2327,6 +2347,31 @@ function buildBlueBetEventOdds(payload: any) {
           name: total.side,
           price,
           point: total.point,
+        });
+        continue;
+      }
+
+      if (isTryScorerEvent) {
+        const player =
+          normalizeBlueBetTryScorerPlayerName(
+            String(
+              outcome?.PlayerName ||
+              outcome?.ParticipantName ||
+              outcome?.RunnerName ||
+              outcomeName ||
+              "",
+            ),
+          );
+        const playerKey = normalizeOddsPlayerName(player);
+        if (!player || !playerKey || ["over", "under"].includes(playerKey)) continue;
+
+        const key = `try-scorer:${playerKey}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        tryScorerOutcomes.push({
+          name: "Yes",
+          description: player,
+          price,
         });
         continue;
       }
@@ -2365,6 +2410,7 @@ function buildBlueBetEventOdds(payload: any) {
     h2hOutcomes.length ? { key: "h2h", outcomes: h2hOutcomes } : null,
     spreadOutcomes.length ? { key: "spreads", outcomes: spreadOutcomes } : null,
     totalOutcomes.length ? { key: "totals", outcomes: selectBlueBetPrimaryTotalOutcomes(totalOutcomes) } : null,
+    tryScorerOutcomes.length ? { key: "player_try_scorer_anytime", outcomes: tryScorerOutcomes } : null,
   ].filter(Boolean);
 
   return {
@@ -2832,7 +2878,23 @@ app.get("/best-try-scorer-odds", async (c) => {
   try {
     const force = allowOddsForceRefresh(c);
     const format = c.req.query("format") || "json";
-    const payload = await refreshBestTryScorerOdds(force);
+    const bookmaker = c.req.query("bookmaker") || "";
+    const normalizedBookmaker = normalizeBookmakerFilter(bookmaker);
+    const payload =
+      normalizedBookmaker === "betr"
+        ? {
+            updatedAt: new Date().toISOString(),
+            sport: "rugbyleague_nrl",
+            market: "player_try_scorer_anytime",
+            eventCount: 0,
+            odds: buildBestTryScorerOdds(await fetchBlueBetNrlOddsRaw()),
+          }
+        : await refreshBestTryScorerOdds(force);
+
+    if (normalizedBookmaker === "betr") {
+      c.header("Cache-Control", "no-store, no-cache, max-age=0, must-revalidate");
+      payload.eventCount = new Set(payload.odds.map((row: any) => row.matchKey)).size;
+    }
 
     if (format === "sheets") {
       return c.json({

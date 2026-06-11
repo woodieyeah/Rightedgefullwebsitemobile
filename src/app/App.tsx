@@ -3456,27 +3456,35 @@ async function fetchBestMatchOddsByBookmaker(bookmaker: "pinnacle") {
   return response.json();
 }
 
-async function fetchBestTryScorerOddsCached() {
-  const cacheKey = "rightedge_best_try_scorer_odds_cache_v1";
+async function fetchBestTryScorerOddsCached(bookmaker?: "betr") {
+  const cacheKey = bookmaker
+    ? `rightedge_best_try_scorer_odds_cache_v1_${bookmaker}`
+    : "rightedge_best_try_scorer_odds_cache_v1";
+  const shouldUsePersistentCache = bookmaker !== "betr";
 
-  try {
-    const cachedStr = localStorage.getItem(cacheKey);
-    if (cachedStr) {
-      const cached = JSON.parse(cachedStr);
-      if (Date.now() - cached.timestamp < ODDS_CACHE_DURATION) {
-        return cached.data;
+  if (shouldUsePersistentCache) {
+    try {
+      const cachedStr = localStorage.getItem(cacheKey);
+      if (cachedStr) {
+        const cached = JSON.parse(cachedStr);
+        if (Date.now() - cached.timestamp < ODDS_CACHE_DURATION) {
+          return cached.data;
+        }
       }
+    } catch (e) {
+      // Ignore cache parse errors.
     }
-  } catch (e) {
-    // Ignore cache parse errors.
   }
 
   if (fetchOddsPromises.has(cacheKey)) {
     return fetchOddsPromises.get(cacheKey)!;
   }
 
-  const fetchPromise = fetch(`/api/best-try-scorer-odds?_=${Date.now()}`, {
-    cache: "default",
+  const params = new URLSearchParams({ _: String(Date.now()) });
+  if (bookmaker) params.set("bookmaker", bookmaker);
+
+  const fetchPromise = fetch(`/api/best-try-scorer-odds?${params.toString()}`, {
+    cache: shouldUsePersistentCache ? "default" : "no-store",
     headers: {
       Authorization: `Bearer ${publicAnonKey}`,
       Accept: "application/json",
@@ -3485,13 +3493,15 @@ async function fetchBestTryScorerOddsCached() {
     .then(async (res) => {
       if (!res.ok) throw new Error("Failed to fetch try scorer odds");
       const data = await res.json();
-      localStorage.setItem(
-        cacheKey,
-        JSON.stringify({
-          timestamp: Date.now(),
-          data,
-        }),
-      );
+      if (shouldUsePersistentCache) {
+        localStorage.setItem(
+          cacheKey,
+          JSON.stringify({
+            timestamp: Date.now(),
+            data,
+          }),
+        );
+      }
       fetchOddsPromises.delete(cacheKey);
       return data;
     })
@@ -4037,9 +4047,9 @@ function OriginRapidPreview({
         <div className="grid gap-3 md:grid-cols-3">
           <div className="border border-[#1E1E2E] bg-[#16161D] p-4">
             <div className="text-[10px] font-medium uppercase tracking-[0.14em] text-[#9CA3AF]">
-              Projected margin
+              Projected score
             </div>
-            <div className="mt-2 text-2xl font-semibold text-white">NSW by 2</div>
+            <div className="mt-2 text-2xl font-semibold text-white">20-18</div>
           </div>
           <div className="border border-[#1E1E2E] bg-[#16161D] p-4">
             <div className="text-[10px] font-medium uppercase tracking-[0.14em] text-[#9CA3AF]">
@@ -7277,7 +7287,7 @@ function OriginPage({
       try {
         const [betrResult, tryScorerResult] = await Promise.allSettled([
           fetchLiveOddsCached("betr"),
-          fetchBestTryScorerOddsCached(),
+          fetchBestTryScorerOddsCached("betr"),
         ]);
 
         if (!mounted) return;
@@ -7434,9 +7444,6 @@ function OriginPage({
                 <span className="text-[#6B7280]">/</span>
                 <span>8:05 PM AEST</span>
               </div>
-              <div className="mt-4 max-w-3xl text-sm md:text-base text-[#9CA3AF] leading-relaxed">
-                Game 2 uses the same Origin modelling flow as Game 1: projected score, model percentage, market line context, premium play and anytime try scorer signals.
-              </div>
             </div>
             <div className="grid grid-cols-2 gap-2 shrink-0 w-full sm:w-auto">
               <div className="border border-[#1E1E2E] bg-[#16161D] px-4 py-3">
@@ -7468,11 +7475,11 @@ function OriginPage({
                 Main model prediction
               </div>
               <h3 className="text-xl md:text-3xl font-semibold tracking-tight text-white uppercase">
-                NSW by 2
+                Projected score {originRow.predictedHomeScore}-{originRow.predictedAwayScore}
               </h3>
             </div>
             <div className="text-[10px] md:text-xs uppercase tracking-widest text-[#9CA3AF] font-medium">
-              Projected score {originRow.predictedHomeScore}-{originRow.predictedAwayScore}
+              Model percentage from live market baseline
             </div>
           </div>
 
@@ -7574,9 +7581,6 @@ function OriginPage({
           <h3 className="text-lg md:text-2xl font-black text-white uppercase tracking-tight">
             Premium Plays
           </h3>
-          <div className="text-[10px] md:text-xs font-black text-white/45 uppercase tracking-widest mt-1">
-            Game 2 line read using the same Premium Plays card pattern.
-          </div>
         </div>
         <PremiumMarketPlayCard play={originPremiumPlay} now={now} />
       </div>
@@ -7586,92 +7590,82 @@ function OriginPage({
           <h3 className="text-lg md:text-2xl font-black text-white uppercase tracking-tight">
             Try Scorer Best Bets
           </h3>
-          <div className="text-[10px] md:text-xs font-black text-white/45 uppercase tracking-widest mt-1">
-            Game 2 anytime try scorer probabilities with live best available prices.
-          </div>
         </div>
-        <div className="grid grid-cols-1 gap-5 md:gap-6">
-          {states.flatMap((state) =>
-            state.props.map((prop) => {
-              const liveOdds = originTryScorerOddsByPlayer[normalizeOriginPlayerName(prop.player)];
-              return (
-                <GlassCard
-                  key={`${state.key}-${prop.player}`}
-                  className="p-4 md:p-6 border-l-4 border-l-[#FF2E63]"
-                >
-                  <div className="flex items-start justify-between gap-3 md:gap-4">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2.5 md:gap-3 mb-2.5 md:mb-3">
-                        <div
-                          className="flex h-8 w-8 shrink-0 items-center justify-center border text-[9px] font-black uppercase md:h-9 md:w-9"
-                          style={{
-                            backgroundColor: state.colors.primary,
-                            borderColor: state.colors.secondary,
-                            color: state.colors.secondary,
-                          }}
-                        >
-                          {state.short}
-                        </div>
-                        <div className="min-w-0">
-                          <div className="break-words text-lg md:text-2xl font-black text-white tracking-tight leading-[1.05]">
-                            {prop.player}
-                          </div>
-                          <div className="mt-1 text-[9px] md:text-xs font-black text-[#FFEA00] uppercase tracking-widest">
-                            {state.name} · Origin Game 2
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                    <span className="shrink-0 bg-[#FF2E63] text-white px-2.5 md:px-3 py-1 md:py-1.5 text-[8px] md:text-[10px] font-black uppercase tracking-widest">
-                      Best Bet
-                    </span>
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          {states.map((state) => (
+            <GlassCard
+              key={state.key}
+              className={`overflow-hidden border-l-4 p-0 ${
+                state.key === "nsw" ? "border-l-[#7CC6FF]" : "border-l-[#8A1748]"
+              }`}
+            >
+              <div className="flex items-center justify-between gap-3 border-b border-[#1E1E2E] bg-[#16161D] p-4 md:p-5">
+                <div className="flex min-w-0 items-center gap-3">
+                  <div
+                    className="flex h-9 w-9 shrink-0 items-center justify-center border text-[9px] font-black uppercase tracking-widest"
+                    style={{
+                      backgroundColor: state.colors.primary,
+                      borderColor: state.colors.secondary,
+                      color: state.colors.secondary,
+                    }}
+                  >
+                    {state.short}
                   </div>
-                  <div className="mt-4 md:mt-5 grid grid-cols-3 gap-2.5 md:gap-3">
-                    <div className="min-w-0 bg-[#1E232B] p-2.5 md:p-3">
-                      <div className="text-[9px] font-black text-white/45 uppercase tracking-widest mb-1">
-                        Model %
-                      </div>
-                      <div className="text-base md:text-lg font-black text-white">
-                        {formatPercent(prop.probability, 1)}
-                      </div>
+                  <div className="min-w-0">
+                    <div className="truncate text-lg font-black uppercase tracking-tight text-white md:text-xl">
+                      {state.name}
                     </div>
-                    <div className="min-w-0 bg-[#1E232B] p-2.5 md:p-3">
-                      <div className="text-[9px] font-black text-white/45 uppercase tracking-widest mb-1">
-                        Odds
-                      </div>
-                      <div className={liveOdds ? "text-base md:text-lg font-black text-[#093AD3]" : "text-base md:text-lg font-black text-[#00E676]"}>
-                        {liveOdds ? `$${liveOdds.bestOdds.toFixed(2)}` : "Pending"}
-                      </div>
-                    </div>
-                    <div className="min-w-0 bg-[#1E232B] p-2.5 md:p-3">
-                      <div className="text-[9px] font-black text-white/45 uppercase tracking-widest mb-1">
-                        Bookie
-                      </div>
-                      {liveOdds ? (
-                        <BookmakerName
-                          name={getPreviewBookmakerName(liveOdds.bookmaker)}
-                          className="break-words text-[11px] md:text-xs font-black uppercase leading-tight text-[#FFEA00]"
-                        />
-                      ) : (
-                        <div className="text-[11px] md:text-xs font-black uppercase leading-tight text-white/45">
-                          Pending
-                        </div>
-                      )}
+                    <div className="mt-1 text-[9px] font-black uppercase tracking-[0.18em] text-white/40">
+                      Anytime try scorer
                     </div>
                   </div>
-                  {liveOdds && (
-                    <AffiliateMarketButton
-                      payload="rightedge_origin_try_scorer"
-                      bookmaker="Betr"
-                      odds={liveOdds.bestOdds}
-                      label="View NRL market"
-                      className="mt-3 md:mt-4"
-                    />
-                  )}
-                </GlassCard>
-              );
-            }),
-          )}
+                </div>
+                <span className="shrink-0 border border-[#1E1E2E] px-2.5 py-1 text-[8px] font-black uppercase tracking-widest text-[#6B7280]">
+                  Betr odds
+                </span>
+              </div>
+              <div className="divide-y divide-[#1E1E2E]">
+                {state.props.map((prop) => {
+                  const liveOdds = originTryScorerOddsByPlayer[normalizeOriginPlayerName(prop.player)];
+                  return (
+                    <div
+                      key={`${state.key}-${prop.player}`}
+                      className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 p-4 md:grid-cols-[minmax(0,1fr)_84px_116px] md:items-center md:gap-4 md:p-5"
+                    >
+                      <div className="min-w-0">
+                        <div className="truncate text-base font-black text-white md:text-lg">
+                          {prop.player}
+                        </div>
+                      </div>
+                      <div className="text-right md:text-left">
+                        <div className="text-[8px] font-black uppercase tracking-[0.18em] text-white/40">
+                          Model
+                        </div>
+                        <div className="mt-1 text-base font-black text-[#4ADE80] md:text-lg">
+                          {formatPercent(prop.probability, 1)}
+                        </div>
+                      </div>
+                      <div className="col-span-2 md:col-span-1">
+                        {liveOdds ? (
+                          <AffiliateMarketButton
+                            payload="rightedge_origin_try_scorer"
+                            bookmaker="Betr"
+                            odds={liveOdds.bestOdds}
+                            label={`Betr $${liveOdds.bestOdds.toFixed(2)}`}
+                            className="w-full py-2.5 text-[10px]"
+                          />
+                        ) : (
+                          <div className="border border-[#1E1E2E] bg-[#111116] px-3 py-2.5 text-center text-[10px] font-black uppercase tracking-widest text-[#6B7280]">
+                            Odds pending
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </GlassCard>
+          ))}
         </div>
       </div>
 
