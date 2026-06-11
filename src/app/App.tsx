@@ -867,10 +867,14 @@ const appPages = [
   },
 ];
 
-function getAppPages(isAdmin: boolean) {
+function getAppPages(isAdmin: boolean, canViewOrigin: boolean) {
+  const visiblePages = canViewOrigin
+    ? appPages
+    : appPages.filter((page) => page.id !== "origin");
+
   if (isAdmin) {
     return [
-      ...appPages,
+      ...visiblePages,
       {
         id: "admin",
         label: "Admin",
@@ -879,7 +883,7 @@ function getAppPages(isAdmin: boolean) {
       },
     ];
   }
-  return appPages;
+  return visiblePages;
 }
 
 function GlowOrb({
@@ -2391,6 +2395,7 @@ function ConfidenceBadge({
 }
 
 const ADMIN_EMAILS = ["elliott@woodbry.com", "ewoodbry@gmail.com", "elliott@rightedge.com.au"];
+const ORIGIN_PREVIEW_EMAIL = "elliott@woodbry.com";
 type AuthTier = "none" | "free" | "premium";
 type RuntimeAuthState = {
   checked: boolean;
@@ -2414,6 +2419,10 @@ function hasEmailAccess(): boolean {
 
 function getUserEmail(): string | null {
   return runtimeAuthState.email;
+}
+
+function canViewOriginPage(): boolean {
+  return getUserEmail() === ORIGIN_PREVIEW_EMAIL;
 }
 
 function getPreviewBookmakerName(bookmaker?: string) {
@@ -2635,9 +2644,10 @@ function PaymentGateModal({
     const section = ["matches", "origin", "best-bets", "try-scorers"].includes(currentPremiumHash)
       ? currentPremiumHash
       : "best-bets";
+    const trackedSection = section === "origin" && !canViewOriginPage() ? "matches" : section;
     (window as any).trackAnalyticsEvent?.("premium_paywall_view", {
-      section,
-      cta_source: section,
+      section: trackedSection,
+      cta_source: trackedSection,
     });
   }, [open]);
 
@@ -2688,9 +2698,12 @@ function PaymentGateModal({
 
       setStep("processing");
       const currentPremiumHash = window.location.hash.replace("#", "");
-      const returnHash = ["matches", "origin", "best-bets", "try-scorers"].includes(currentPremiumHash)
+      let returnHash = ["matches", "origin", "best-bets", "try-scorers"].includes(currentPremiumHash)
         ? currentPremiumHash
         : "best-bets";
+      if (returnHash === "origin" && !canViewOriginPage()) {
+        returnHash = "matches";
+      }
       const returnUrl = `${window.location.origin}${window.location.pathname}`;
       const cancelUrl = `${window.location.origin}${window.location.pathname}#matches`;
 
@@ -8966,6 +8979,7 @@ function AppDashboard({
   isPremium: boolean;
 }) {
   const [isAdmin, setIsAdmin] = useState(() => isUserAdmin());
+  const canViewOrigin = canViewOriginPage();
 
   useEffect(() => {
     const handleAdminAuth = () => {
@@ -8977,6 +8991,9 @@ function AppDashboard({
 
   const [page, setPage] = useState(() => {
     const hash = window.location.hash.replace("#", "");
+    if (hash === "origin" && !canViewOriginPage()) {
+      return "matches";
+    }
     if (
       ["matches", "origin", "best-bets", "try-scorers", "performance", "admin"].includes(
         hash,
@@ -8996,6 +9013,11 @@ function AppDashboard({
   useEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash.replace("#", "");
+      if (hash === "origin" && !canViewOrigin) {
+        setPage("matches");
+        window.history.replaceState({}, document.title, `${window.location.pathname}#matches`);
+        return;
+      }
       if (
         [
           "matches",
@@ -9015,9 +9037,21 @@ function AppDashboard({
         "hashchange",
         handleHashChange,
       );
-  }, []);
+  }, [canViewOrigin]);
+
+  useEffect(() => {
+    if (page === "origin" && !canViewOrigin) {
+      setPage("matches");
+      window.history.replaceState({}, document.title, `${window.location.pathname}#matches`);
+    }
+  }, [canViewOrigin, page]);
 
   const handlePageChange = (newPage: string) => {
+    if (newPage === "origin" && !canViewOrigin) {
+      setPage("matches");
+      window.location.hash = "matches";
+      return;
+    }
     setPage(newPage);
     window.location.hash = newPage;
     window.scrollTo(0, 0);
@@ -9025,7 +9059,7 @@ function AppDashboard({
     document.body.scrollTop = 0;
   };
 
-  const mobilePages = useMemo(() => getAppPages(isAdmin), [isAdmin]);
+  const mobilePages = useMemo(() => getAppPages(isAdmin, canViewOrigin), [canViewOrigin, isAdmin]);
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -9140,7 +9174,7 @@ function AppDashboard({
           </div>
 
           <div className="space-y-3">
-            {getAppPages(isAdmin).map((item) => (
+            {getAppPages(isAdmin, canViewOrigin).map((item) => (
               <SidebarItem
                 key={item.id}
                 active={page === item.id}
@@ -9306,7 +9340,7 @@ function AppDashboard({
                   selectedArchive={selectedRoundArchive}
                 />
               )}
-              {page === "origin" && (
+              {page === "origin" && canViewOrigin && (
                 <OriginPage
                   onRequestAccess={onRequestAccess}
                   isAdmin={isAdmin}
@@ -9860,9 +9894,12 @@ export default function App() {
   };
 
   const requestPremiumAccess = (source: string = 'unknown') => {
-    const targetHash = ["matches", "origin", "best-bets", "try-scorers"].includes(source)
+    let targetHash = ["matches", "origin", "best-bets", "try-scorers"].includes(source)
       ? source
       : "best-bets";
+    if (targetHash === "origin" && !canViewOriginPage()) {
+      targetHash = "matches";
+    }
     setSitePage("app");
     window.location.hash = targetHash;
     setShowEmailGate(false);
@@ -9896,6 +9933,19 @@ export default function App() {
     const appHashes = ["matches", "origin", "best-bets", "try-scorers", "performance", "admin"];
     const premiumHashes = ["origin", "best-bets", "try-scorers"];
     const publicHashes = ["results", "methodology", "ad-studio", "articles", "article-round-5-2026", "article-methodology"];
+
+    if (hash === "origin" && !canViewOriginPage()) {
+      window.history.replaceState({}, document.title, `${window.location.pathname}#matches`);
+      trackHashPageView("matches");
+      setShowEmailGate(false);
+      setShowPaymentGate(false);
+      if (hasEmailAccess() || hasPaidAccess()) {
+        setSitePage("app");
+      } else {
+        setSitePage("home");
+      }
+      return;
+    }
 
     if (hash === "sgm-builder") {
       window.location.hash = "best-bets";
@@ -9972,9 +10022,12 @@ export default function App() {
 
       const sessionId = searchParams.get("session_id");
       const fallbackReturnHash = searchParams.get("return_hash") || window.location.hash.replace("#", "") || "best-bets";
-      const returnHash = ["matches", "origin", "best-bets", "try-scorers"].includes(fallbackReturnHash)
+      let returnHash = ["matches", "origin", "best-bets", "try-scorers"].includes(fallbackReturnHash)
         ? fallbackReturnHash
         : "best-bets";
+      if (returnHash === "origin" && !canViewOriginPage()) {
+        returnHash = "matches";
+      }
 
       if (!sessionId) {
         (window as any).trackAnalyticsEvent?.("premium_checkout_missing_session", { return_hash: returnHash });
@@ -10013,9 +10066,12 @@ export default function App() {
 
           setShowEmailGate(false);
 
-          const confirmedReturnHash = ["matches", "origin", "best-bets", "try-scorers"].includes(data.returnHash)
+          let confirmedReturnHash = ["matches", "origin", "best-bets", "try-scorers"].includes(data.returnHash)
             ? data.returnHash
             : returnHash;
+          if (confirmedReturnHash === "origin" && !canViewOriginPage()) {
+            confirmedReturnHash = "matches";
+          }
 
           (window as any).trackAnalyticsEvent?.("premium_checkout_confirmed", {
             email: data.email,
@@ -10229,6 +10285,9 @@ export default function App() {
             loadData={loadData}
             isPremium={paidAccessState || isAdmin}
             onRequestAccess={(targetHash = "best-bets") => {
+              if (targetHash === "origin" && !canViewOriginPage()) {
+                targetHash = "matches";
+              }
               setSitePage("app");
               window.location.hash = targetHash;
               if (hasPaidAccess()) {
@@ -10284,9 +10343,12 @@ export default function App() {
             setShowPaymentGate(false);
             setSitePage("app");
             const currentPremiumHash = window.location.hash.replace("#", "");
-            const returnHash = ["matches", "origin", "best-bets", "try-scorers"].includes(currentPremiumHash)
+            let returnHash = ["matches", "origin", "best-bets", "try-scorers"].includes(currentPremiumHash)
               ? currentPremiumHash
               : "best-bets";
+            if (returnHash === "origin" && !canViewOriginPage()) {
+              returnHash = "matches";
+            }
             window.location.hash = returnHash;
           }}
           onSessionRefresh={refreshAuthSession}
