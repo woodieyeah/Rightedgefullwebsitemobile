@@ -19,7 +19,7 @@ const DEFAULT_STRIPE_PREMIUM_WEEKLY_PRICE_ID = "price_1TE76qHbbDQt0kPBF1BrLgdQ";
 const DEFAULT_STRIPE_PREMIUM_MONTHLY_PRICE_ID = "price_1TeeatHbbDQt0kPBBQ3xzV1d";
 const STRIPE_PREMIUM_EXPECTED_PRODUCT_ID = "prod_UCW96IffvVLL3c";
 const STRIPE_CHECKOUT_VERSION = "2026-06-05-current-premium-product";
-const STRIPE_RETENTION_COUPON_KV_KEY = "stripe_retention_coupon_id";
+const STRIPE_RETENTION_COUPON_KV_KEY = "KvZzfsuz";
 const STRIPE_RETENTION_OFFER_INVOICES = 2;
 
 type AuthSessionTier = "free" | "premium";
@@ -3019,7 +3019,7 @@ app.post("/apply-retention-offer", async (c) => {
 
     const couponId = await resolveRetentionCouponId(stripe);
     const updatedSubscription = await stripe.subscriptions.update(activeSubscription.id, {
-      discounts: [{ coupon: couponId }],
+      coupon: couponId,
       cancel_at_period_end: false,
       metadata: {
         ...(activeSubscription.metadata || {}),
@@ -3390,8 +3390,13 @@ async function updateRetentionOfferUsage(stripe: Stripe, subscription: any, invo
   };
 
   if (nextRemaining <= 0) {
+    try {
+      await (stripe.subscriptions as any).deleteDiscount(subscription.id);
+    } catch (err: any) {
+      console.warn("[Stripe] Could not remove retention discount:", err?.message || err);
+    }
+
     await stripe.subscriptions.update(subscription.id, {
-      discounts: [],
       metadata: {
         ...nextMetadata,
         rightedgeRetentionOfferActive: "false",
