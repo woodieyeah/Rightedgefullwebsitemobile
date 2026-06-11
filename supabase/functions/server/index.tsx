@@ -3039,8 +3039,9 @@ app.post("/apply-retention-offer", async (c) => {
       message: "50% off has been applied for your next 2 rounds.",
     });
   } catch (err: any) {
-    console.error("[Stripe] Error applying retention offer:", err?.message || err);
-    return c.json({ error: "Failed to apply retention offer" }, 500);
+    const message = err?.message || "Failed to apply retention offer";
+    console.error("[Stripe] Error applying retention offer:", message, err);
+    return c.json({ error: message }, 500);
   }
 });
 
