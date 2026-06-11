@@ -19,7 +19,7 @@ const DEFAULT_STRIPE_PREMIUM_WEEKLY_PRICE_ID = "price_1TE76qHbbDQt0kPBF1BrLgdQ";
 const DEFAULT_STRIPE_PREMIUM_MONTHLY_PRICE_ID = "price_1TeeatHbbDQt0kPBBQ3xzV1d";
 const STRIPE_PREMIUM_EXPECTED_PRODUCT_ID = "prod_UCW96IffvVLL3c";
 const STRIPE_CHECKOUT_VERSION = "2026-06-05-current-premium-product";
-const STRIPE_RETENTION_COUPON_KV_KEY = "KvZzfsuz";
+const STRIPE_RETENTION_COUPON_KV_KEY = "stripe_retention_coupon_id";
 const STRIPE_RETENTION_OFFER_INVOICES = 2;
 
 type AuthSessionTier = "free" | "premium";
@@ -73,7 +73,7 @@ async function resolveRetentionCouponId(stripe: Stripe) {
   const coupon = await stripe.coupons.create({
     percent_off: 50,
     duration: "forever",
-    name: "RightEdge retention - 50% off next 2 rounds",
+    name: "RightEdge 50% off",
     metadata: {
       rightedge_offer: "cancel_retention",
       invoices_to_apply: String(STRIPE_RETENTION_OFFER_INVOICES),
