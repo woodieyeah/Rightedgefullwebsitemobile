@@ -7542,10 +7542,10 @@ function OriginPage({
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <div className="border border-[#1E1E2E] bg-[#16161D] p-4">
               <div className="text-[9px] font-medium uppercase tracking-[0.18em] text-[#6B7280] mb-2">
-                Model line
+                Model margin
               </div>
               <div className="text-lg md:text-2xl font-semibold text-white">
-                NSW -2
+                2 pts
               </div>
             </div>
             <div className="border border-[#1E1E2E] bg-[#16161D] p-4">
@@ -7703,9 +7703,6 @@ function OriginPage({
                 <PremiumResultBadge result="Hit" />
               </div>
             </div>
-          </div>
-          <div className="text-[10px] md:text-xs font-bold text-white/45 uppercase tracking-widest leading-relaxed">
-            Archived as credibility proof only. Game 2 remains the live Origin product focus.
           </div>
         </div>
       </GlassCard>
