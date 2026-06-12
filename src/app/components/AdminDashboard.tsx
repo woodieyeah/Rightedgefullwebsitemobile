@@ -94,7 +94,7 @@ function adminEmailCtaHtml(href: string, label: string, variant: 'primary' | 'se
 }
 
 function adminMetricCardHtml(label: string, value: string, tone: 'default' | 'positive' | 'negative' = 'default') {
-  const color = tone === 'positive' ? '#4ADE80' : tone === 'negative' ? '#F87171' : '#ffffff';
+  const color = tone === 'positive' ? '#00E676' : tone === 'negative' ? '#F87171' : '#ffffff';
   return `
     <td width="33.33%" style="padding:0 6px 12px 6px;vertical-align:top;">
       <div style="background:#16161D;border:1px solid #1E1E2E;padding:18px 16px;">
@@ -455,7 +455,7 @@ export function AdminDashboard({ data, onNavigateAdStudio }: { data?: any, onNav
             <td width="30%" align="right">
                <div style="background:#111116;border:1px solid #1E1E2E;padding:8px 10px;display:inline-block;text-align:left;">
                  <div style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:9px;color:#9CA3AF;text-transform:uppercase;margin-bottom:3px;font-weight:500;letter-spacing:0.1em;">Model</div>
-                 <div style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:13px;color:#4ADE80;font-weight:600;">${favProb.toFixed(1)}%</div>
+                 <div style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:13px;color:#00E676;font-weight:600;">${favProb.toFixed(1)}%</div>
                </div>
             </td>
           </tr>

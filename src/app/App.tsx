@@ -932,7 +932,7 @@ function MetricCard({
 }) {
   const accentText = {
     neutral: "text-white/50",
-    green: "text-[#4ADE80]",
+    green: "text-[#00E676]",
     gold: "text-white",
     blue: "text-white",
   }[accent];
@@ -2352,7 +2352,7 @@ function buildDashboardData(
 function ResultPill({ result }: { result: "W" | "L" | "P" }) {
   if (result === "W") {
     return (
-      <span className="inline-flex items-center justify-center w-8 h-8 bg-[#4ADE80] text-[#0A0A0F] text-sm font-semibold">
+      <span className="inline-flex items-center justify-center w-8 h-8 bg-[#00E676] text-[#0A0A0F] text-sm font-semibold">
         W
       </span>
     );
@@ -3218,7 +3218,7 @@ function EmailGateModal({
           ) : (
             <>
               {successMsg && (
-                <div className="bg-[#16161D] text-[#4ADE80] border border-[#1E1E2E] p-3 text-xs font-medium uppercase tracking-wider">
+                <div className="bg-[#16161D] text-[#00E676] border border-[#1E1E2E] p-3 text-xs font-medium uppercase tracking-wider">
                   {successMsg}
                 </div>
               )}
@@ -3804,7 +3804,7 @@ function OfficialPlayCard({ row }: { row: PredictionRow }) {
             <div className="text-[10px] md:text-xs uppercase tracking-widest text-[#9CA3AF] font-medium mb-1 md:mb-2">
               Edge
             </div>
-            <div className="text-lg md:text-2xl font-semibold text-[#4ADE80]">
+            <div className="text-lg md:text-2xl font-semibold text-[#00E676]">
               +{formatPercent(row.bestEdge, 2)}
             </div>
           </div>
@@ -3815,8 +3815,8 @@ function OfficialPlayCard({ row }: { row: PredictionRow }) {
           <div className="text-xs font-medium text-[#9CA3AF] mb-4 uppercase tracking-widest flex items-center justify-between">
             <span>Live Bookmaker Prices</span>
             <span className="flex h-2 w-2 relative">
-              <span className="animate-ping-pong absolute inline-flex h-full w-full rounded-full bg-[#4ADE80] opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-[#4ADE80]"></span>
+              <span className="animate-ping-pong absolute inline-flex h-full w-full rounded-full bg-[#00E676] opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-[#00E676]"></span>
             </span>
           </div>
           <div className="flex flex-col gap-2 mb-6 min-h-[160px]">
@@ -3846,7 +3846,7 @@ function OfficialPlayCard({ row }: { row: PredictionRow }) {
                             isBetr
                               ? "text-white"
                               : bookie.isBest
-                                ? "text-[#4ADE80]"
+                                ? "text-[#00E676]"
                                 : "text-[#9CA3AF]"
                           }`}
                         >
@@ -4036,7 +4036,7 @@ function OriginRapidPreview({
                 <div className="text-[8px] font-medium uppercase tracking-[0.14em] text-[#6B7280]">
                   Win %
                 </div>
-                <div className={`text-lg font-semibold leading-none sm:text-xl ${team.isWinner ? "text-[#4ADE80]" : "text-[#9CA3AF]"}`}>
+                <div className={`text-lg font-semibold leading-none sm:text-xl ${team.isWinner ? "text-[#00E676]" : "text-[#9CA3AF]"}`}>
                   {formatPercent(team.winPct, 0)}
                 </div>
               </div>
@@ -4136,7 +4136,7 @@ function TryScorerTicker({ data }: { data: DashboardData | null }) {
           {row.player}
         </span>
         <span className="text-[13px] font-medium text-[#9CA3AF]">
-          · MODEL <span className="text-[#4ADE80]">{formatPercent(row.statsInsiderPct, 0)}</span>
+          · MODEL <span className="text-[#00E676]">{formatPercent(row.statsInsiderPct, 0)}</span>
         </span>
         <span className="text-[13px] font-medium text-[#9CA3AF]">
           · MARKET {formatPercent(row.marketImpliedPct, 0)}
@@ -4562,7 +4562,7 @@ function FreeBetrMarketsPanel({
                           <span className="text-[7px] font-medium uppercase tracking-widest text-[#9CA3AF]">
                             Model
                           </span>
-                          <span className="text-base font-semibold leading-none text-[#4ADE80] tabular-nums">
+                          <span className="text-base font-semibold leading-none text-[#00E676] tabular-nums">
                             {Number.isFinite(outcome.modelPct) ? formatPercent(outcome.modelPct || 0, 0) : "—"}
                           </span>
                         </div>
@@ -4681,7 +4681,6 @@ function OriginMarketBoard({
   const projectedTotal = row.predictedHomeScore + row.predictedAwayScore;
   const pinnacleMarkets = getBookmakerMarketsForPrediction(baselineMarketMap, row, "pinnacle");
   const bestMarkets = getSgmMatchMarkets(bestMarketMap, row);
-  const hasBestMarketData = Object.keys(bestMarkets).length > 0;
   const getBestH2hOffer = (team: string, fallbackOdds: number) => {
     const teamKey = normalizeTeamName(team);
     const offers = Object.entries(bestMarkets)
@@ -4817,16 +4816,6 @@ function OriginMarketBoard({
               Origin II market board
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="inline-flex items-center gap-2 border border-[#1E1E2E] bg-[#16161D] px-3 py-2 text-[10px] uppercase tracking-[0.18em] text-[#9CA3AF] font-medium">
-              <span className={`w-2 h-2 rounded-full ${hasBestMarketData ? "bg-[#4ADE80]" : "bg-[#6B7280]"}`} />
-              {hasBestMarketData ? "Live market odds loaded" : "Market odds pending"}
-            </div>
-            <div className="inline-flex items-center gap-2 border border-[#1E1E2E] bg-[#16161D] px-3 py-2 text-[10px] uppercase tracking-[0.18em] text-[#9CA3AF] font-medium">
-              <span className="w-2 h-2 rounded-full bg-[#4ADE80]" />
-              {isLoading ? "Updating model baseline" : ORIGIN_MARKET_SNAPSHOT.updatedLabel}
-            </div>
-          </div>
         </div>
 
         <div className="grid grid-cols-3 gap-1 border border-[#1E1E2E] bg-[#0A0A0F] p-1">
@@ -4885,7 +4874,7 @@ function OriginMarketBoard({
                     <div className="text-[8px] uppercase tracking-[0.18em] text-[#9CA3AF] font-medium mb-1">
                       Model
                     </div>
-                    <div className="text-xl md:text-2xl font-semibold text-[#4ADE80] tabular-nums">
+                    <div className="text-xl md:text-2xl font-semibold text-[#00E676] tabular-nums">
                       {formatPercent(outcome.modelPct, 0)}
                     </div>
                   </div>
@@ -4975,7 +4964,7 @@ function FeaturedMatchPreview({
     !selectedIsHome && !selectedIsAway
       ? "text-[#9CA3AF]"
       : selectedEdge >= 0
-        ? "text-[#4ADE80]"
+        ? "text-[#00E676]"
         : "text-[#F87171]";
 
   const featuredWinPct = getPredictedWinnerWinPct(row);
@@ -5061,7 +5050,7 @@ function FeaturedMatchPreview({
               <div className="mb-2 text-[10px] font-medium uppercase tracking-[0.14em] text-[#9CA3AF]">
                 Win prob
               </div>
-              <div className="text-xl font-semibold text-[#4ADE80]">
+              <div className="text-xl font-semibold text-[#00E676]">
                 {formatPercent(featuredWinPct, 2)}
               </div>
             </div>
@@ -5137,7 +5126,7 @@ function ProbabilityPathModule() {
           <linearGradient id="probability-path-gradient" x1="0" x2="1" y1="0" y2="0">
             <stop offset="0%" stopColor="#6B7280" stopOpacity="0.2" />
             <stop offset="65%" stopColor="#9CA3AF" stopOpacity="0.7" />
-            <stop offset="100%" stopColor="#4ADE80" stopOpacity="0.9" />
+            <stop offset="100%" stopColor="#00E676" stopOpacity="0.9" />
           </linearGradient>
         </defs>
         {[
@@ -5168,7 +5157,7 @@ function ProbabilityPathModule() {
             cx="304"
             cy={y}
             r={index === 2 ? 4.5 : 2.5}
-            fill={index === 2 ? "#4ADE80" : "#9CA3AF"}
+            fill={index === 2 ? "#00E676" : "#9CA3AF"}
             opacity={index === 2 ? 1 : 0.5}
           />
         ))}
@@ -5208,15 +5197,15 @@ function MarketComparisonModule() {
           <div className="text-[9px] font-medium uppercase tracking-[0.14em] text-[#6B7280]">
             Overlay
           </div>
-          <div className="text-lg font-semibold text-[#4ADE80]">+8.9%</div>
+          <div className="text-lg font-semibold text-[#00E676]">+8.9%</div>
         </div>
       </div>
 
       <div className="relative mt-8 h-16">
         <div className="absolute left-0 right-0 top-1/2 h-px bg-[#1E1E2E]" />
         <div className="absolute left-[22%] top-1/2 h-8 w-px -translate-y-1/2 bg-[#6B7280]" />
-        <div className="absolute left-[64%] top-1/2 h-8 w-px -translate-y-1/2 bg-[#4ADE80]" />
-        <div className="rightedge-overlay-gap absolute left-[22%] right-[36%] top-1/2 h-1 -translate-y-1/2 bg-[#4ADE80]" />
+        <div className="absolute left-[64%] top-1/2 h-8 w-px -translate-y-1/2 bg-[#00E676]" />
+        <div className="rightedge-overlay-gap absolute left-[22%] right-[36%] top-1/2 h-1 -translate-y-1/2 bg-[#00E676]" />
 
         <div className="absolute left-[22%] top-0 -translate-x-1/2 border border-[#1E1E2E] bg-[#16161D] px-3 py-2">
           <div className="text-[9px] font-medium uppercase tracking-[0.14em] text-[#9CA3AF]">
@@ -5224,8 +5213,8 @@ function MarketComparisonModule() {
           </div>
           <div className="text-xl font-semibold text-white">$1.80</div>
         </div>
-        <div className="absolute left-[64%] bottom-0 -translate-x-1/2 border border-[#4ADE80]/60 bg-[#111116] px-3 py-2 shadow-[0_0_22px_rgba(74,222,128,0.14)]">
-          <div className="text-[9px] font-medium uppercase tracking-[0.14em] text-[#4ADE80]">
+        <div className="absolute left-[64%] bottom-0 -translate-x-1/2 border border-[#00E676]/60 bg-[#111116] px-3 py-2 shadow-[0_0_22px_rgba(0,230,118,0.14)]">
+          <div className="text-[9px] font-medium uppercase tracking-[0.14em] text-[#00E676]">
             RightEdge
           </div>
           <div className="text-xl font-semibold text-white">$1.55</div>
@@ -5233,7 +5222,7 @@ function MarketComparisonModule() {
       </div>
 
       <div className="absolute bottom-5 left-5 right-5 flex items-center justify-end text-[10px] font-medium uppercase tracking-[0.14em] text-[#6B7280]">
-        <span className="text-[#4ADE80]">Price gap lights up</span>
+        <span className="text-[#00E676]">Price gap lights up</span>
       </div>
     </div>
   );
@@ -5933,7 +5922,7 @@ function OverviewPage({ data }: { data: DashboardData }) {
                   {data.clvData.map((_, idx) => (
                     <Cell
                       key={`clv-${idx}`}
-                      fill={idx === 0 ? "#4ADE80" : "#9CA3AF"}
+                      fill={idx === 0 ? "#00E676" : "#9CA3AF"}
                     />
                   ))}
                 </Bar>
@@ -7383,7 +7372,6 @@ function OriginPage({
   const [originBetrMarketMap, setOriginBetrMarketMap] = useState<SgmMarketMap>({});
   const [originPinnacleMarketMap, setOriginPinnacleMarketMap] = useState<SgmMarketMap>({});
   const [originTryScorerOddsByPlayer, setOriginTryScorerOddsByPlayer] = useState<Record<string, { bestOdds: number; bookmaker: string }>>({});
-  const [isOriginOddsLoading, setIsOriginOddsLoading] = useState(true);
   const [activeOriginMarketRead, setActiveOriginMarketRead] = useState<"h2h" | "line" | "total">("h2h");
 
   const originRowBase: PredictionRow = {
@@ -7425,7 +7413,6 @@ function OriginPage({
     let mounted = true;
 
     const fetchOriginOdds = async () => {
-      setIsOriginOddsLoading(true);
       try {
         const [betrResult, pinnacleResult, tryScorerResult] = await Promise.allSettled([
           fetchLiveOddsCached("betr"),
@@ -7468,8 +7455,11 @@ function OriginPage({
         } else {
           setOriginTryScorerOddsByPlayer({});
         }
-      } finally {
-        if (mounted) setIsOriginOddsLoading(false);
+      } catch {
+        if (!mounted) return;
+        setOriginBetrMarketMap({});
+        setOriginPinnacleMarketMap({});
+        setOriginTryScorerOddsByPlayer({});
       }
     };
 
@@ -7578,6 +7568,25 @@ function OriginPage({
     originMarketReadGroups.find((group) => group.id === activeOriginMarketRead) ||
     originMarketReadGroups[0];
   const originPremiumPlay = buildOriginPremiumMarketPlay(originRow, originBetrMarkets, originPinnacleBaselineMarkets);
+  const originTryScorerSignals = states.flatMap((state) =>
+    state.props.map((prop) => {
+      const liveOdds = originTryScorerOddsByPlayer[normalizeOriginPlayerName(prop.player)];
+      const read = getOriginTryScorerRead(prop.probability, liveOdds?.bestOdds);
+      return {
+        state,
+        prop,
+        liveOdds,
+        read,
+      };
+    }),
+  );
+  const positiveOriginTryScorerSignals = originTryScorerSignals
+    .filter(({ read }) => read.edge > 0)
+    .sort((a, b) => {
+      const edgeDiff = b.read.edge - a.read.edge;
+      if (Math.abs(edgeDiff) > 0.001) return edgeDiff;
+      return b.prop.probability - a.prop.probability;
+    });
 
   if (!hasPaidAccess() && !isAdmin) {
     return (
@@ -7629,24 +7638,6 @@ function OriginPage({
                 <span>8:05 PM AEST</span>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-2 shrink-0 w-full sm:w-auto">
-              <div className="border border-[#1E1E2E] bg-[#16161D] px-4 py-3">
-                <div className="text-[9px] uppercase tracking-[0.18em] text-[#6B7280] font-medium mb-1">
-                  Status
-                </div>
-                <div className="text-sm font-semibold uppercase text-white">
-                  Game 2 Live
-                </div>
-              </div>
-              <div className="border border-[#1E1E2E] bg-[#16161D] px-4 py-3">
-                <div className="text-[9px] uppercase tracking-[0.18em] text-[#6B7280] font-medium mb-1">
-                  Market
-                </div>
-                <div className="text-sm font-semibold uppercase text-[#4ADE80]">
-                  {isOriginOddsLoading ? "Updating" : "Loaded"}
-                </div>
-              </div>
-            </div>
           </div>
         </div>
       </GlassCard>
@@ -7659,7 +7650,7 @@ function OriginPage({
                 Main model prediction
               </div>
               <h3 className="text-xl md:text-3xl font-semibold tracking-tight text-white uppercase">
-                Projected score {originRow.predictedHomeScore}-{originRow.predictedAwayScore}
+                Game 2 model
               </h3>
             </div>
           </div>
@@ -7708,7 +7699,7 @@ function OriginPage({
                     <div className="text-[8px] uppercase tracking-[0.18em] text-[#6B7280] font-medium mb-1">
                       Model %
                     </div>
-                    <div className="text-2xl md:text-3xl font-semibold leading-none text-[#4ADE80]">
+                    <div className="text-2xl md:text-3xl font-semibold leading-none text-[#00E676]">
                       {formatPercent(state.winPct, 1)}
                     </div>
                   </div>
@@ -7799,7 +7790,7 @@ function OriginPage({
                       Edge
                     </div>
                     <div className={`mt-1 text-lg font-black md:text-xl ${
-                      read.edge > 0 ? "text-[#4ADE80]" : "text-[#9CA3AF]"
+                      read.edge > 0 ? "text-[#00E676]" : "text-[#9CA3AF]"
                     }`}>
                       {read.modelPct ? `${read.edge >= 0 ? "+" : ""}${formatPercent(read.edge, 1)}` : "—"}
                     </div>
@@ -7817,18 +7808,86 @@ function OriginPage({
             Premium Plays
           </h3>
         </div>
-        {originPremiumPlay ? (
-          <PremiumMarketPlayCard play={originPremiumPlay} now={now} />
-        ) : (
-          <GlassCard className="p-4 md:p-6 border-l-4 border-l-[#6B7280]">
-            <div className="text-[10px] font-black uppercase tracking-[0.18em] text-[#6B7280] mb-2">
-              No positive edge
-            </div>
-            <div className="text-lg md:text-2xl font-black uppercase tracking-tight text-white">
-              Waiting for Betr to move into value range.
-            </div>
-          </GlassCard>
-        )}
+        <div className="grid grid-cols-1 gap-4 md:gap-5">
+          {originPremiumPlay ? (
+            <PremiumMarketPlayCard play={originPremiumPlay} now={now} />
+          ) : (
+            <GlassCard className="p-4 md:p-6 border-l-4 border-l-[#6B7280]">
+              <div className="text-[10px] font-black uppercase tracking-[0.18em] text-[#6B7280] mb-2">
+                No positive edge
+              </div>
+              <div className="text-lg md:text-2xl font-black uppercase tracking-tight text-white">
+                Waiting for Betr to move into value range.
+              </div>
+            </GlassCard>
+          )}
+
+          {positiveOriginTryScorerSignals.length > 0 && (
+            <GlassCard className="p-3 md:p-4 border-l-4 border-l-[#FF2E63]">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-[9px] font-black uppercase tracking-[0.18em] text-white/45">
+                    Try scorer value
+                  </div>
+                  <div className="mt-1 text-base font-black uppercase tracking-tight text-white md:text-lg">
+                    Positive-edge scorer signals
+                  </div>
+                </div>
+                <span className="shrink-0 border border-[#1E1E2E] px-2 py-1 text-[8px] font-black uppercase tracking-widest text-[#6B7280]">
+                  Betr odds
+                </span>
+              </div>
+              <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                {positiveOriginTryScorerSignals.map(({ state, prop, liveOdds, read }) => (
+                  <div
+                    key={`premium-origin-scorer-${state.key}-${prop.player}`}
+                    className="border border-[#1E1E2E] bg-[#111116] p-3"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-black text-white md:text-base">
+                          {prop.player}
+                        </div>
+                        <div className="mt-1 text-[8px] font-black uppercase tracking-[0.18em] text-white/40">
+                          {state.name}
+                        </div>
+                      </div>
+                      <span className="shrink-0 border border-[#00E676]/35 bg-[#00E676]/10 px-1.5 py-0.5 text-[7px] font-black uppercase tracking-widest text-[#00E676]">
+                        Best Bet
+                      </span>
+                    </div>
+                    <div className="mt-3 grid grid-cols-3 gap-2">
+                      <div>
+                        <div className="text-[7px] font-black uppercase tracking-[0.18em] text-white/40">
+                          Model %
+                        </div>
+                        <div className={`mt-1 text-sm font-black ${prop.probability > 38 ? "text-[#00E676]" : "text-white"}`}>
+                          {formatPercent(prop.probability, 1)}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-[7px] font-black uppercase tracking-[0.18em] text-white/40">
+                          Edge %
+                        </div>
+                        <div className="mt-1 text-sm font-black text-[#00E676]">
+                          +{formatPercent(read.edge, 1)}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-[7px] font-black uppercase tracking-[0.18em] text-white/40">
+                          Odds
+                        </div>
+                        <div className="mt-1 text-sm font-black text-white">
+                          {liveOdds ? `$${liveOdds.bestOdds.toFixed(2)}` : "—"}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </GlassCard>
+          )}
+        </div>
       </div>
 
       <div className="flex flex-col gap-4">
@@ -7885,10 +7944,10 @@ function OriginPage({
                   return (
                     <div
                       key={`${state.key}-${prop.player}`}
-                      className="grid grid-cols-1 gap-2.5 p-3 md:grid-cols-[minmax(0,1fr)_170px_130px] md:items-center md:gap-4 md:p-4"
+                      className="grid grid-cols-1 gap-3 p-3 md:grid-cols-[minmax(0,1fr)_minmax(180px,220px)_128px] md:items-center md:gap-3 md:p-3.5"
                     >
                       <div className="min-w-0">
-                        <div className="flex min-w-0 flex-wrap items-center gap-2">
+                        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                           <div className="min-w-0 truncate text-sm font-black text-white md:text-base">
                             {prop.player}
                           </div>
@@ -7897,7 +7956,7 @@ function OriginPage({
                               key={label}
                               className={`inline-flex shrink-0 border px-1.5 py-0.5 text-[7px] font-black uppercase tracking-widest ${
                                 label === "Best Bet"
-                                  ? "border-[#4ADE80]/35 bg-[#4ADE80]/10 text-[#4ADE80]"
+                                  ? "border-[#00E676]/35 bg-[#00E676]/10 text-[#00E676]"
                                   : "border-[#1E1E2E] bg-[#111116] text-[#9CA3AF]"
                               }`}
                             >
@@ -7909,20 +7968,20 @@ function OriginPage({
                       <div className="grid grid-cols-2 gap-2">
                         <div className="border border-[#1E1E2E] bg-[#111116] px-2.5 py-2">
                           <div className="text-[7px] font-black uppercase tracking-[0.18em] text-white/40">
-                            Model
+                            Model %
                           </div>
                           <div className={`mt-0.5 text-sm font-black md:text-base ${
-                            prop.probability > 38 ? "text-[#4ADE80]" : "text-[#9CA3AF]"
+                            prop.probability > 38 ? "text-[#00E676]" : "text-[#9CA3AF]"
                           }`}>
                             {formatPercent(prop.probability, 1)}
                           </div>
                         </div>
                         <div className="border border-[#1E1E2E] bg-[#111116] px-2.5 py-2">
                           <div className="text-[7px] font-black uppercase tracking-[0.18em] text-white/40">
-                            Edge
+                            Edge %
                           </div>
                           <div className={`mt-0.5 text-sm font-black md:text-base ${
-                            read.edge > 0 ? "text-[#4ADE80]" : "text-[#9CA3AF]"
+                            read.edge > 0 ? "text-[#00E676]" : "text-[#9CA3AF]"
                           }`}>
                             {liveOdds ? `${read.edge >= 0 ? "+" : ""}${formatPercent(read.edge, 1)}` : "—"}
                           </div>
@@ -7952,7 +8011,7 @@ function OriginPage({
         </div>
       </div>
 
-      <GlassCard className="p-4 md:p-5 border-l-4 border-l-[#4ADE80]">
+      <GlassCard className="p-4 md:p-5 border-l-4 border-l-[#00E676]">
         <div className="flex flex-col gap-4">
           <div>
             <div className="text-[10px] uppercase tracking-[0.18em] text-[#9CA3AF] font-medium mb-2">
@@ -7973,7 +8032,7 @@ function OriginPage({
               <div className="text-[9px] font-black text-white/45 uppercase tracking-widest mb-1">
                 Model exact score
               </div>
-              <div className="text-lg font-black text-[#4ADE80]">NSW 22-20</div>
+              <div className="text-lg font-black text-[#00E676]">NSW 22-20</div>
             </div>
             <div className="border border-[#1E1E2E] bg-[#16161D] p-4">
               <div className="flex items-center justify-between gap-2">
@@ -9164,7 +9223,7 @@ function AnalyticsPage({ data }: { data: DashboardData }) {
                     <Cell
                       key={`team-${row.team}-${idx}`}
                       fill={
-                        row.profit >= 0 ? "#4ADE80" : "#F87171"
+                        row.profit >= 0 ? "#00E676" : "#F87171"
                       }
                     />
                   ))}
@@ -9203,7 +9262,7 @@ function AnalyticsPage({ data }: { data: DashboardData }) {
                     <Cell
                       key={`pie-cell-2-${index}`}
                       fill={
-                        ["#4ADE80", "#F87171", "#6B7280"][index]
+                        ["#00E676", "#F87171", "#6B7280"][index]
                       }
                     />
                   ))}
@@ -9265,8 +9324,8 @@ function RoundSwitcher({
       >
         {!selectedArchive && (
           <span className="relative flex h-2.5 w-2.5">
-            <span className="absolute inline-flex h-full w-full animate-ping-pong rounded-full bg-[#4ADE80] opacity-70" />
-            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-[#4ADE80]" />
+            <span className="absolute inline-flex h-full w-full animate-ping-pong rounded-full bg-[#00E676] opacity-70" />
+            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-[#00E676]" />
           </span>
         )}
         <span>{label}</span>
@@ -9288,7 +9347,7 @@ function RoundSwitcher({
             }`}
           >
             <span>{liveLabel} Live</span>
-            <span className="h-2 w-2 bg-[#4ADE80]" />
+            <span className="h-2 w-2 bg-[#00E676]" />
           </button>
           {ROUND_ARCHIVES.map((archive) => (
             <button
@@ -9637,8 +9696,8 @@ function AppDashboard({
               ) : (
                 <span className="inline-flex items-center gap-2 bg-[#16161D] px-3 md:px-4 py-1.5 md:py-2 border border-[#1E1E2E]">
                   <span className="relative flex h-2.5 w-2.5">
-                    <span className="absolute inline-flex h-full w-full animate-ping-pong rounded-full bg-[#4ADE80] opacity-70" />
-                    <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-[#4ADE80]" />
+                    <span className="absolute inline-flex h-full w-full animate-ping-pong rounded-full bg-[#00E676] opacity-70" />
+                    <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-[#00E676]" />
                   </span>
                   <span>{data?.currentRoundLabel || "Round 1"} Live</span>
                 </span>

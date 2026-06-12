@@ -25,7 +25,7 @@
   --font-weight-medium: 500;
   --font-weight-normal: 400;
   --ring: #9CA3AF;
-  --chart-1: #4ADE80;
+  --chart-1: #00E676;
   --chart-2: #9CA3AF;
   --chart-3: #6B7280;
   --chart-4: #FFFFFF;
@@ -235,11 +235,11 @@
   }
 
   #root [class*="text-[#00E676]"] {
-    color: #4ADE80 !important;
+    color: #00E676 !important;
   }
 
   #root [class*="bg-[#00E676]"] {
-    background-color: #4ADE80 !important;
+    background-color: #00E676 !important;
     color: #0A0A0F !important;
   }
 
@@ -448,7 +448,7 @@
 
   #root .rightedge-overlay-gap {
     animation: rightedge-overlay-glow 2.8s ease-in-out infinite;
-    box-shadow: 0 0 18px rgba(74, 222, 128, 0.45);
+    box-shadow: 0 0 18px rgba(0,230,118, 0.45);
   }
 
   #root .rightedge-premium-blur {
