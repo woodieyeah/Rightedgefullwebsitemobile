@@ -7904,7 +7904,7 @@ function OriginPage({
                 state.key === "nsw" ? "border-l-[#7CC6FF]" : "border-l-[#8A1748]"
               }`}
             >
-              <div className="flex items-center justify-between gap-3 border-b border-[#1E1E2E] bg-[#16161D] p-4 md:p-5">
+              <div className="flex items-center justify-between gap-3 border-b border-[#C7C7C2] bg-[#F6F6F3] p-4 md:p-5">
                 <div className="flex min-w-0 items-center gap-3">
                   <div
                     className="flex h-9 w-9 shrink-0 items-center justify-center border text-[9px] font-black uppercase tracking-widest"
@@ -7917,19 +7917,19 @@ function OriginPage({
                     {state.short}
                   </div>
                   <div className="min-w-0">
-                    <div className="truncate text-lg font-black uppercase tracking-tight text-white md:text-xl">
+                    <div className="truncate text-lg font-black uppercase tracking-tight text-[#0A0A0A] md:text-xl">
                       {state.name}
                     </div>
-                    <div className="mt-1 text-[9px] font-black uppercase tracking-[0.18em] text-white/40">
+                    <div className="mt-1 text-[9px] font-black uppercase tracking-[0.18em] text-[#6A6A65]">
                       Anytime try scorer
                     </div>
                   </div>
                 </div>
-                <span className="shrink-0 border border-[#1E1E2E] px-2.5 py-1 text-[8px] font-black uppercase tracking-widest text-[#6B7280]">
+                <span className="shrink-0 border border-[#C7C7C2] bg-[#F1F1EF] px-2.5 py-1 text-[8px] font-black uppercase tracking-widest text-[#6A6A65]">
                   Betr odds
                 </span>
               </div>
-              <div className="divide-y divide-[#1E1E2E]">
+              <div className="divide-y divide-[#C7C7C2]">
                 {[...state.props].sort((a, b) => {
                   const aOdds = originTryScorerOddsByPlayer[normalizeOriginPlayerName(a.player)]?.bestOdds;
                   const bOdds = originTryScorerOddsByPlayer[normalizeOriginPlayerName(b.player)]?.bestOdds;
@@ -7944,30 +7944,34 @@ function OriginPage({
                   return (
                     <div
                       key={`${state.key}-${prop.player}`}
-                      className="grid grid-cols-1 gap-3 p-3 md:grid-cols-[minmax(0,1fr)_minmax(180px,220px)_128px] md:items-center md:gap-3 md:p-3.5"
+                      className="grid grid-cols-1 gap-3 p-3 md:grid-cols-[minmax(210px,1fr)_minmax(176px,220px)_minmax(200px,230px)] md:items-center md:gap-3 md:p-3.5 xl:grid-cols-[minmax(250px,1fr)_minmax(190px,230px)_minmax(210px,240px)]"
                     >
                       <div className="min-w-0">
-                        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-                          <div className="min-w-0 truncate text-sm font-black text-white md:text-base">
+                        <div className="flex min-w-0 flex-col gap-1.5">
+                          <div className="min-w-0 truncate text-sm font-black text-[#0A0A0A] md:text-base">
                             {prop.player}
                           </div>
-                          {read.labels.map((label) => (
-                            <span
-                              key={label}
-                              className={`inline-flex shrink-0 border px-1.5 py-0.5 text-[7px] font-black uppercase tracking-widest ${
-                                label === "Best Bet"
-                                  ? "border-[#00E676]/35 bg-[#00E676]/10 text-[#00E676]"
-                                  : "border-[#1E1E2E] bg-[#111116] text-[#9CA3AF]"
-                              }`}
-                            >
-                              {label}
-                            </span>
-                          ))}
+                          {read.labels.length > 0 && (
+                            <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                              {read.labels.map((label) => (
+                                <span
+                                  key={label}
+                                  className={`inline-flex shrink-0 border px-1.5 py-0.5 text-[7px] font-black uppercase tracking-widest ${
+                                    label === "Best Bet"
+                                      ? "border-[#00E676]/50 bg-[#00E676]/10 text-[#087A3A]"
+                                      : "border-[#C7C7C2] bg-[#F1F1EF] text-[#6A6A65]"
+                                  }`}
+                                >
+                                  {label}
+                                </span>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       </div>
                       <div className="grid grid-cols-2 gap-2">
-                        <div className="border border-[#1E1E2E] bg-[#111116] px-2.5 py-2">
-                          <div className="text-[7px] font-black uppercase tracking-[0.18em] text-white/40">
+                        <div className="border border-[#C7C7C2] bg-[#F1F1EF] px-2.5 py-2">
+                          <div className="text-[7px] font-black uppercase tracking-[0.18em] text-[#6A6A65]">
                             Model %
                           </div>
                           <div className={`mt-0.5 text-sm font-black md:text-base ${
@@ -7976,8 +7980,8 @@ function OriginPage({
                             {formatPercent(prop.probability, 1)}
                           </div>
                         </div>
-                        <div className="border border-[#1E1E2E] bg-[#111116] px-2.5 py-2">
-                          <div className="text-[7px] font-black uppercase tracking-[0.18em] text-white/40">
+                        <div className="border border-[#C7C7C2] bg-[#F1F1EF] px-2.5 py-2">
+                          <div className="text-[7px] font-black uppercase tracking-[0.18em] text-[#6A6A65]">
                             Edge %
                           </div>
                           <div className={`mt-0.5 text-sm font-black md:text-base ${
@@ -7994,10 +7998,10 @@ function OriginPage({
                             bookmaker="Betr"
                             odds={liveOdds.bestOdds}
                             label={`Betr $${liveOdds.bestOdds.toFixed(2)}`}
-                            className="w-full py-2.5 text-[10px]"
+                            className="w-full justify-center whitespace-nowrap px-3 py-2.5 text-[10px] [&_span]:!overflow-visible [&_span]:!text-clip [&_span]:!whitespace-nowrap"
                           />
                         ) : (
-                          <div className="border border-[#1E1E2E] bg-[#111116] px-3 py-2.5 text-center text-[10px] font-black uppercase tracking-widest text-[#6B7280]">
+                          <div className="border border-[#C7C7C2] bg-[#F1F1EF] px-3 py-2.5 text-center text-[10px] font-black uppercase tracking-widest text-[#6A6A65]">
                             Odds pending
                           </div>
                         )}
