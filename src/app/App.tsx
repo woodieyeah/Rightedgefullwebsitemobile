@@ -7568,6 +7568,32 @@ function OriginPage({
     originMarketReadGroups.find((group) => group.id === activeOriginMarketRead) ||
     originMarketReadGroups[0];
   const originPremiumPlay = buildOriginPremiumMarketPlay(originRow, originBetrMarkets, originPinnacleBaselineMarkets);
+  const originQueenslandLineOdds = findSpreadOffer(originBetrMarkets, originRow.awayTeam, originAwayLine.point)?.odds;
+  const originQueenslandLineModelPct = getImpliedWinPctFromOdds(originAwayLine.odds);
+  const originQueenslandLineEdge = originQueenslandLineOdds
+    ? getPremiumMatchValueEdgePct(originQueenslandLineModelPct, originQueenslandLineOdds)
+    : 0;
+  const originQueenslandLinePlay: PremiumMarketPlay | null =
+    originQueenslandLineOdds && originQueenslandLineEdge > 0
+      ? {
+          id: `origin-game-2-line-away-${originAwayLine.point}`,
+          row: originRow,
+          type: "Line",
+          selection: `${originRow.awayTeam} ${formatSgmLine(originAwayLine.point)}`,
+          bookmaker: "Betr",
+          odds: originQueenslandLineOdds,
+          modelPct: originQueenslandLineModelPct,
+          modelEdge: originQueenslandLineEdge,
+          marketPoint: originAwayLine.point,
+          projectedValue: originRow.predictedAwayScore - originRow.predictedHomeScore,
+        }
+      : null;
+  const originPremiumPlays = [
+    originPremiumPlay,
+    originQueenslandLinePlay && originPremiumPlay?.id !== originQueenslandLinePlay.id
+      ? originQueenslandLinePlay
+      : null,
+  ].filter(Boolean) as PremiumMarketPlay[];
   const originTryScorerSignals = states.flatMap((state) =>
     state.props.map((prop) => {
       const liveOdds = originTryScorerOddsByPlayer[normalizeOriginPlayerName(prop.player)];
@@ -7809,8 +7835,10 @@ function OriginPage({
           </h3>
         </div>
         <div className="grid grid-cols-1 gap-4 md:gap-5">
-          {originPremiumPlay ? (
-            <PremiumMarketPlayCard play={originPremiumPlay} now={now} />
+          {originPremiumPlays.length ? (
+            originPremiumPlays.map((play) => (
+              <PremiumMarketPlayCard key={play.id} play={play} now={now} />
+            ))
           ) : (
             <GlassCard className="p-4 md:p-6 border-l-4 border-l-[#6B7280]">
               <div className="text-[10px] font-black uppercase tracking-[0.18em] text-[#6B7280] mb-2">
@@ -7896,11 +7924,11 @@ function OriginPage({
             Try Scorer Best Bets
           </h3>
         </div>
-        <div className="grid grid-cols-1 gap-4 2xl:grid-cols-2">
+        <div className="grid auto-rows-auto grid-cols-1 items-start gap-4 xl:grid-cols-2">
           {states.map((state) => (
             <GlassCard
               key={state.key}
-              className={`overflow-hidden border-l-4 p-0 ${
+              className={`h-auto overflow-visible border-l-4 p-0 ${
                 state.key === "nsw" ? "border-l-[#7CC6FF]" : "border-l-[#8A1748]"
               }`}
             >
@@ -7929,7 +7957,7 @@ function OriginPage({
                   Betr odds
                 </span>
               </div>
-              <div className="divide-y divide-[#C7C7C2]">
+              <div className="h-auto divide-y divide-[#C7C7C2] overflow-visible">
                 {[...state.props].sort((a, b) => {
                   const aOdds = originTryScorerOddsByPlayer[normalizeOriginPlayerName(a.player)]?.bestOdds;
                   const bOdds = originTryScorerOddsByPlayer[normalizeOriginPlayerName(b.player)]?.bestOdds;
@@ -7944,7 +7972,7 @@ function OriginPage({
                   return (
                     <div
                       key={`${state.key}-${prop.player}`}
-                      className="grid grid-cols-1 gap-3 p-3 md:grid-cols-[minmax(210px,1fr)_minmax(176px,220px)_minmax(200px,230px)] md:items-center md:gap-3 md:p-3.5 xl:grid-cols-[minmax(250px,1fr)_minmax(190px,230px)_minmax(210px,240px)]"
+                      className="grid min-w-0 grid-cols-1 gap-3 p-3 md:grid-cols-[minmax(0,1fr)_minmax(168px,210px)] md:items-center md:gap-3 md:p-3.5"
                     >
                       <div className="min-w-0">
                         <div className="flex min-w-0 flex-col gap-1.5">
@@ -7969,7 +7997,7 @@ function OriginPage({
                           )}
                         </div>
                       </div>
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid min-w-0 grid-cols-2 gap-2">
                         <div className="border border-[#C7C7C2] bg-[#F1F1EF] px-2.5 py-2">
                           <div className="text-[7px] font-black uppercase tracking-[0.18em] text-[#6A6A65]">
                             Model %
@@ -7991,14 +8019,14 @@ function OriginPage({
                           </div>
                         </div>
                       </div>
-                      <div>
+                      <div className="min-w-0 md:col-span-2">
                         {liveOdds ? (
                           <AffiliateMarketButton
                             payload="rightedge_origin_try_scorer"
                             bookmaker="Betr"
                             odds={liveOdds.bestOdds}
                             label={`Betr $${liveOdds.bestOdds.toFixed(2)}`}
-                            className="w-full justify-center whitespace-nowrap px-3 py-2.5 text-[10px] [&_span]:!overflow-visible [&_span]:!text-clip [&_span]:!whitespace-nowrap"
+                            className="w-full justify-center whitespace-nowrap px-3 py-2.5 text-[10px] [&_span]:!min-w-0 [&_span]:!whitespace-nowrap"
                           />
                         ) : (
                           <div className="border border-[#C7C7C2] bg-[#F1F1EF] px-3 py-2.5 text-center text-[10px] font-black uppercase tracking-widest text-[#6A6A65]">
