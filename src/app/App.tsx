@@ -252,6 +252,52 @@ function TeamLogo({
   );
 }
 
+function getOriginBadgeConfig(teamName: string) {
+  const normalized = teamName.toLowerCase();
+  if (normalized.includes("new south wales") || normalized.includes("nsw")) {
+    return {
+      label: "NSW",
+      title: "NSW Blues",
+      primary: "#7CC6FF",
+      secondary: "#183153",
+    };
+  }
+  if (normalized.includes("queensland") || normalized.includes("qld")) {
+    return {
+      label: "QLD",
+      title: "Queensland Maroons",
+      primary: "#8A1748",
+      secondary: "#F5E6EE",
+    };
+  }
+  return null;
+}
+
+function OriginTeamBadge({
+  teamName,
+  className = "",
+}: {
+  teamName: string;
+  className?: string;
+}) {
+  const badge = getOriginBadgeConfig(teamName);
+  if (!badge) return null;
+
+  return (
+    <div
+      className={`flex shrink-0 items-center justify-center border font-black uppercase tracking-wider ${className}`}
+      style={{
+        backgroundColor: badge.primary,
+        borderColor: badge.secondary,
+        color: badge.secondary,
+      }}
+      title={badge.title}
+    >
+      {badge.label}
+    </div>
+  );
+}
+
 const STARTING_BANKROLL = 5000;
 // const MAX_STAKE_CAP_LABEL = '3% bankroll';
 
@@ -6733,6 +6779,7 @@ function PremiumMarketPlayCard({ play, now }: { play: PremiumMarketPlay; now: nu
     row.predictedHomeScore || row.predictedAwayScore
       ? `${Math.round(row.predictedHomeScore)}-${Math.round(row.predictedAwayScore)}`
       : "—";
+  const originBadge = getOriginBadgeConfig(play.selection);
   const detail =
     play.type === "Line"
       ? `Model margin ${play.projectedValue && play.projectedValue > 0 ? "+" : ""}${Math.round(play.projectedValue || 0)} vs market ${formatSgmLine(play.marketPoint || 0)}`
@@ -6755,10 +6802,17 @@ function PremiumMarketPlayCard({ play, now }: { play: PremiumMarketPlay; now: nu
             </span>
           </div>
           <div className="flex items-center gap-2.5 md:gap-3">
-            <TeamLogo
-              teamName={play.type === "Total" ? row.predictedWinner : play.selection}
-              className="w-9 h-9 md:w-11 md:h-11 rounded-sm shadow-[2px_2px_0_0_rgba(255,255,255,0.1)]"
-            />
+            {originBadge ? (
+              <OriginTeamBadge
+                teamName={play.selection}
+                className="h-9 w-9 rounded-sm text-[10px] md:h-11 md:w-11 md:text-xs shadow-[2px_2px_0_0_rgba(255,255,255,0.1)]"
+              />
+            ) : (
+              <TeamLogo
+                teamName={play.type === "Total" ? row.predictedWinner : play.selection}
+                className="w-9 h-9 md:w-11 md:h-11 rounded-sm shadow-[2px_2px_0_0_rgba(255,255,255,0.1)]"
+              />
+            )}
             <div className="min-w-0">
               <div className="text-lg md:text-3xl font-black text-white uppercase tracking-tight leading-[1.05] break-words">
                 {play.selection}
