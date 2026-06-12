@@ -767,6 +767,48 @@ const ROUND_14_PROOF: RoundArchive = {
   ],
 };
 
+const ROUND_15_LIVE_PROOF: RoundArchive = {
+  round: 15,
+  label: "Round 15 Live Results",
+  status: "Results",
+  fixtures: [
+    {
+      match: "Rabbitohs v Broncos",
+      day: "Thursday",
+      dateISO: "2026-06-11",
+      dateLabel: "Jun 11",
+      aedt: "7:50 PM",
+      stadium: "Accor Stadium",
+    },
+  ],
+  matchPlays: [
+    {
+      match: "Rabbitohs v Broncos",
+      selection: "Rabbitohs -6.5",
+      market: "Line",
+      modelScore: "29-20",
+      finalScore: "48-6",
+      modelPct: 58.3,
+      odds: 1.95,
+      bookmaker: "PlayUp",
+      result: "Hit",
+      note: "Rabbitohs covered the line.",
+    },
+  ],
+  tryScorers: [
+    {
+      match: "Rabbitohs v Broncos",
+      player: "Alex Johnston",
+      team: "Rabbitohs",
+      odds: 1.57,
+      bookmaker: "Ladbrokes",
+      result: "Hit",
+      note: "Alex Johnston scored.",
+    },
+  ],
+};
+
+const ROUND_PROOF_ARCHIVES: RoundArchive[] = [ROUND_15_LIVE_PROOF, ROUND_14_PROOF];
 const ROUND_ARCHIVES: RoundArchive[] = [ROUND_14_PROOF];
 
 function splitMatchTeams(match: string) {
@@ -1748,23 +1790,46 @@ function getTryScorerSignalsForPrediction(data: DashboardData, row: PredictionRo
     .slice(0, limit);
 }
 
-function getRoundProofMatchPlaysForPrediction(row: PredictionRow, archive: RoundArchive | null = ROUND_14_PROOF) {
-  if (!archive) return [];
+function getRoundProofArchiveForPrediction(row: PredictionRow, archive: RoundArchive | null = null) {
+  if (archive) return archive;
   const pairKey = getPredictionPairKey(row);
-  return archive.matchPlays.filter(
+
+  return (
+    ROUND_PROOF_ARCHIVES.find((candidate) =>
+      candidate.round === row.roundNumber &&
+      (
+        candidate.fixtures.some((fixture) => getMatchPairKeyFromLabel(fixture.match) === pairKey) ||
+        candidate.matchPlays.some((play) => getMatchPairKeyFromLabel(play.match) === pairKey) ||
+        candidate.tryScorers.some((scorer) => getMatchPairKeyFromLabel(scorer.match) === pairKey)
+      )
+    ) ||
+    ROUND_PROOF_ARCHIVES.find((candidate) =>
+      candidate.matchPlays.some((play) => getMatchPairKeyFromLabel(play.match) === pairKey) ||
+      candidate.tryScorers.some((scorer) => getMatchPairKeyFromLabel(scorer.match) === pairKey)
+    ) ||
+    null
+  );
+}
+
+function getRoundProofMatchPlaysForPrediction(row: PredictionRow, archive: RoundArchive | null = null) {
+  const resolvedArchive = getRoundProofArchiveForPrediction(row, archive);
+  if (!resolvedArchive) return [];
+  const pairKey = getPredictionPairKey(row);
+  return resolvedArchive.matchPlays.filter(
     (play) => getMatchPairKeyFromLabel(play.match) === pairKey,
   );
 }
 
-function getRoundProofTryScorerHitsForPrediction(row: PredictionRow, archive: RoundArchive | null = ROUND_14_PROOF) {
-  if (!archive) return [];
+function getRoundProofTryScorerHitsForPrediction(row: PredictionRow, archive: RoundArchive | null = null) {
+  const resolvedArchive = getRoundProofArchiveForPrediction(row, archive);
+  if (!resolvedArchive) return [];
   const pairKey = getPredictionPairKey(row);
-  return archive.tryScorers.filter(
+  return resolvedArchive.tryScorers.filter(
     (scorer) => scorer.result === "Hit" && getMatchPairKeyFromLabel(scorer.match) === pairKey,
   );
 }
 
-function hasSettledRoundProofForPrediction(row: PredictionRow, archive: RoundArchive | null = ROUND_14_PROOF) {
+function hasSettledRoundProofForPrediction(row: PredictionRow, archive: RoundArchive | null = null) {
   return getRoundProofMatchPlaysForPrediction(row, archive).some(
     (play) => play.result === "Hit" || play.result === "Miss",
   );
@@ -1772,7 +1837,9 @@ function hasSettledRoundProofForPrediction(row: PredictionRow, archive: RoundArc
 
 function getRoundProofForPremiumPlay(play: PremiumMarketPlay) {
   const pairKey = getPredictionPairKey(play.row);
-  const matchProofs = ROUND_14_PROOF.matchPlays.filter(
+  const proofArchive = getRoundProofArchiveForPrediction(play.row);
+  if (!proofArchive) return null;
+  const matchProofs = proofArchive.matchPlays.filter(
     (proof) => getMatchPairKeyFromLabel(proof.match) === pairKey,
   );
   return matchProofs.find((proof) => proof.market === play.type) || matchProofs[0] || null;
@@ -1781,7 +1848,24 @@ function getRoundProofForPremiumPlay(play: PremiumMarketPlay) {
 function getRoundProofForTryScorer(row: TryScorerRow) {
   const pairKey = getMatchPairKeyFromLabel(row.match);
   const playerKey = row.player.trim().toLowerCase();
-  return ROUND_14_PROOF.tryScorers.find(
+  const proofArchive =
+    ROUND_PROOF_ARCHIVES.find((archive) =>
+      archive.round === row.round &&
+      archive.tryScorers.some(
+        (proof) =>
+          getMatchPairKeyFromLabel(proof.match) === pairKey &&
+          proof.player.trim().toLowerCase() === playerKey,
+      )
+    ) ||
+    ROUND_PROOF_ARCHIVES.find((archive) =>
+      archive.tryScorers.some(
+        (proof) =>
+          getMatchPairKeyFromLabel(proof.match) === pairKey &&
+          proof.player.trim().toLowerCase() === playerKey,
+      )
+    );
+
+  return proofArchive?.tryScorers.find(
     (proof) =>
       getMatchPairKeyFromLabel(proof.match) === pairKey &&
       proof.player.trim().toLowerCase() === playerKey,
@@ -6135,6 +6219,10 @@ function PredictionsPage({
           const tryScorerSignals = selectedArchive ? [] : getTryScorerSignalsForPrediction(data, row);
           const proofMatchPlays = getRoundProofMatchPlaysForPrediction(row, selectedArchive);
           const proofTryScorerHits = getRoundProofTryScorerHitsForPrediction(row, selectedArchive);
+          const proofFinalScore = proofMatchPlays.find((play) => play.finalScore)?.finalScore || "";
+          const proofFinalScorePair = proofFinalScore ? parseScorePair(proofFinalScore) : null;
+          const displayHomeScore = proofFinalScorePair ? proofFinalScorePair.homeScore : projectedHomeScore;
+          const displayAwayScore = proofFinalScorePair ? proofFinalScorePair.awayScore : projectedAwayScore;
           const matchCompleted = Boolean(selectedArchive) || isFixtureCompleted(row.fixture, now) || hasSettledRoundProofForPrediction(row, selectedArchive);
           const fixtureStatus = matchCompleted
             ? {
@@ -6183,7 +6271,7 @@ function PredictionsPage({
                       <div className={`border border-[#1E1E2E] bg-[#16161D] px-2 py-1 text-center text-lg md:text-xl font-black tabular-nums ${
                         hasPredictedWinner && !homeIsPredictedWinner ? "text-white/50" : "text-white"
                       }`}>
-                        {projectedHomeScore ?? "—"}
+                        {displayHomeScore ?? "—"}
                       </div>
                     </div>
 
@@ -6203,7 +6291,7 @@ function PredictionsPage({
                       <div className={`border border-[#1E1E2E] bg-[#16161D] px-2 py-1 text-center text-lg md:text-xl font-black tabular-nums ${
                         hasPredictedWinner && !awayIsPredictedWinner ? "text-white/50" : "text-white"
                       }`}>
-                        {projectedAwayScore ?? "—"}
+                        {displayAwayScore ?? "—"}
                       </div>
                     </div>
                   </div>
