@@ -7355,11 +7355,21 @@ function buildOriginPremiumMarketPlay(
 function getOriginTryScorerRead(probability: number, odds?: number) {
   const marketPct = odds && odds > 1 ? getImpliedWinPctFromOdds(odds) : 0;
   const edge = marketPct ? probability - marketPct : 0;
-  const label =
-    edge >= 5 ? "Best bet" :
-      edge >= 2 ? "Value" :
-        "High probability";
-  return { edge, label };
+  const labels = [
+    ...(edge > 0 ? ["Best Bet"] : []),
+    ...(probability > 38 ? ["High Probability"] : []),
+  ];
+  return { edge, labels };
+}
+
+function getOriginMarketRead(
+  label: string,
+  modelOdds?: number,
+  marketOdds?: number,
+) {
+  const modelPct = modelOdds && modelOdds > 1 ? getImpliedWinPctFromOdds(modelOdds) : 0;
+  const edge = marketOdds && marketOdds > 1 ? getPremiumMatchValueEdgePct(modelPct, marketOdds) : 0;
+  return { label, modelPct, edge };
 }
 
 function OriginPage({
@@ -7374,6 +7384,7 @@ function OriginPage({
   const [originPinnacleMarketMap, setOriginPinnacleMarketMap] = useState<SgmMarketMap>({});
   const [originTryScorerOddsByPlayer, setOriginTryScorerOddsByPlayer] = useState<Record<string, { bestOdds: number; bookmaker: string }>>({});
   const [isOriginOddsLoading, setIsOriginOddsLoading] = useState(true);
+  const [activeOriginMarketRead, setActiveOriginMarketRead] = useState<"h2h" | "line" | "total">("h2h");
 
   const originRowBase: PredictionRow = {
     match: "NSW Blues v Queensland Maroons",
@@ -7517,6 +7528,55 @@ function OriginPage({
   const originMarketTotal =
     findTotalOffer(originPinnacleBaselineMarkets, "Over", ORIGIN_MARKET_SNAPSHOT.total.point) ||
     { side: "Over" as const, point: ORIGIN_MARKET_SNAPSHOT.total.point, odds: ORIGIN_MARKET_SNAPSHOT.total.overOdds };
+  const originHomeLine =
+    findSpreadOffer(originPinnacleBaselineMarkets, originRow.homeTeam, ORIGIN_MARKET_SNAPSHOT.line.homePoint) ||
+    { point: ORIGIN_MARKET_SNAPSHOT.line.homePoint, odds: ORIGIN_MARKET_SNAPSHOT.line.homeOdds, team: originRow.homeTeam };
+  const originAwayLine =
+    findSpreadOffer(originPinnacleBaselineMarkets, originRow.awayTeam, ORIGIN_MARKET_SNAPSHOT.line.awayPoint) ||
+    { point: ORIGIN_MARKET_SNAPSHOT.line.awayPoint, odds: ORIGIN_MARKET_SNAPSHOT.line.awayOdds, team: originRow.awayTeam };
+  const originOverTotal =
+    findTotalOffer(originPinnacleBaselineMarkets, "Over", ORIGIN_MARKET_SNAPSHOT.total.point) ||
+    { side: "Over" as const, point: ORIGIN_MARKET_SNAPSHOT.total.point, odds: ORIGIN_MARKET_SNAPSHOT.total.overOdds };
+  const originUnderTotal =
+    findTotalOffer(originPinnacleBaselineMarkets, "Under", ORIGIN_MARKET_SNAPSHOT.total.point) ||
+    { side: "Under" as const, point: ORIGIN_MARKET_SNAPSHOT.total.point, odds: ORIGIN_MARKET_SNAPSHOT.total.underOdds };
+  const originMarketReadGroups = [
+    {
+      id: "h2h" as const,
+      title: "H2H",
+      reads: [
+        getOriginMarketRead("NSW", originRow.modelHomeOdds, originBetrMarkets?.h2h[normalizeTeamName(originRow.homeTeam)] || originRow.marketHomeOdds),
+        getOriginMarketRead("QLD", originRow.modelAwayOdds, originBetrMarkets?.h2h[normalizeTeamName(originRow.awayTeam)] || originRow.marketAwayOdds),
+      ],
+    },
+    {
+      id: "line" as const,
+      title: "Line",
+      reads: [
+        getOriginMarketRead(
+          `NSW ${formatSgmLine(originHomeLine.point)}`,
+          originHomeLine.odds,
+          findSpreadOffer(originBetrMarkets, originRow.homeTeam, originHomeLine.point)?.odds,
+        ),
+        getOriginMarketRead(
+          `QLD ${formatSgmLine(originAwayLine.point)}`,
+          originAwayLine.odds,
+          findSpreadOffer(originBetrMarkets, originRow.awayTeam, originAwayLine.point)?.odds,
+        ),
+      ],
+    },
+    {
+      id: "total" as const,
+      title: `Total ${originMarketTotal.point}`,
+      reads: [
+        getOriginMarketRead("Over", originOverTotal.odds, findTotalOffer(originBetrMarkets, "Over", originOverTotal.point)?.odds),
+        getOriginMarketRead("Under", originUnderTotal.odds, findTotalOffer(originBetrMarkets, "Under", originUnderTotal.point)?.odds),
+      ],
+    },
+  ];
+  const activeOriginMarketReadGroup =
+    originMarketReadGroups.find((group) => group.id === activeOriginMarketRead) ||
+    originMarketReadGroups[0];
   const originPremiumPlay = buildOriginPremiumMarketPlay(originRow, originBetrMarkets, originPinnacleBaselineMarkets);
 
   if (!hasPaidAccess() && !isAdmin) {
@@ -7608,7 +7668,7 @@ function OriginPage({
             {states.map((state, index) => (
               <div
                 key={state.key}
-                className="relative grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border border-[#1E1E2E] bg-[#111116] p-3 md:p-4"
+                className="relative grid grid-cols-1 items-center gap-3 border border-[#1E1E2E] bg-[#111116] p-3 sm:grid-cols-[minmax(0,1fr)_auto] md:p-4"
               >
                 <span
                   className="absolute left-0 top-0 h-full w-1"
@@ -7633,7 +7693,7 @@ function OriginPage({
                     </div>
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-2 md:gap-3">
+                <div className="grid grid-cols-2 gap-2 sm:w-auto md:gap-3">
                   <div className="min-w-[70px] border border-[#1E1E2E] bg-[#16161D] px-2 py-2 text-center md:min-w-[90px]">
                     <div className="text-[8px] uppercase tracking-[0.18em] text-[#6B7280] font-medium mb-1">
                       Score
@@ -7657,39 +7717,96 @@ function OriginPage({
             ))}
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="border border-[#1E1E2E] bg-[#16161D] p-4">
-              <div className="text-[9px] font-medium uppercase tracking-[0.18em] text-[#6B7280] mb-2">
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-4 md:gap-3">
+            <div className="border border-[#1E1E2E] bg-[#16161D] p-3 md:p-4">
+              <div className="text-[8px] md:text-[9px] font-medium uppercase tracking-[0.18em] text-[#6B7280] mb-1.5">
                 Model margin
               </div>
-              <div className="text-lg md:text-2xl font-semibold text-white">
+              <div className="text-base md:text-2xl font-semibold text-white">
                 2 pts
               </div>
             </div>
-            <div className="border border-[#1E1E2E] bg-[#16161D] p-4">
-              <div className="text-[9px] font-medium uppercase tracking-[0.18em] text-[#6B7280] mb-2">
+            <div className="border border-[#1E1E2E] bg-[#16161D] p-3 md:p-4">
+              <div className="text-[8px] md:text-[9px] font-medium uppercase tracking-[0.18em] text-[#6B7280] mb-1.5">
                 Market line
               </div>
-              <div className="text-lg md:text-2xl font-semibold text-white">
+              <div className="text-base md:text-2xl font-semibold text-white">
                 QLD {formatSgmLine(originMarketLine.point)}
               </div>
             </div>
-            <div className="border border-[#1E1E2E] bg-[#16161D] p-4">
-              <div className="text-[9px] font-medium uppercase tracking-[0.18em] text-[#6B7280] mb-2">
+            <div className="border border-[#1E1E2E] bg-[#16161D] p-3 md:p-4">
+              <div className="text-[8px] md:text-[9px] font-medium uppercase tracking-[0.18em] text-[#6B7280] mb-1.5">
                 Model total
               </div>
-              <div className="text-lg md:text-2xl font-semibold text-white">
+              <div className="text-base md:text-2xl font-semibold text-white">
                 {originRow.predictedHomeScore + originRow.predictedAwayScore}
               </div>
             </div>
-            <div className="border border-[#1E1E2E] bg-[#16161D] p-4">
-              <div className="text-[9px] font-medium uppercase tracking-[0.18em] text-[#6B7280] mb-2">
+            <div className="border border-[#1E1E2E] bg-[#16161D] p-3 md:p-4">
+              <div className="text-[8px] md:text-[9px] font-medium uppercase tracking-[0.18em] text-[#6B7280] mb-1.5">
                 Market total
               </div>
-              <div className="text-lg md:text-2xl font-semibold text-white">
+              <div className="text-base md:text-2xl font-semibold text-white">
                 {originMarketTotal.point}
               </div>
             </div>
+          </div>
+
+          <div className="border border-[#1E1E2E] bg-[#0A0A0F] p-1">
+            <div className="grid grid-cols-3 gap-1">
+              {originMarketReadGroups.map((group) => (
+                <button
+                  key={group.id}
+                  type="button"
+                  onClick={() => setActiveOriginMarketRead(group.id)}
+                  className={`min-h-[36px] px-2 text-[10px] font-medium uppercase tracking-widest transition ${
+                    activeOriginMarketRead === group.id
+                      ? "bg-white text-[#0A0A0F]"
+                      : "bg-transparent text-[#6B7280] hover:bg-white/5 hover:text-white"
+                  }`}
+                >
+                  {group.id === "total" ? "Total" : group.title}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:gap-3">
+            {activeOriginMarketReadGroup.reads.map((read) => (
+              <div
+                key={`${activeOriginMarketReadGroup.title}-${read.label}`}
+                className="border border-[#1E1E2E] bg-[#111116] p-3 md:p-4"
+              >
+                <div className="mb-3 flex min-w-0 items-center justify-between gap-3">
+                  <div className="min-w-0 truncate text-sm font-black uppercase tracking-tight text-white md:text-base">
+                    {read.label}
+                  </div>
+                  <div className="shrink-0 text-[8px] font-black uppercase tracking-[0.18em] text-[#6B7280]">
+                    {activeOriginMarketReadGroup.title}
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="border border-[#1E1E2E] bg-[#16161D] px-3 py-2.5">
+                    <div className="text-[8px] font-black uppercase tracking-[0.18em] text-[#6B7280]">
+                      Model %
+                    </div>
+                    <div className="mt-1 text-lg font-black text-white md:text-xl">
+                      {read.modelPct ? formatPercent(read.modelPct, 1) : "—"}
+                    </div>
+                  </div>
+                  <div className="border border-[#1E1E2E] bg-[#16161D] px-3 py-2.5">
+                    <div className="text-[8px] font-black uppercase tracking-[0.18em] text-[#6B7280]">
+                      Edge
+                    </div>
+                    <div className={`mt-1 text-lg font-black md:text-xl ${
+                      read.edge > 0 ? "text-[#4ADE80]" : "text-[#9CA3AF]"
+                    }`}>
+                      {read.modelPct ? `${read.edge >= 0 ? "+" : ""}${formatPercent(read.edge, 1)}` : "—"}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </GlassCard>
@@ -7768,35 +7885,50 @@ function OriginPage({
                   return (
                     <div
                       key={`${state.key}-${prop.player}`}
-                      className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 p-4 md:grid-cols-[minmax(0,1fr)_84px_86px_116px] md:items-center md:gap-4 md:p-5"
+                      className="grid grid-cols-1 gap-2.5 p-3 md:grid-cols-[minmax(0,1fr)_170px_130px] md:items-center md:gap-4 md:p-4"
                     >
                       <div className="min-w-0">
-                        <div className="truncate text-base font-black text-white md:text-lg">
-                          {prop.player}
-                        </div>
-                        <div className="mt-1 inline-flex border border-[#1E1E2E] bg-[#111116] px-2 py-1 text-[8px] font-black uppercase tracking-widest text-[#9CA3AF]">
-                          {read.label}
-                        </div>
-                      </div>
-                      <div className="text-right md:text-left">
-                        <div className="text-[8px] font-black uppercase tracking-[0.18em] text-white/40">
-                          Model
-                        </div>
-                        <div className="mt-1 text-base font-black text-[#4ADE80] md:text-lg">
-                          {formatPercent(prop.probability, 1)}
-                        </div>
-                      </div>
-                      <div className="text-right md:text-left">
-                        <div className="text-[8px] font-black uppercase tracking-[0.18em] text-white/40">
-                          Edge
-                        </div>
-                        <div className={`mt-1 text-base font-black md:text-lg ${
-                          read.edge >= 0 ? "text-[#4ADE80]" : "text-[#9CA3AF]"
-                        }`}>
-                          {liveOdds ? `${read.edge >= 0 ? "+" : ""}${formatPercent(read.edge, 1)}` : "—"}
+                        <div className="flex min-w-0 flex-wrap items-center gap-2">
+                          <div className="min-w-0 truncate text-sm font-black text-white md:text-base">
+                            {prop.player}
+                          </div>
+                          {read.labels.map((label) => (
+                            <span
+                              key={label}
+                              className={`inline-flex shrink-0 border px-1.5 py-0.5 text-[7px] font-black uppercase tracking-widest ${
+                                label === "Best Bet"
+                                  ? "border-[#4ADE80]/35 bg-[#4ADE80]/10 text-[#4ADE80]"
+                                  : "border-[#1E1E2E] bg-[#111116] text-[#9CA3AF]"
+                              }`}
+                            >
+                              {label}
+                            </span>
+                          ))}
                         </div>
                       </div>
-                      <div className="col-span-2 md:col-span-1">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="border border-[#1E1E2E] bg-[#111116] px-2.5 py-2">
+                          <div className="text-[7px] font-black uppercase tracking-[0.18em] text-white/40">
+                            Model
+                          </div>
+                          <div className={`mt-0.5 text-sm font-black md:text-base ${
+                            prop.probability > 38 ? "text-[#4ADE80]" : "text-[#9CA3AF]"
+                          }`}>
+                            {formatPercent(prop.probability, 1)}
+                          </div>
+                        </div>
+                        <div className="border border-[#1E1E2E] bg-[#111116] px-2.5 py-2">
+                          <div className="text-[7px] font-black uppercase tracking-[0.18em] text-white/40">
+                            Edge
+                          </div>
+                          <div className={`mt-0.5 text-sm font-black md:text-base ${
+                            read.edge > 0 ? "text-[#4ADE80]" : "text-[#9CA3AF]"
+                          }`}>
+                            {liveOdds ? `${read.edge >= 0 ? "+" : ""}${formatPercent(read.edge, 1)}` : "—"}
+                          </div>
+                        </div>
+                      </div>
+                      <div>
                         {liveOdds ? (
                           <AffiliateMarketButton
                             payload="rightedge_origin_try_scorer"
