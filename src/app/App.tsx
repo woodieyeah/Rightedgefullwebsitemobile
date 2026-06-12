@@ -2422,7 +2422,7 @@ function getUserEmail(): string | null {
 }
 
 function canViewOriginPage(): boolean {
-  return getUserEmail() === ORIGIN_PREVIEW_EMAIL;
+  return hasPaidAccess() || getUserEmail() === ORIGIN_PREVIEW_EMAIL;
 }
 
 function getPreviewBookmakerName(bookmaker?: string) {
