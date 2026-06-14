@@ -6,21 +6,24 @@ import Stripe from "npm:stripe";
 import { createClient } from "jsr:@supabase/supabase-js@2.49.8";
 import * as kv from "./kv_store.tsx";
 const app = new Hono().basePath('/make-server-3b84b96c');
-const MATCH_ODDS_CACHE_MS = 30 * 60 * 1000;
+const MATCH_ODDS_CACHE_MS = 12 * 60 * 60 * 1000;
+const NRL_EVENTS_CACHE_MS = 6 * 60 * 60 * 1000;
+const TRY_SCORER_ODDS_CACHE_MS = 24 * 60 * 60 * 1000;
 const PREMATCH_ODDS_LOCK_PREFIX = "prematch_odds_lock";
 const BLUEBET_API_BASE_URL = "https://affiliate-api.bluebet.com.au";
 const BLUEBET_AFFILIATE_USER_AGENT =
   Deno.env.get("BLUEBET_AFFILIATE_USER_AGENT") || "rightedge.com.au";
 const AUTH_SESSION_COOKIE = "rightedge_session";
 const AUTH_SESSION_MAX_AGE_SECONDS = 7_776_000;
-const DEFAULT_STRIPE_PREMIUM_PRICE_ID = "price_1TYHPcHbbDQt0kPBTrqSxMmK";
-const ROUND_RESULT_ADMIN_EMAILS = new Set([
-  "elliott@woodbry.com",
-  "ewoodbry@gmail.com",
-  "elliott@rightedge.com.au",
-]);
+const DEFAULT_STRIPE_PREMIUM_WEEKLY_PRICE_ID = "price_1TE76qHbbDQt0kPBF1BrLgdQ";
+const DEFAULT_STRIPE_PREMIUM_MONTHLY_PRICE_ID = "price_1TeeatHbbDQt0kPBBQ3xzV1d";
+const STRIPE_PREMIUM_EXPECTED_PRODUCT_ID = "prod_UCW96IffvVLL3c";
+const STRIPE_CHECKOUT_VERSION = "2026-06-05-current-premium-product";
+const STRIPE_RETENTION_COUPON_KV_KEY = "stripe_retention_coupon_id";
+const STRIPE_RETENTION_OFFER_INVOICES = 2;
 
 type AuthSessionTier = "free" | "premium";
+type PremiumCheckoutPlan = "weekly" | "monthly";
 type StoredAuthSession = {
   token: string;
   email: string;
@@ -47,34 +50,98 @@ function parseKvValue<T = any>(value: any): T | null {
   return value as T;
 }
 
-function normalizeRoundResultText(value: unknown) {
-  return String(value || "").trim();
-}
-
-function normalizeRoundResultMatchKey(value: unknown) {
-  return normalizeRoundResultText(value)
-    .toLowerCase()
-    .replace(/&/g, "and")
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "");
-}
-
-function normalizeRoundResultNumber(value: unknown) {
-  const numericValue = Number(value);
-  return Number.isFinite(numericValue) ? numericValue : undefined;
-}
-
 function getStripeClient() {
   const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
   if (!stripeKey) throw new Error("STRIPE_SECRET_KEY not configured");
   return new Stripe(stripeKey, { apiVersion: "2023-10-16" });
 }
 
-function getPremiumStripePriceId() {
+async function resolveRetentionCouponId(stripe: Stripe) {
+  const configuredCouponId = Deno.env.get("STRIPE_RETENTION_COUPON_ID")?.trim();
+  if (configuredCouponId) return configuredCouponId;
+
+  const storedCouponId = String((await kv.get(STRIPE_RETENTION_COUPON_KV_KEY)) || "").trim();
+  if (storedCouponId) {
+    try {
+      const coupon = await stripe.coupons.retrieve(storedCouponId);
+      if (!coupon.deleted && coupon.valid !== false) return storedCouponId;
+    } catch (err: any) {
+      console.warn("[Stripe] Stored retention coupon could not be retrieved:", err?.message || err);
+    }
+  }
+
+  const coupon = await stripe.coupons.create({
+    percent_off: 50,
+    duration: "forever",
+    name: "RightEdge 50% off",
+    metadata: {
+      rightedge_offer: "cancel_retention",
+      invoices_to_apply: String(STRIPE_RETENTION_OFFER_INVOICES),
+    },
+  });
+
+  await kv.set(STRIPE_RETENTION_COUPON_KV_KEY, coupon.id);
+  return coupon.id;
+}
+
+function normalizePremiumCheckoutPlan(plan: unknown): PremiumCheckoutPlan {
+  return String(plan || "").trim().toLowerCase() === "monthly" ? "monthly" : "weekly";
+}
+
+function getConfiguredPremiumStripePriceId(plan: PremiumCheckoutPlan = "weekly") {
+  if (plan === "monthly") {
+    return (
+      Deno.env.get("STRIPE_PREMIUM_MONTHLY_PRICE_ID")?.trim() ||
+      DEFAULT_STRIPE_PREMIUM_MONTHLY_PRICE_ID
+    );
+  }
+
   return (
-    Deno.env.get("STRIPE_PREMIUM_PRICE_ID")?.trim() ||
-    DEFAULT_STRIPE_PREMIUM_PRICE_ID
+    Deno.env.get("STRIPE_PREMIUM_WEEKLY_PRICE_ID")?.trim() ||
+    DEFAULT_STRIPE_PREMIUM_WEEKLY_PRICE_ID
   );
+}
+
+function getDefaultPremiumStripePriceId(plan: PremiumCheckoutPlan = "weekly") {
+  return plan === "monthly"
+    ? DEFAULT_STRIPE_PREMIUM_MONTHLY_PRICE_ID
+    : DEFAULT_STRIPE_PREMIUM_WEEKLY_PRICE_ID;
+}
+
+function getStripePriceProductId(price: any) {
+  const product = price?.product;
+  return typeof product === "string" ? product : product?.id || "";
+}
+
+async function resolvePremiumStripePriceId(stripe: Stripe, plan: PremiumCheckoutPlan = "weekly") {
+  const configuredPriceId = getConfiguredPremiumStripePriceId(plan);
+  const fallbackPriceId = getDefaultPremiumStripePriceId(plan);
+
+  try {
+    const configuredPrice = await stripe.prices.retrieve(configuredPriceId);
+    const configuredProductId = getStripePriceProductId(configuredPrice);
+
+    if (configuredPrice.active !== false && configuredProductId === STRIPE_PREMIUM_EXPECTED_PRODUCT_ID) {
+      return configuredPriceId;
+    }
+
+    console.warn(
+      `[Stripe] Ignoring configured ${plan} price ${configuredPriceId}; product=${configuredProductId || "unknown"} active=${configuredPrice.active}`
+    );
+  } catch (err: any) {
+    console.warn(`[Stripe] Could not validate configured ${plan} price ${configuredPriceId}:`, err?.message || err);
+  }
+
+  const fallbackPrice = await stripe.prices.retrieve(fallbackPriceId);
+  const fallbackProductId = getStripePriceProductId(fallbackPrice);
+
+  if (fallbackPrice.active === false || fallbackProductId !== STRIPE_PREMIUM_EXPECTED_PRODUCT_ID) {
+    throw new Error(
+      `Fallback ${plan} price ${fallbackPriceId} is not usable for expected product ${STRIPE_PREMIUM_EXPECTED_PRODUCT_ID}.`
+    );
+  }
+
+  return fallbackPriceId;
 }
 
 function normalizeStripeSubscriptionStatus(status: unknown) {
@@ -617,53 +684,362 @@ function rightEdgeEmailShell(preheader: string, label: string, innerHtml: string
 }
 
 function freeWelcomeHtml() {
-  return rightEdgeEmailShell(
-    "View this week's match simulations and score projections.",
-    "Free Access",
-    `
-        <div style="background:#111116;border:1px solid #1E1E2E;margin-top:24px;padding:28px 26px;">
-          <div style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:34px;line-height:1.05;color:#ffffff;font-weight:600;letter-spacing:-0.02em;text-transform:uppercase;">Welcome to RightEdge.</div>
-          <div style="margin-top:12px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:18px;line-height:1.4;color:#ffffff;font-weight:500;letter-spacing:-0.01em;">Your free round access is ready.</div>
-          <div style="margin-top:18px;max-width:560px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:16px;line-height:1.6;color:#9CA3AF;font-weight:400;">
-            Your account is set up and you now have full access to our standard match simulations and score projections.<br/><br/>
-            Since you went straight into the live dashboard when you signed up, you are already logged in on your current browser. If you ever close the tab, log out, or want to view the data on a different device, just use the button below to head back to the site.
-          </div>
-          ${emailCtaHtml("https://www.rightedge.com.au/#matches", "View Round Predictions &rarr;")}
-          <div style="margin-top:12px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:12px;line-height:1.6;color:#6B7280;font-weight:400;">
-            <em>Note: RightEdge is completely passwordless. If your browser session expires, simply type your email on the homepage to jump straight back into your dashboard instantly.</em>
-          </div>
-        </div>
+  return `
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html dir="ltr" lang="en">
+  <head>
+    <meta content="width=device-width" name="viewport" />
+    <meta content="text/html; charset=UTF-8" http-equiv="Content-Type" />
+    <meta name="x-apple-disable-message-reformatting" />
+    <meta content="IE=edge" http-equiv="X-UA-Compatible" />
+    <meta name="x-apple-disable-message-reformatting" />
+    <meta
+      content="telephone=no,address=no,email=no,date=no,url=no"
+      name="format-detection" />
+  </head>
+  <body style="background-color:#ffffff">
+    <!--$--><!--html--><!--head--><!--body-->
+    <table
+      border="0"
+      width="100%"
+      cellpadding="0"
+      cellspacing="0"
+      role="presentation"
+      align="center">
+      <tbody>
+        <tr>
+          <td style="background-color:#ffffff">
+            <table
+              align="left"
+              width="100%"
+              border="0"
+              cellpadding="0"
+              cellspacing="0"
+              role="presentation"
+              style="max-width:600px;align:left;width:100%;color:#000000;background-color:#ffffff;border-radius:0px;border-color:#000000">
+              <tbody>
+                <tr style="width:100%">
+                  <td
+                    style="padding-top:0px;padding-right:0px;padding-bottom:0px;padding-left:0px">
+                    <div
+                      style="margin:0;padding:0;display:none;overflow:hidden;line-height:1px;opacity:0;max-height:0;max-width:0">
+                      <p style="margin:0;padding:0">
+                        Your free RightEdge model access is ready.
+                      </p>
+                    </div>
+                    <table
+                      width="100%"
+                      border="0"
+                      cellpadding="0"
+                      cellspacing="0"
+                      role="presentation"
+                      style="margin-top:0;margin-right:0;margin-bottom:0;margin-left:0;padding-top:0;padding-right:0;padding-bottom:0;padding-left:0;background:#E7E7E4">
+                      <tbody>
+                        <tr style="margin:0;padding:0">
+                          <td
+                            align="center"
+                            data-id="__react-email-column"
+                            style="margin:0;padding:0">
+                            <table
+                              width="100%"
+                              border="0"
+                              cellpadding="0"
+                              cellspacing="0"
+                              role="presentation"
+                              style="margin-top:0;margin-right:0;margin-bottom:0;margin-left:0;padding-top:0;padding-right:0;padding-bottom:0;padding-left:0;max-width:640px;background:#E7E7E4;color:#0A0A0A">
+                              <tbody>
+                                <tr style="margin:0;padding:0">
+                                  <td
+                                    data-id="__react-email-column"
+                                    style="margin:0;padding:28px 24px 18px 24px;border-bottom:1px solid #C7C7C2">
+                                    <table
+                                      width="100%"
+                                      border="0"
+                                      cellpadding="0"
+                                      cellspacing="0"
+                                      role="presentation"
+                                      style="margin-top:0;margin-right:0;margin-bottom:0;margin-left:0;padding-top:0;padding-right:0;padding-bottom:0;padding-left:0">
+                                      <tbody>
+                                        <tr style="margin:0;padding:0">
+                                          <td
+                                            align="left"
+                                            data-id="__react-email-column"
+                                            style="margin:0;padding:0;font-size:20px;font-weight:900;letter-spacing:-0.04em">
+                                            <p style="margin:0;padding:0">
+                                              RightEdge
+                                            </p>
+                                          </td>
+                                          <td
+                                            align="right"
+                                            data-id="__react-email-column"
+                                            style="margin:0;padding:0;font-size:11px;color:#6A6A65;text-transform:uppercase;letter-spacing:0.14em;font-weight:900">
+                                            <p style="margin:0;padding:0">
+                                              Free Access
+                                            </p>
+                                          </td>
+                                        </tr>
+                                      </tbody>
+                                    </table>
+                                  </td>
+                                </tr>
+                                <tr style="margin:0;padding:0">
+                                  <td
+                                    data-id="__react-email-column"
+                                    style="margin:0;padding:34px 24px 20px 24px">
+                                    <div
+                                      style="margin:0;padding:30px 26px;background:#F1F1EF;border:1px solid #C7C7C2">
+                                      <div
+                                        style="margin:0;padding:0;font-size:11px;color:#6A6A65;text-transform:uppercase;letter-spacing:0.16em;font-weight:900;margin-bottom:18px">
+                                        <p style="margin:0;padding:0">
+                                          Account ready
+                                        </p>
+                                      </div>
+                                      <h1
+                                        style="margin:0;padding:0;color:#0A0A0A;font-size:46px;line-height:0.96;font-weight:900;letter-spacing:-0.055em;text-transform:uppercase">
+                                        Welcome to<br />RightEdge.
+                                      </h1>
+                                      <p
+                                        style="margin:22px 0 0 0;padding:0;color:#0A0A0A;font-size:18px;line-height:1.45;font-weight:800">
+                                        Your free round access is ready.
+                                      </p>
+                                      <p
+                                        style="margin:18px 0 0 0;padding:0;color:#6A6A65;font-size:16px;line-height:1.6">
+                                        You now have access to RightEdge’s
+                                        standard NRL match simulations,
+                                        projected scores and model win
+                                        probabilities.
+                                      </p>
+                                      <p
+                                        style="margin:14px 0 0 0;padding:0;color:#6A6A65;font-size:16px;line-height:1.6">
+                                        Since you went straight into the
+                                        dashboard when you signed up, you should
+                                        already be logged in on your current
+                                        browser. If you close the tab, log out,
+                                        or want to view the model on another
+                                        device, use the button below to get back
+                                        in.
+                                      </p>
+                                      <table
+                                        border="0"
+                                        cellpadding="0"
+                                        cellspacing="0"
+                                        role="presentation"
+                                        style="margin-top:26px;margin-right:0;margin-bottom:0;margin-left:0;padding-top:0;padding-right:0;padding-bottom:0;padding-left:0">
+                                        <tbody>
+                                          <tr style="margin:0;padding:0">
+                                            <td
+                                              data-id="__react-email-column"
+                                              style="margin:0;padding:0;background:#0A0A0A;border:1px solid #0A0A0A">
+                                              <p style="margin:0;padding:0">
+                                                <a
+                                                  href="https://www.rightedge.com.au/#matches"
+                                                  rel="noopener noreferrer nofollow"
+                                                  style="color:#ffffff;text-decoration-line:none;text-decoration:none;display:inline-block;padding:15px 22px;font-size:13px;font-weight:900;text-transform:uppercase;letter-spacing:0.08em"
+                                                  target="_blank"
+                                                  >View Round Predictions →</a
+                                                >
+                                              </p>
+                                            </td>
+                                          </tr>
+                                        </tbody>
+                                      </table>
+                                      <p
+                                        style="margin:18px 0 0 0;padding:0;color:#6A6A65;font-size:13px;line-height:1.6">
+                                        RightEdge is passwordless. If your
+                                        browser session expires, enter your
+                                        email on the homepage to jump straight
+                                        back into your dashboard.
+                                      </p>
+                                    </div>
+                                  </td>
+                                </tr>
+                                <tr style="margin:0;padding:0">
+                                  <td
+                                    data-id="__react-email-column"
+                                    style="margin:0;padding:10px 24px 0 24px">
+                                    <div
+                                      style="margin:0;padding:0;font-size:11px;color:#6A6A65;text-transform:uppercase;letter-spacing:0.16em;font-weight:900;margin-bottom:12px">
+                                      <p style="margin:0;padding:0">
+                                        How the model works
+                                      </p>
+                                    </div>
+                                    <div
+                                      style="margin:0;padding:22px 24px;background:#F6F6F3;border:1px solid #C7C7C2;margin-bottom:12px">
+                                      <div
+                                        style="margin:0;padding:0;font-size:12px;color:#0A0A0A;font-weight:900;letter-spacing:0.12em;text-transform:uppercase">
+                                        <p style="margin:0;padding:0">
+                                          01 / Data Simulation
+                                        </p>
+                                      </div>
+                                      <p
+                                        style="margin:10px 0 0 0;padding:0;color:#6A6A65;font-size:14px;line-height:1.7">
+                                        RightEdge simulates every NRL matchup
+                                        thousands of times, processing team
+                                        metrics and roster changes to map
+                                        projected scores and win probabilities.
+                                      </p>
+                                    </div>
+                                    <div
+                                      style="margin:0;padding:22px 24px;background:#F6F6F3;border:1px solid #C7C7C2;margin-bottom:12px">
+                                      <div
+                                        style="margin:0;padding:0;font-size:12px;color:#0A0A0A;font-weight:900;letter-spacing:0.12em;text-transform:uppercase">
+                                        <p style="margin:0;padding:0">
+                                          02 / True Price
+                                        </p>
+                                      </div>
+                                      <p
+                                        style="margin:10px 0 0 0;padding:0;color:#6A6A65;font-size:14px;line-height:1.7">
+                                        The model converts projected
+                                        probabilities into model odds, giving
+                                        you a cleaner baseline to compare
+                                        against the market.
+                                      </p>
+                                    </div>
+                                    <div
+                                      style="margin:0;padding:22px 24px;background:#F6F6F3;border:1px solid #C7C7C2">
+                                      <div
+                                        style="margin:0;padding:0;font-size:12px;color:#0A0A0A;font-weight:900;letter-spacing:0.12em;text-transform:uppercase">
+                                        <p style="margin:0;padding:0">
+                                          03 / Premium Plays
+                                        </p>
+                                      </div>
+                                      <p
+                                        style="margin:10px 0 0 0;padding:0;color:#6A6A65;font-size:14px;line-height:1.7">
+                                        Free users see projected scores and win
+                                        probabilities. Premium members get H2H,
+                                        line, total and try scorer plays before
+                                        kickoff.
+                                      </p>
+                                    </div>
+                                  </td>
+                                </tr>
+                                <tr style="margin:0;padding:0">
+                                  <td
+                                    data-id="__react-email-column"
+                                    style="margin:0;padding:24px 24px 0 24px">
+                                    <div
+                                      style="margin:0;padding:24px;background:#F1F1EF;border:1px solid #C7C7C2">
+                                      <h2
+                                        style="margin:0;padding:0;color:#0A0A0A;font-size:30px;line-height:1;font-weight:900;letter-spacing:-0.05em;text-transform:uppercase">
+                                        Free sees the projection.<br />Premium
+                                        sees the edge.
+                                      </h2>
+                                      <p
+                                        style="margin:16px 0 0 0;padding:0;color:#6A6A65;font-size:15px;line-height:1.6">
+                                        The matches dashboard is free to use.
+                                        Premium is for users who want the
+                                        model’s strongest plays and try scorer
+                                        signals before kickoff.
+                                      </p>
+                                      <table
+                                        border="0"
+                                        cellpadding="0"
+                                        cellspacing="0"
+                                        role="presentation"
+                                        style="margin-top:22px;margin-right:0;margin-bottom:0;margin-left:0;padding-top:0;padding-right:0;padding-bottom:0;padding-left:0">
+                                        <tbody>
+                                          <tr style="margin:0;padding:0">
+                                            <td
+                                              data-id="__react-email-column"
+                                              style="margin:0;padding:0;background:#093AD3;border:1px solid #093AD3">
+                                              <p style="margin:0;padding:0">
+                                                <a
+                                                  href="https://www.rightedge.com.au/#best-bets"
+                                                  rel="noopener noreferrer nofollow"
+                                                  style="color:#ffffff;text-decoration-line:none;text-decoration:none;display:inline-block;padding:15px 22px;font-size:13px;font-weight:900;text-transform:uppercase;letter-spacing:0.08em"
+                                                  target="_blank"
+                                                  >See Premium →</a
+                                                >
+                                              </p>
+                                            </td>
+                                          </tr>
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  </td>
+                                </tr>
+                                <tr style="margin:0;padding:0">
+                                  <td
+                                    data-id="__react-email-column"
+                                    style="margin:0;padding:26px 24px 32px 24px">
+                                    <p
+                                      style="margin:0 0 10px 0;padding:0;color:#6A6A65;font-size:12px;line-height:1.6">
+                                      RightEdge Analytics. Backed by data, not
+                                      guesswork.
+                                    </p>
+                                    <p
+                                      style="margin:0 0 10px 0;padding:0;color:#6A6A65;font-size:12px;line-height:1.6">
+                                      You are receiving this email because you
+                                      created a free account at
+                                      rightedge.com.au.
+                                    </p>
+                                    <div
+                                      style="margin:0;padding:16px 18px;margin-top:22px;background:#ffffff;border:1px solid #0A0A0A">
+                                      <div
+                                        style="margin:0;padding:0;font-size:14px;line-height:1.3;color:#0A0A0A;font-weight:900;text-transform:uppercase">
+                                        <p style="margin:0;padding:0">
+                                          Imagine what you could be buying
+                                          instead.
+                                        </p>
+                                      </div>
+                                      <div
+                                        style="margin:0;padding:0;margin-top:8px;font-size:13px;line-height:1.6;color:#0A0A0A;font-weight:700">
+                                        <p style="margin:0;padding:0">
+                                          For free and confidential support call
+                                          <a
+                                            href="tel:1800858858"
+                                            rel="noopener noreferrer nofollow"
+                                            style="color:#0A0A0A;text-decoration-line:none;text-decoration:underline;font-weight:900"
+                                            target="_blank"
+                                            ><u>1800 858 858</u></a
+                                          >
+                                          or visit
+                                          <a
+                                            href="https://www.gamblinghelponline.org.au/"
+                                            rel="noopener noreferrer"
+                                            style="color:#0A0A0A;text-decoration-line:none;text-decoration:underline;font-weight:900"
+                                            target="_blank"
+                                            ><u>gamblinghelponline.org.au</u></a
+                                          >.
+                                        </p>
+                                      </div>
+                                      <div
+                                        style="margin:0;padding:0;margin-top:10px;font-size:11px;line-height:1.2;color:#0A0A0A;font-weight:900;letter-spacing:1.5px;text-transform:uppercase">
+                                        <p style="margin:0;padding:0">
+                                          18+ only
+                                        </p>
+                                      </div>
+                                    </div>
+                                    <p
+                                      style="margin:18px 0 0 0;padding:0;color:#6A6A65;font-size:12px;line-height:1.6">
+                                      RightEdge provides model-based information
+                                      and does not guarantee outcomes. RightEdge
+                                      is independent and is not affiliated with,
+                                      endorsed by, or licensed by the National
+                                      Rugby League or its clubs
+                                    </p>
+                                  </td>
+                                </tr>
+                              </tbody>
+                            </table>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                    <p style="margin:0;padding:0"><br /></p>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <!--/$-->
+  </body>
+</html>
 
-        <div style="margin-top:28px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:14px;line-height:1.2;color:#ffffff;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;">How the model works</div>
-
-        <div style="background:#111116;border:1px solid #1E1E2E;margin-top:14px;padding:22px 24px;">
-          <div style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:12px;line-height:1.2;color:#ffffff;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;">01 / Data Simulation</div>
-          <div style="margin-top:10px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:14px;line-height:1.7;color:#9CA3AF;font-weight:400;">We run 10,000 algorithmic simulations for every NRL match&mdash;processing team metrics and roster changes to map out clean NRL predictions, picks and plays.</div>
-        </div>
-
-        <div style="background:#111116;border:1px solid #1E1E2E;margin-top:12px;padding:22px 24px;">
-          <div style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:12px;line-height:1.2;color:#ffffff;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;">02 / Value Detection</div>
-          <div style="margin-top:10px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:14px;line-height:1.7;color:#9CA3AF;font-weight:400;">The model automatically converts those probabilities into mathematical "true odds," giving you a clear baseline to compare against bookmaker prices.</div>
-        </div>
-
-        <div style="background:#111116;border:1px solid #1E1E2E;margin-top:12px;padding:22px 24px;">
-          <div style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:12px;line-height:1.2;color:#ffffff;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;">03 / Premium Plays</div>
-          <div style="margin-top:10px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:14px;line-height:1.7;color:#9CA3AF;font-weight:400;">Standard access gives you score projections for every match of each round. When the gap between the bookmaker price and the model's odds creates a heavy mathematical edge, the system flags it as a Premium Play. Premium Plays include H2H, Line, Total and Try Scorers.</div>
-        </div>
-
-        <div style="background:#111116;border:1px solid #1E1E2E;margin-top:16px;padding:22px 24px;">
-          <div style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:13px;line-height:1.7;color:#9CA3AF;">
-            The RightEdge matches dashboard is, and always will be, 100% free to use.<br/><br/>
-            Our Premium tier functions as an automated upgrade for users who don't want to track data shifts manually&mdash;unlocking our highest-conviction model plays, precise staking metrics, and live Try Scorer value signals the exact second a market price moves.
-          </div>
-          ${emailCtaHtml("https://www.rightedge.com.au/#best-bets", "See How Premium Works &rarr;", "secondary")}
-        </div>
-
-        <div style="margin-top:20px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:12px;line-height:1.7;color:#6B7280;font-weight:400;">
-          RightEdge Analytics. Data-driven probabilities with zero media bias.<br/>
-          You are receiving this email because you created a free account at rightedge.com.au.
-        </div>`
-  );
+  `;
 }
 
 
@@ -747,7 +1123,7 @@ async function sendWelcomeEmail(type: "free" | "premium", email: string) {
 
   const subject =
     type === "free"
-      ? "Welcome to RightEdge | Your NRL Predictions Link"
+      ? "Your free RightEdge model access is ready"
       : "You’re in — RightEdge Premium is live";
 
   const html =
@@ -1571,90 +1947,6 @@ app.get("/analytics-debug", async (c) => {
   }
 });
 
-app.get("/round-results", async (c) => {
-  try {
-    const entries = (await kv.getByPrefix("round_result:")) || [];
-    const results = entries
-      .map((entry) => parseKvValue<any>(entry))
-      .filter((entry) => entry?.round && entry?.match)
-      .sort((a, b) => {
-        const roundDelta = Number(a.round || 0) - Number(b.round || 0);
-        if (roundDelta !== 0) return roundDelta;
-        return String(a.match || "").localeCompare(String(b.match || ""));
-      });
-
-    return c.json({ results });
-  } catch (error) {
-    console.error("[round-results] Failed:", error);
-    return c.json({ results: [] });
-  }
-});
-
-app.post("/admin/round-results", async (c) => {
-  try {
-    const body = await c.req.json();
-    const adminEmail = normalizeRoundResultText(
-      c.req.header("x-admin-email") || body.updatedBy || body.adminEmail,
-    ).toLowerCase();
-
-    if (!ROUND_RESULT_ADMIN_EMAILS.has(adminEmail)) {
-      return c.json({ error: "Admin access required" }, 403);
-    }
-
-    const round = Number(body.round);
-    const match = normalizeRoundResultText(body.match);
-    const finalScore = normalizeRoundResultText(body.finalScore);
-
-    if (!Number.isFinite(round) || round <= 0 || !match || !finalScore) {
-      return c.json({ error: "Round, match and final score are required" }, 400);
-    }
-
-    const matchPlay = body.matchPlay?.selection
-      ? {
-          market: normalizeRoundResultText(body.matchPlay.market || "Play"),
-          selection: normalizeRoundResultText(body.matchPlay.selection),
-          result: normalizeRoundResultText(body.matchPlay.result || "Hit"),
-          odds: normalizeRoundResultNumber(body.matchPlay.odds),
-          bookmaker: normalizeRoundResultText(body.matchPlay.bookmaker) || undefined,
-          modelScore: normalizeRoundResultText(body.matchPlay.modelScore) || undefined,
-        }
-      : null;
-
-    const tryScorers = Array.isArray(body.tryScorers)
-      ? body.tryScorers
-          .map((scorer: any) => ({
-            player: normalizeRoundResultText(scorer?.player),
-            team: normalizeRoundResultText(scorer?.team) || undefined,
-            odds: normalizeRoundResultNumber(scorer?.odds),
-            bookmaker: normalizeRoundResultText(scorer?.bookmaker) || undefined,
-          }))
-          .filter((scorer) => scorer.player)
-      : [];
-
-    const result = {
-      round,
-      match,
-      finalScore,
-      homeScore: normalizeRoundResultNumber(body.homeScore),
-      awayScore: normalizeRoundResultNumber(body.awayScore),
-      matchPlay,
-      tryScorers,
-      updatedAt: new Date().toISOString(),
-      updatedBy: adminEmail,
-    };
-
-    await kv.set(
-      `round_result:${round}:${normalizeRoundResultMatchKey(match)}`,
-      JSON.stringify(result),
-    );
-
-    return c.json({ success: true, result });
-  } catch (error) {
-    console.error("[admin/round-results] Failed:", error);
-    return c.json({ error: "Failed to save match result" }, 500);
-  }
-});
-
 // ── Full KV namespace scan ─────────────────────────────────────────────────
 // Reads ALL keys in the table (no prefix filter) and groups them by their
 // leading namespace (everything before the first colon).
@@ -1722,6 +2014,8 @@ app.get("/kv-namespace-scan", async (c) => {
 
 function normalizeNrlTeamName(team: string) {
   const t = String(team || "").toLowerCase();
+  if (t.includes("new south wales") || /\bnsw\b/.test(t) || t.includes("blues")) return "New South Wales Blues";
+  if (t.includes("queensland maroons") || /\bqld\b/.test(t) || t.includes("maroons")) return "Queensland Maroons";
   if (t.includes("bronco") || t.includes("brisbane")) return "Brisbane Broncos";
   if (t.includes("rabbitoh") || t.includes("south")) return "South Sydney Rabbitohs";
   if (t.includes("rooster") || t.includes("sydney")) return "Sydney Roosters";
@@ -2000,6 +2294,18 @@ function selectBlueBetPrimaryTotalOutcomes(outcomes: any[]) {
   return primary ? [primary.pair.over, primary.pair.under] : [];
 }
 
+function normalizeBlueBetTryScorerPlayerName(outcomeName: string) {
+  return String(outcomeName || "")
+    .replace(/\b(anytime|any time)\s+try\s*scorer\b/gi, "")
+    .replace(/\btry\s*scorer\b/gi, "")
+    .replace(/\bto\s+score\s+a\s+try\b/gi, "")
+    .replace(/\bscore\s+a\s+try\b/gi, "")
+    .replace(/\b(yes|no)\b/gi, "")
+    .replace(/\s*[-–:]\s*/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function buildBlueBetEventOdds(payload: any) {
   const masterEvent = payload?.MasterEvent || {};
   const masterEventName = masterEvent.MasterEventName || "";
@@ -2009,12 +2315,20 @@ function buildBlueBetEventOdds(payload: any) {
   const h2hOutcomes: any[] = [];
   const spreadOutcomes: any[] = [];
   const totalOutcomes: any[] = [];
+  const tryScorerOutcomes: any[] = [];
   const seen = new Set<string>();
 
   for (const event of asBlueBetArray(payload?.Events)) {
     const eventName = String(event?.EventName || "");
     const eventClass = String(event?.EventClass || "");
-    const isTotalsEvent = `${eventName} ${eventClass}`.toLowerCase().includes("total points over/under");
+    const eventText = `${eventName} ${eventClass}`.toLowerCase();
+    const isTotalsEvent = eventText.includes("total points over/under");
+    const isTryScorerEvent =
+      eventText.includes("try scorer") ||
+      eventText.includes("tryscorer") ||
+      eventText.includes("anytime try") ||
+      eventText.includes("any time try") ||
+      eventText.includes("score a try");
 
     for (const outcome of asBlueBetArray(event?.Outcomes)) {
       const price = Number(outcome?.Price);
@@ -2035,6 +2349,31 @@ function buildBlueBetEventOdds(payload: any) {
           name: total.side,
           price,
           point: total.point,
+        });
+        continue;
+      }
+
+      if (isTryScorerEvent) {
+        const player =
+          normalizeBlueBetTryScorerPlayerName(
+            String(
+              outcome?.PlayerName ||
+              outcome?.ParticipantName ||
+              outcome?.RunnerName ||
+              outcomeName ||
+              "",
+            ),
+          );
+        const playerKey = normalizeOddsPlayerName(player);
+        if (!player || !playerKey || ["over", "under"].includes(playerKey)) continue;
+
+        const key = `try-scorer:${playerKey}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        tryScorerOutcomes.push({
+          name: "Yes",
+          description: player,
+          price,
         });
         continue;
       }
@@ -2073,6 +2412,7 @@ function buildBlueBetEventOdds(payload: any) {
     h2hOutcomes.length ? { key: "h2h", outcomes: h2hOutcomes } : null,
     spreadOutcomes.length ? { key: "spreads", outcomes: spreadOutcomes } : null,
     totalOutcomes.length ? { key: "totals", outcomes: selectBlueBetPrimaryTotalOutcomes(totalOutcomes) } : null,
+    tryScorerOutcomes.length ? { key: "player_try_scorer_anytime", outcomes: tryScorerOutcomes } : null,
   ].filter(Boolean);
 
   return {
@@ -2286,7 +2626,7 @@ async function fetchNrlEventsRaw(force = false) {
 
   // Events do not count against The Odds API quota, but this keeps the edge
   // function fast and avoids needless network calls.
-  if (!force && cachedEvents && cacheTime && (now - Number(cacheTime)) < 600000) {
+  if (!force && cachedEvents && cacheTime && (now - Number(cacheTime)) < NRL_EVENTS_CACHE_MS) {
     return typeof cachedEvents === "string" ? JSON.parse(cachedEvents) : cachedEvents;
   }
 
@@ -2346,7 +2686,7 @@ async function fetchTryScorerEventOdds(event: any, force = false) {
 
   // Player props are fetched event-by-event and are expensive on the free plan.
   // Keep them aligned with the main odds cache unless explicitly refreshed.
-  if (!force && parsedCachedOdds && cacheTime && (now - Number(cacheTime)) < MATCH_ODDS_CACHE_MS) {
+  if (!force && parsedCachedOdds && cacheTime && (now - Number(cacheTime)) < TRY_SCORER_ODDS_CACHE_MS) {
     return parsedCachedOdds;
   }
 
@@ -2540,7 +2880,23 @@ app.get("/best-try-scorer-odds", async (c) => {
   try {
     const force = allowOddsForceRefresh(c);
     const format = c.req.query("format") || "json";
-    const payload = await refreshBestTryScorerOdds(force);
+    const bookmaker = c.req.query("bookmaker") || "";
+    const normalizedBookmaker = normalizeBookmakerFilter(bookmaker);
+    const payload =
+      normalizedBookmaker === "betr"
+        ? {
+            updatedAt: new Date().toISOString(),
+            sport: "rugbyleague_nrl",
+            market: "player_try_scorer_anytime",
+            eventCount: 0,
+            odds: buildBestTryScorerOdds(await fetchBlueBetNrlOddsRaw()),
+          }
+        : await refreshBestTryScorerOdds(force);
+
+    if (normalizedBookmaker === "betr") {
+      c.header("Cache-Control", "no-store, no-cache, max-age=0, must-revalidate");
+      payload.eventCount = new Set(payload.odds.map((row: any) => row.matchKey)).size;
+    }
 
     if (format === "sheets") {
       return c.json({
@@ -2618,7 +2974,7 @@ app.post("/verify-email", async (c) => {
 });
 
 async function findActiveStripeSubscription(stripe: Stripe, email: string) {
-  const customers = await findStripeCustomersByEmail(stripe, email);
+  const customers = await stripe.customers.list({ email, limit: 10 });
   let activeSubscription: any = null;
   let customerId = "";
 
@@ -2640,25 +2996,6 @@ async function findActiveStripeSubscription(stripe: Stripe, email: string) {
   }
 
   return { activeSubscription, customerId };
-}
-
-async function findStripeCustomersByEmail(stripe: Stripe, email: string) {
-  const normalizedEmail = String(email || "").trim().toLowerCase();
-  if (!normalizedEmail.includes("@")) return [];
-
-  const exactMatches = await stripe.customers.list({ email, limit: 10 });
-  const normalizedExactMatches = exactMatches.data.filter((customer: any) =>
-    String(customer?.email || "").trim().toLowerCase() === normalizedEmail
-  );
-
-  if (normalizedExactMatches.length > 0) {
-    return normalizedExactMatches;
-  }
-
-  const fallbackCustomers = await stripe.customers.list({ limit: 100 });
-  return fallbackCustomers.data.filter((customer: any) =>
-    String(customer?.email || "").trim().toLowerCase() === normalizedEmail
-  );
 }
 
 async function createInstantAccessUrl(email: string, returnUrl: string, returnHash: string, customerId: string, subscription: any) {
@@ -2709,14 +3046,14 @@ app.post("/create-customer-portal", async (c) => {
     if (!stripeKey) return c.json({ error: "Stripe not configured" }, 500);
     
     const stripe = new Stripe(stripeKey, { apiVersion: "2023-10-16" });
-    const customers = await findStripeCustomersByEmail(stripe, email);
+    const customers = await stripe.customers.list({ email, limit: 1 });
     
-    if (customers.length === 0) {
+    if (customers.data.length === 0) {
       return c.json({ error: "No active subscription found for this email." }, 404);
     }
     
     const session = await stripe.billingPortal.sessions.create({
-      customer: customers[0].id,
+      customer: customers.data[0].id,
       return_url: returnUrl,
     });
     
@@ -2724,6 +3061,51 @@ app.post("/create-customer-portal", async (c) => {
   } catch (err: any) {
     console.error("[Stripe] Error creating portal session:", err);
     return c.json({ error: "Failed to create portal session" }, 500);
+  }
+});
+
+app.post("/apply-retention-offer", async (c) => {
+  try {
+    const body = await c.req.json();
+    const email = body?.email?.trim()?.toLowerCase();
+
+    if (!email) return c.json({ error: "Email required" }, 400);
+
+    const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
+    if (!stripeKey) return c.json({ error: "Stripe not configured" }, 500);
+
+    const stripe = new Stripe(stripeKey, { apiVersion: "2023-10-16" });
+    const { activeSubscription } = await findActiveStripeSubscription(stripe, email);
+
+    if (!activeSubscription) {
+      return c.json({ error: "No active subscription found for this email." }, 404);
+    }
+
+    const couponId = await resolveRetentionCouponId(stripe);
+    const updatedSubscription = await stripe.subscriptions.update(activeSubscription.id, {
+      coupon: couponId,
+      cancel_at_period_end: false,
+      metadata: {
+        ...(activeSubscription.metadata || {}),
+        rightedgeRetentionOfferActive: "true",
+        rightedgeRetentionOfferCouponId: couponId,
+        rightedgeRetentionOfferInvoicesRemaining: String(STRIPE_RETENTION_OFFER_INVOICES),
+        rightedgeRetentionOfferAppliedAt: new Date().toISOString(),
+      },
+    } as any);
+
+    await syncStripeSubscriptionStatus(stripe, updatedSubscription, "retention_offer_applied");
+
+    return c.json({
+      success: true,
+      subscriptionId: updatedSubscription.id,
+      invoicesRemaining: STRIPE_RETENTION_OFFER_INVOICES,
+      message: "50% off has been applied for your next 2 rounds.",
+    });
+  } catch (err: any) {
+    const message = err?.message || "Failed to apply retention offer";
+    console.error("[Stripe] Error applying retention offer:", message, err);
+    return c.json({ error: message }, 500);
   }
 });
 
@@ -2792,6 +3174,7 @@ app.post("/create-checkout-session", async (c) => {
       ? body.returnHash
       : "best-bets";
     const cancelUrl = body?.cancelUrl || `${returnUrl}#${returnHash}`;
+    const plan = normalizePremiumCheckoutPlan(body?.plan || body?.billingPlan || body?.interval);
 
     if (!email || !email.includes('@') || !email.includes('.')) {
       return c.json({ error: "Please enter a valid email address." }, 400);
@@ -2805,7 +3188,7 @@ app.post("/create-checkout-session", async (c) => {
 
     const stripe = new Stripe(stripeKey, { apiVersion: "2023-10-16" });
     const { activeSubscription, customerId } = await findActiveStripeSubscription(stripe, email);
-    const premiumPriceId = getPremiumStripePriceId();
+    const premiumPriceId = await resolvePremiumStripePriceId(stripe, plan);
 
     if (activeSubscription) {
       const url = await createInstantAccessUrl(email, returnUrl, returnHash, customerId, activeSubscription);
@@ -2820,6 +3203,7 @@ app.post("/create-checkout-session", async (c) => {
     await kv.set(`checkout_lead:${email}`, JSON.stringify({
       email,
       returnHash,
+      plan,
       source: body?.source || `premium_${returnHash}`,
       created_at: new Date().toISOString(),
       last_seen_at: new Date().toISOString(),
@@ -2834,12 +3218,20 @@ app.post("/create-checkout-session", async (c) => {
       metadata: {
         email,
         returnHash,
+        plan,
+        priceId: premiumPriceId,
+        checkoutVersion: STRIPE_CHECKOUT_VERSION,
+        expectedProductId: STRIPE_PREMIUM_EXPECTED_PRODUCT_ID,
         source: body?.source || `premium_${returnHash}`,
       },
       subscription_data: {
         metadata: {
           email,
           returnHash,
+          plan,
+          priceId: premiumPriceId,
+          checkoutVersion: STRIPE_CHECKOUT_VERSION,
+          expectedProductId: STRIPE_PREMIUM_EXPECTED_PRODUCT_ID,
           source: body?.source || `premium_${returnHash}`,
         },
       },
@@ -2852,8 +3244,14 @@ app.post("/create-checkout-session", async (c) => {
       cancel_url: `${returnUrl}?canceled=true&return_hash=${encodeURIComponent(returnHash)}#${returnHash}`,
     });
 
-    console.log(`[Stripe] Created checkout session for ${email} returning to #${returnHash}`);
-    return c.json({ url: session.url, sessionId: session.id });
+    console.log(`[Stripe] Created ${plan} checkout session ${session.id} using ${premiumPriceId} for ${email} returning to #${returnHash}`);
+    return c.json({
+      url: session.url,
+      sessionId: session.id,
+      plan,
+      priceId: premiumPriceId,
+      checkoutVersion: STRIPE_CHECKOUT_VERSION,
+    });
   } catch (err: any) {
     console.error("[Stripe] Error creating checkout session:", err);
     return c.json({ error: "Failed to create checkout session." }, 500);
@@ -3028,7 +3426,54 @@ async function syncStripeInvoiceSubscription(stripe: Stripe, invoice: any, sourc
   }
 
   const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+  await updateRetentionOfferUsage(stripe, subscription, invoice, source);
   return syncStripeSubscriptionStatus(stripe, subscription, source);
+}
+
+async function updateRetentionOfferUsage(stripe: Stripe, subscription: any, invoice: any, source: string) {
+  if (source !== "invoice.payment_succeeded") return;
+
+  const metadata = subscription?.metadata || {};
+  if (metadata.rightedgeRetentionOfferActive !== "true") return;
+
+  const invoiceId = String(invoice?.id || "");
+  if (invoiceId && metadata.rightedgeRetentionOfferLastInvoiceId === invoiceId) return;
+
+  const remaining = Math.max(
+    0,
+    Number.parseInt(String(metadata.rightedgeRetentionOfferInvoicesRemaining || "0"), 10) || 0,
+  );
+
+  if (remaining <= 0) return;
+
+  const nextRemaining = remaining - 1;
+  const nextMetadata = {
+    ...metadata,
+    rightedgeRetentionOfferInvoicesRemaining: String(nextRemaining),
+    rightedgeRetentionOfferLastInvoiceId: invoiceId,
+    rightedgeRetentionOfferLastInvoiceAt: new Date().toISOString(),
+  };
+
+  if (nextRemaining <= 0) {
+    try {
+      await (stripe.subscriptions as any).deleteDiscount(subscription.id);
+    } catch (err: any) {
+      console.warn("[Stripe] Could not remove retention discount:", err?.message || err);
+    }
+
+    await stripe.subscriptions.update(subscription.id, {
+      metadata: {
+        ...nextMetadata,
+        rightedgeRetentionOfferActive: "false",
+        rightedgeRetentionOfferCompletedAt: new Date().toISOString(),
+      },
+    });
+    return;
+  }
+
+  await stripe.subscriptions.update(subscription.id, {
+    metadata: nextMetadata,
+  });
 }
 
 async function syncStripeCheckoutSession(stripe: Stripe, session: any) {
@@ -3227,6 +3672,322 @@ async function resolveGuardedBroadcastRecipients(body: any) {
   };
 }
 
+type PremiumBestBetAlertPlay = {
+  round: number;
+  match: string;
+  homeTeam: string;
+  awayTeam: string;
+  selection: string;
+  side: "Home" | "Away" | "";
+  stake: number;
+  modelPct: number;
+  edgePct: number;
+  marketOdds: number;
+  projectedScore: string;
+};
+
+type PremiumBestBetAlertContext = {
+  round: number;
+  plays: PremiumBestBetAlertPlay[];
+};
+
+const PREMIUM_BEST_BET_ALERT_LOCK_KEY = "premium_best_bets_alert:last";
+
+function cleanBestBetSelection(value: string) {
+  return normalizeNrlTeamName(
+    String(value || "")
+      .replace(/\s+\(Home\)/i, "")
+      .replace(/\s+\(Away\)/i, "")
+      .trim(),
+  );
+}
+
+function getPredictionSide(bestBetCell: string, selection: string, homeTeam: string, awayTeam: string): "Home" | "Away" | "" {
+  if (/\(Home\)/i.test(bestBetCell)) return "Home";
+  if (/\(Away\)/i.test(bestBetCell)) return "Away";
+  if (selection === normalizeNrlTeamName(homeTeam)) return "Home";
+  if (selection === normalizeNrlTeamName(awayTeam)) return "Away";
+  return "";
+}
+
+function isValidBestBetSelection(selection: string) {
+  const cleaned = String(selection || "").trim();
+  return Boolean(cleaned && cleaned !== "-" && cleaned !== "—");
+}
+
+async function loadPremiumBestBetAlertContext(): Promise<PremiumBestBetAlertContext> {
+  const [predictionRows, fixtureRows] = await Promise.all([
+    fetchPublishedSheetRows(SHEET_GIDS.matchPredictions),
+    fetchPublishedSheetRows(SHEET_GIDS.fixtures2026),
+  ]);
+
+  const fixtures = fixtureRows
+    .map((row) => {
+      const round = toSheetRound(getSheetValue(row, ["Round Number", "RoundNumber", "Round"]));
+      const kickoffMs = parseAestKickoffMs(
+        getSheetValue(row, ["Date ISO", "DateISO"]),
+        getSheetValue(row, ["AEST", "AEDT", "Time", "Kickoff"]),
+        getSheetValue(row, ["TZ", "Timezone", "Time Zone"]) || "AEST",
+      );
+      return { round, kickoffMs };
+    })
+    .filter((fixture) => fixture.round)
+    .sort((a, b) => a.kickoffMs - b.kickoffMs);
+
+  const now = Date.now();
+  const upcomingRound = fixtures.find((fixture) => fixture.kickoffMs >= now)?.round;
+
+  const parsedPredictions = predictionRows
+    .map((row) => {
+      const homeTeam = shortNrlTeamName(getSheetValue(row, ["Home Team", "Home"]));
+      const awayTeam = shortNrlTeamName(getSheetValue(row, ["Away Team", "Away"]));
+      const round = toSheetRound(getSheetValue(row, ["Round", "Round Number", "RoundNumber", "NRL Round"]));
+      const predictedHomeScore = toSheetNumber(getSheetValue(row, ["Predicted Home Score", "Home Score", "Projected Home Score"]));
+      const predictedAwayScore = toSheetNumber(getSheetValue(row, ["Predicted Away Score", "Away Score", "Projected Away Score"]));
+      const bestBetCell = getSheetValue(row, ["Best Value Bet", "Best Bet", "BestValueBet"]);
+      const selection = cleanBestBetSelection(bestBetCell);
+      const side = getPredictionSide(bestBetCell, selection, homeTeam, awayTeam);
+      const modelHomeOdds = toSheetNumber(getSheetValue(row, ["Home Implied Odds", "Home Model Odds", "Model Home Odds"]));
+      const modelAwayOdds = toSheetNumber(getSheetValue(row, ["Away Implied Odds", "Away Model Odds", "Model Away Odds"]));
+      const marketHomeOdds = toSheetNumber(getSheetValue(row, ["Best Home Odds", "Tab Home Odds", "Actual Home Odds (Market)", "Home Market Odds"]));
+      const marketAwayOdds = toSheetNumber(getSheetValue(row, ["Best Away Odds", "Tab Away Odds", "Actual Away Odds (Market)", "Away Market Odds"]));
+      const homeOverlay = toSheetPercent(getSheetValue(row, ["Home Overlay %", "Home Overlay"]));
+      const awayOverlay = toSheetPercent(getSheetValue(row, ["Away Overlay %", "Away Overlay"]));
+      const stake = toSheetNumber(getSheetValue(row, ["Stake"]));
+      const modelOdds = side === "Home" ? modelHomeOdds : side === "Away" ? modelAwayOdds : 0;
+
+      return {
+        round,
+        match: homeTeam && awayTeam ? `${homeTeam} v ${awayTeam}` : "",
+        homeTeam,
+        awayTeam,
+        selection,
+        side,
+        stake,
+        modelPct: modelOdds > 1 ? (1 / modelOdds) * 100 : 0,
+        edgePct: side === "Home" ? homeOverlay : side === "Away" ? awayOverlay : 0,
+        marketOdds: side === "Home" ? marketHomeOdds : side === "Away" ? marketAwayOdds : 0,
+        projectedScore: predictedHomeScore || predictedAwayScore
+          ? `${Math.round(predictedHomeScore)}-${Math.round(predictedAwayScore)}`
+          : "",
+      };
+    })
+    .filter((row) => row.match && isValidBestBetSelection(row.selection) && row.stake > 0);
+
+  const latestPredictionRound = Math.max(0, ...parsedPredictions.map((row) => row.round || 0));
+  const targetRound = upcomingRound || latestPredictionRound;
+  const roundPlays = targetRound
+    ? parsedPredictions.filter((row) => row.round === targetRound)
+    : parsedPredictions;
+  const plays = (roundPlays.length ? roundPlays : parsedPredictions)
+    .sort((a, b) =>
+      (b.stake - a.stake) ||
+      (b.edgePct - a.edgePct) ||
+      (b.modelPct - a.modelPct)
+    );
+
+  return {
+    round: targetRound || latestPredictionRound || 0,
+    plays,
+  };
+}
+
+function buildPremiumBestBetAlertFingerprint(ctx: PremiumBestBetAlertContext) {
+  return [
+    `round:${ctx.round}`,
+    ...ctx.plays.map((play) => [
+      play.match,
+      play.selection,
+      play.side,
+      play.stake,
+      play.marketOdds.toFixed(3),
+      play.modelPct.toFixed(3),
+      play.edgePct.toFixed(3),
+    ].join("|")),
+  ].join("::");
+}
+
+function formatAlertPercent(value: number, decimals = 1) {
+  return Number.isFinite(value) ? `${value.toFixed(decimals)}%` : "—";
+}
+
+function formatAlertOdds(value: number) {
+  return value > 1 ? `$${value.toFixed(2)}` : "Live price";
+}
+
+function buildPremiumBestBetAlertHtml(ctx: PremiumBestBetAlertContext) {
+  const playCards = ctx.plays.map((play) => `
+        <div style="background:#16161D;border:1px solid #1E1E2E;margin-top:12px;padding:18px 18px;">
+          <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+            <tr>
+              <td style="vertical-align:top;padding-right:14px;">
+                <div style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:10px;line-height:1.2;color:#9CA3AF;font-weight:500;letter-spacing:0.12em;text-transform:uppercase;">${escapeHtml(play.match)}</div>
+                <div style="margin-top:8px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:20px;line-height:1.18;color:#ffffff;font-weight:600;letter-spacing:-0.02em;">${escapeHtml(publicNrlTeamName(play.selection))}</div>
+                <div style="margin-top:8px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:13px;line-height:1.6;color:#9CA3AF;">Projected score ${escapeHtml(play.projectedScore || "TBC")} · stake ${play.stake.toFixed(1)}u</div>
+              </td>
+              <td style="vertical-align:top;text-align:right;width:150px;">
+                <div style="display:inline-block;background:#111116;border:1px solid #1E1E2E;padding:10px 12px;text-align:left;">
+                  <div style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:9px;line-height:1;color:#9CA3AF;font-weight:500;letter-spacing:0.12em;text-transform:uppercase;">Model</div>
+                  <div style="margin-top:6px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:18px;line-height:1;color:#4ADE80;font-weight:600;">${formatAlertPercent(play.modelPct)}</div>
+                </div>
+                <div style="margin-top:8px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:13px;line-height:1.4;color:#ffffff;font-weight:600;">${formatAlertOdds(play.marketOdds)}</div>
+                <div style="margin-top:3px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:10px;line-height:1.2;color:#9CA3AF;font-weight:500;letter-spacing:0.10em;text-transform:uppercase;">Edge ${formatAlertPercent(play.edgePct, 2)}</div>
+              </td>
+            </tr>
+          </table>
+        </div>`).join("");
+
+  return rightEdgeEmailShell(
+    `${ctx.plays.length} premium best bet${ctx.plays.length === 1 ? "" : "s"} are live for Round ${ctx.round}.`,
+    "Premium Alert",
+    `
+        <div style="background:#111116;border:1px solid #1E1E2E;margin-top:24px;padding:28px 26px;">
+          <div style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:10px;line-height:1.2;color:#9CA3AF;font-weight:500;letter-spacing:0.12em;text-transform:uppercase;">Round ${ctx.round} premium card</div>
+          <div style="margin-top:14px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:30px;line-height:1.08;color:#ffffff;font-weight:600;letter-spacing:-0.02em;">Best bets are live.</div>
+          <div style="margin-top:18px;font-family:Inter,Arial,Helvetica,sans-serif;font-size:15px;line-height:1.7;color:#9CA3AF;font-weight:400;">
+            The model has ${ctx.plays.length} qualifying premium play${ctx.plays.length === 1 ? "" : "s"} on the current card. Check live prices before acting, because markets can move quickly.
+          </div>
+          ${emailCtaHtml("https://www.rightedge.com.au/#best-bets", "Open Premium Plays ->")}
+        </div>
+        ${playCards}
+        <div style="background:#111116;border:1px solid #1E1E2E;margin-top:16px;padding:18px 20px;">
+          <div style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:12px;line-height:1.7;color:#9CA3AF;">This alert only sends when the premium card changes, so subscribers do not receive duplicate emails for the same set of plays.</div>
+        </div>`
+  );
+}
+
+async function runPremiumBestBetAlerts(opts: { dryRun?: boolean; force?: boolean; limit?: number; testMode?: boolean; testEmail?: string } = {}) {
+  const dryRun = opts.dryRun !== false;
+  const force = opts.force === true;
+  const testMode = opts.testMode !== false;
+  const testEmail = String(opts.testEmail || "elliott@woodbry.com").trim().toLowerCase();
+  const limit = Number.isInteger(opts.limit) && opts.limit! > 0 ? Math.min(opts.limit!, 1000) : null;
+  const ctx = await loadPremiumBestBetAlertContext();
+  const fingerprint = buildPremiumBestBetAlertFingerprint(ctx);
+  const lastAlert = parseKvValue<any>(await kv.get(PREMIUM_BEST_BET_ALERT_LOCK_KEY));
+
+  if (!ctx.plays.length) {
+    return {
+      success: true,
+      dryRun,
+      testMode,
+      skipped: true,
+      reason: "no_qualifying_premium_plays",
+      round: ctx.round,
+      playCount: 0,
+      recipientCount: 0,
+    };
+  }
+
+  if (!testMode && !force && lastAlert?.fingerprint === fingerprint) {
+    return {
+      success: true,
+      dryRun,
+      testMode,
+      skipped: true,
+      reason: "duplicate_card",
+      round: ctx.round,
+      playCount: ctx.plays.length,
+      recipientCount: Number(lastAlert?.recipientCount || 0),
+      lastSentAt: lastAlert?.sentAt || "",
+    };
+  }
+
+  const { recipients } = await loadBroadcastRecipients({ audience: "premium" });
+  const livePremiumEmails = [...new Set(recipients.map((recipient) => recipient.email).filter(Boolean))]
+    .slice(0, limit || undefined);
+  const emailsToSend = testMode
+    ? [testEmail].filter((email) => email.includes("@"))
+    : livePremiumEmails;
+  const subject = `RightEdge Premium: ${ctx.plays.length} best bet${ctx.plays.length === 1 ? "" : "s"} live for Round ${ctx.round}`;
+  const htmlContent = buildPremiumBestBetAlertHtml(ctx);
+
+  if (dryRun) {
+    return {
+      success: true,
+      dryRun: true,
+      testMode,
+      skipped: false,
+      round: ctx.round,
+      playCount: ctx.plays.length,
+      recipientCount: testMode ? 1 : livePremiumEmails.length,
+      testRecipient: testMode ? testEmail : "",
+      subject,
+      fingerprint,
+      plays: ctx.plays,
+    };
+  }
+
+  if (!emailsToSend.length) {
+    return {
+      success: true,
+      dryRun: false,
+      testMode,
+      skipped: true,
+      reason: testMode ? "no_test_recipient" : "no_premium_recipients",
+      round: ctx.round,
+      playCount: ctx.plays.length,
+      recipientCount: 0,
+    };
+  }
+
+  const resend = getResendClient();
+  const fromEmail = getFromEmail();
+  const BATCH_SIZE = 100;
+  const results = [];
+
+  for (let i = 0; i < emailsToSend.length; i += BATCH_SIZE) {
+    const batch = emailsToSend.slice(i, i + BATCH_SIZE);
+    const emailBatch = batch.map((email) => ({
+      from: fromEmail,
+      to: [email],
+      subject,
+      html: htmlContent,
+    }));
+
+    const { data, error } = await resend.batch.send(emailBatch);
+    if (error) {
+      throw new Error(`Premium best bet alert batch failed: ${JSON.stringify(error)}`);
+    }
+    results.push(data);
+  }
+
+  const sentAt = new Date().toISOString();
+  if (!testMode) {
+    await kv.set(PREMIUM_BEST_BET_ALERT_LOCK_KEY, JSON.stringify({
+      fingerprint,
+      round: ctx.round,
+      playCount: ctx.plays.length,
+      recipientCount: emailsToSend.length,
+      sentAt,
+      subject,
+      testMode,
+    }));
+    await kv.set(`broadcast:${Date.now()}`, JSON.stringify({
+      subject,
+      htmlContent,
+      sentAt,
+      recipients: emailsToSend.length,
+      source: "auto:premium-best-bets",
+      audience: "premium",
+      team: "",
+    }));
+  }
+
+  return {
+    success: true,
+    dryRun: false,
+    testMode,
+    skipped: false,
+    round: ctx.round,
+    playCount: ctx.plays.length,
+    recipientCount: emailsToSend.length,
+    subject,
+    fingerprint,
+    results,
+  };
+}
+
 app.post("/confirm-checkout-session", async (c) => {
   try {
     const body = await c.req.json();
@@ -3385,12 +4146,12 @@ app.post("/subscribe", async (c) => {
     }
 
     const stripe = new Stripe(stripeKey, { apiVersion: "2023-10-16" });
-    const customers = await findStripeCustomersByEmail(stripe, email);
+    const customers = await stripe.customers.list({ email, limit: 10 });
 
     let activeSubscription: any = null;
     let customerId = "";
 
-    for (const customer of customers) {
+    for (const customer of customers.data) {
       const subscriptions = await stripe.subscriptions.list({
         customer: customer.id,
         status: "all",
@@ -3562,6 +4323,40 @@ app.post("/admin/broadcast", async (c) => {
   } catch (err: any) {
     console.error("[AdminEmail] Server error:", err);
     return c.json({ error: "Internal server error", message: err.message }, 500);
+  }
+});
+
+app.post("/admin/premium-best-bet-alerts", async (c) => {
+  try {
+    const authHeader = c.req.header("Authorization");
+    if (!authHeader) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+
+    const body = await c.req.json().catch(() => ({}));
+    const dryRun = body?.dryRun !== false;
+    const testMode = body?.testMode !== false;
+    const liveEnabled = Deno.env.get("PREMIUM_BEST_BET_ALERTS_LIVE_ENABLED") === "true";
+
+    if (!testMode && (!liveEnabled || body?.confirm !== "SEND_PREMIUM_BEST_BET_ALERTS_LIVE")) {
+      return c.json({
+        error: "Live premium best-bet alerts are disabled. Use testMode:true for private testing.",
+        liveEnabled,
+      }, 403);
+    }
+
+    const result = await runPremiumBestBetAlerts({
+      dryRun,
+      testMode,
+      force: body?.force === true,
+      limit: Number(body?.limit) || undefined,
+      testEmail: body?.testEmail || "elliott@woodbry.com",
+    });
+
+    return c.json(result);
+  } catch (err: any) {
+    console.error("[admin/premium-best-bet-alerts] error:", err);
+    return c.json({ error: "Internal server error", message: err?.message || "unknown" }, 500);
   }
 });
 
