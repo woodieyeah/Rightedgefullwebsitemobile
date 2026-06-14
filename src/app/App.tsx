@@ -26,6 +26,7 @@ import {
   Printer,
   RefreshCw,
   ShieldAlert,
+  Sparkles,
   Target,
   Trophy,
   Wallet,
@@ -2526,6 +2527,7 @@ function ConfidenceBadge({
 
 const ADMIN_EMAILS = ["elliott@woodbry.com", "ewoodbry@gmail.com", "elliott@rightedge.com.au"];
 const ORIGIN_PREVIEW_EMAIL = "elliott@woodbry.com";
+const CRICKET_PROTOTYPE_EMAILS = ["elliott@woodbry.com"];
 type AuthTier = "none" | "free" | "premium";
 type RuntimeAuthState = {
   checked: boolean;
@@ -2553,6 +2555,10 @@ function getUserEmail(): string | null {
 
 function canViewOriginPage(): boolean {
   return hasPaidAccess() || getUserEmail() === ORIGIN_PREVIEW_EMAIL;
+}
+
+function canAccessCricketPrototype(email = runtimeAuthState.email): boolean {
+  return !!email && CRICKET_PROTOTYPE_EMAILS.includes(email.trim().toLowerCase());
 }
 
 function getPreviewBookmakerName(bookmaker?: string) {
@@ -3413,10 +3419,12 @@ function PublicNav({
   page,
   setPage,
   onPremiumLogin,
+  showCricketLink = false,
 }: {
   page: string;
   setPage: (value: string) => void;
   onPremiumLogin: () => void;
+  showCricketLink?: boolean;
 }) {
   return (
     <div className="fixed left-0 right-0 top-0 z-50 border-b border-[#1E1E2E] bg-[#0A0A0F]/95 backdrop-blur-sm">
@@ -3437,6 +3445,19 @@ function PublicNav({
           >
             Predictions
           </button>
+          {showCricketLink && (
+            <button
+              type="button"
+              onClick={() => setPage("cricket")}
+              className={`hidden h-9 items-center justify-center border px-3 text-xs font-medium transition sm:inline-flex ${
+                page === "cricket"
+                  ? "border-white bg-white text-[#0A0A0F]"
+                  : "border-[#1E1E2E] text-[#9CA3AF] hover:border-white/30 hover:text-white"
+              }`}
+            >
+              Cricket
+            </button>
+          )}
           <button
             type="button"
             onClick={onPremiumLogin}
@@ -3447,6 +3468,615 @@ function PublicNav({
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+type CricketTeamRating = {
+  elo: number;
+  runs_for: number;
+  runs_against: number;
+  n_matches: number;
+  last_seen: string;
+};
+
+type CricketFixturePrototype = {
+  id: string;
+  competition: string;
+  format: "BBL" | "Test";
+  stage: string;
+  home: string;
+  away: string;
+  marketOdds: {
+    home: number;
+    away: number;
+    draw?: number;
+  };
+};
+
+type CricketComputedFixture = CricketFixturePrototype & {
+  probHome: number;
+  probAway: number;
+  probDraw: number;
+  fairHome: number;
+  fairAway: number;
+  fairDraw: number | null;
+  edgeHome: number;
+  edgeAway: number;
+  edgeDraw: number | null;
+  projectedHome: number | null;
+  projectedAway: number | null;
+  valuePick: "home" | "away" | "draw" | null;
+  bestEdge: number;
+  confidence: "LEAN" | "SOLID" | "STRONG" | null;
+  kellyFraction: number;
+};
+
+const CRICKET_MODEL_PARAMS = {
+  bbl_league_avg_runs: 164,
+  bbl_runs_std: 26.5,
+  bbl_strength_std: 14,
+  bbl_form_weight: 0.55,
+  test_draw_base: 0.22,
+  elo_base: 1500,
+};
+
+const CRICKET_RATINGS_GENERATED_AT = "2026-06-14T13:23:58.500949+00:00";
+
+const CRICKET_RATINGS: Record<string, Record<string, CricketTeamRating>> = {
+  "Big Bash League": {
+    "Sydney Sixers": { elo: 1586.43, runs_for: 143.8, runs_against: 135.6, n_matches: 12, last_seen: "2026-01-25" },
+    "Brisbane Heat": { elo: 1509.08, runs_for: 180.2, runs_against: 188.8, n_matches: 12, last_seen: "2026-01-18" },
+    "Melbourne Stars": { elo: 1465.03, runs_for: 151.0, runs_against: 148.9, n_matches: 12, last_seen: "2026-01-21" },
+    "Sydney Thunder": { elo: 1437.33, runs_for: 161.8, runs_against: 170.6, n_matches: 12, last_seen: "2026-01-16" },
+    "Adelaide Strikers": { elo: 1448.48, runs_for: 159.6, runs_against: 164.1, n_matches: 12, last_seen: "2026-01-17" },
+    "Melbourne Renegades": { elo: 1390.06, runs_for: 164.2, runs_against: 168.6, n_matches: 12, last_seen: "2026-01-17" },
+    "Perth Scorchers": { elo: 1609.74, runs_for: 177.5, runs_against: 154.4, n_matches: 12, last_seen: "2026-01-25" },
+    "Hobart Hurricanes": { elo: 1553.85, runs_for: 167.2, runs_against: 162.9, n_matches: 12, last_seen: "2026-01-23" },
+  },
+  "The Ashes": {
+    Australia: { elo: 1550.06, runs_for: 319.1, runs_against: 283.2, n_matches: 12, last_seen: "2026-01-04" },
+    England: { elo: 1449.94, runs_for: 283.2, runs_against: 319.1, n_matches: 12, last_seen: "2026-01-04" },
+  },
+  "Border-Gavaskar Trophy": {
+    Australia: { elo: 1470.13, runs_for: 425.9, runs_against: 405.2, n_matches: 12, last_seen: "2017-03-25" },
+    India: { elo: 1529.87, runs_for: 405.2, runs_against: 425.9, n_matches: 12, last_seen: "2017-03-25" },
+  },
+};
+
+const CRICKET_PROTOTYPE_FIXTURES: CricketFixturePrototype[] = [
+  {
+    id: "bbl-prototype-sixers-scorchers",
+    competition: "Big Bash League",
+    format: "BBL",
+    stage: "October launch sample",
+    home: "Sydney Sixers",
+    away: "Perth Scorchers",
+    marketOdds: { home: 2.22, away: 1.72 },
+  },
+  {
+    id: "bbl-prototype-heat-renegades",
+    competition: "Big Bash League",
+    format: "BBL",
+    stage: "October launch sample",
+    home: "Brisbane Heat",
+    away: "Melbourne Renegades",
+    marketOdds: { home: 1.78, away: 2.08 },
+  },
+  {
+    id: "test-prototype-ashes",
+    competition: "The Ashes",
+    format: "Test",
+    stage: "Summer Test sample",
+    home: "Australia",
+    away: "England",
+    marketOdds: { home: 1.91, away: 3.55, draw: 3.2 },
+  },
+  {
+    id: "test-prototype-india",
+    competition: "Border-Gavaskar Trophy",
+    format: "Test",
+    stage: "Summer Test model check",
+    home: "Australia",
+    away: "India",
+    marketOdds: { home: 2.38, away: 2.48, draw: 3.65 },
+  },
+];
+
+function normalCdf(x: number) {
+  const sign = x < 0 ? -1 : 1;
+  const z = Math.abs(x) / Math.sqrt(2);
+  const t = 1 / (1 + 0.3275911 * z);
+  const erf =
+    1 -
+    (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) *
+      t *
+      Math.exp(-z * z);
+  return 0.5 * (1 + sign * erf);
+}
+
+function clampNumber(value: number, low: number, high: number) {
+  return Math.max(low, Math.min(high, value));
+}
+
+function fairOdds(probability: number) {
+  return probability > 0 ? 1 / probability : 0;
+}
+
+function devigProbabilities(odds: number[]) {
+  const implied = odds.map((odd) => (odd > 0 ? 1 / odd : 0));
+  const total = implied.reduce((sum, item) => sum + item, 0);
+  return implied.map((item) => (total > 0 ? item / total : 0));
+}
+
+function cricketConfidence(edge: number): "LEAN" | "SOLID" | "STRONG" | null {
+  if (edge >= 0.1) return "STRONG";
+  if (edge >= 0.05) return "SOLID";
+  if (edge >= 0.03) return "LEAN";
+  return null;
+}
+
+function cricketKelly(probability: number, odds: number, cap = 0.25) {
+  const b = odds - 1;
+  if (b <= 0) return 0;
+  const fraction = (b * probability - (1 - probability)) / b;
+  return Math.max(0, fraction) * cap;
+}
+
+function computeCricketFixture(fixture: CricketFixturePrototype): CricketComputedFixture {
+  const ratings = CRICKET_RATINGS[fixture.competition];
+  const home = ratings?.[fixture.home];
+  const away = ratings?.[fixture.away];
+
+  if (!home || !away) {
+    throw new Error(`Missing cricket ratings for ${fixture.home} vs ${fixture.away}`);
+  }
+
+  let probHome = 0;
+  let probAway = 0;
+  let probDraw = 0;
+  let projectedHome: number | null = null;
+  let projectedAway: number | null = null;
+
+  if (fixture.format === "BBL") {
+    const leagueAverage = CRICKET_MODEL_PARAMS.bbl_league_avg_runs;
+    const homeRaw = 0.5 * home.runs_for + 0.5 * away.runs_against;
+    const awayRaw = 0.5 * away.runs_for + 0.5 * home.runs_against;
+    const eloGap = clampNumber(home.elo - away.elo, -200, 200);
+    const homeMean = leagueAverage + CRICKET_MODEL_PARAMS.bbl_form_weight * (homeRaw - leagueAverage) + (eloGap / 200) * 10;
+    const awayMean = leagueAverage + CRICKET_MODEL_PARAMS.bbl_form_weight * (awayRaw - leagueAverage) - (eloGap / 200) * 10;
+    const diffStd = Math.sqrt(2 * (CRICKET_MODEL_PARAMS.bbl_runs_std ** 2 + CRICKET_MODEL_PARAMS.bbl_strength_std ** 2));
+    probHome = normalCdf((homeMean - awayMean) / diffStd);
+    probAway = 1 - probHome;
+    projectedHome = homeMean;
+    projectedAway = awayMean;
+  } else {
+    const expected = 1 / (1 + 10 ** ((away.elo - home.elo) / 400));
+    const closeness = 1 - Math.abs(expected - 0.5) * 2;
+    probDraw = clampNumber(CRICKET_MODEL_PARAMS.test_draw_base + 0.18 * closeness, 0.05, 0.45);
+    const decisive = 1 - probDraw;
+    probHome = decisive * expected;
+    probAway = decisive * (1 - expected);
+  }
+
+  const market = fixture.marketOdds;
+  const implied = market.draw
+    ? devigProbabilities([market.home, market.away, market.draw])
+    : devigProbabilities([market.home, market.away]);
+  const edgeHome = probHome - implied[0];
+  const edgeAway = probAway - implied[1];
+  const edgeDraw = market.draw ? probDraw - implied[2] : null;
+  const candidates: Array<{ side: "home" | "away" | "draw"; edge: number; probability: number; odds: number }> = [
+    { side: "home", edge: edgeHome, probability: probHome, odds: market.home },
+    { side: "away", edge: edgeAway, probability: probAway, odds: market.away },
+  ];
+
+  if (market.draw && edgeDraw !== null) {
+    candidates.push({ side: "draw", edge: edgeDraw, probability: probDraw, odds: market.draw });
+  }
+
+  const best = candidates.sort((a, b) => b.edge - a.edge)[0];
+  const confidence = best ? cricketConfidence(best.edge) : null;
+
+  return {
+    ...fixture,
+    probHome,
+    probAway,
+    probDraw,
+    fairHome: fairOdds(probHome),
+    fairAway: fairOdds(probAway),
+    fairDraw: fixture.format === "Test" ? fairOdds(probDraw) : null,
+    edgeHome,
+    edgeAway,
+    edgeDraw,
+    projectedHome,
+    projectedAway,
+    valuePick: confidence && best ? best.side : null,
+    bestEdge: best?.edge || 0,
+    confidence,
+    kellyFraction: confidence && best ? cricketKelly(best.probability, best.odds) : 0,
+  };
+}
+
+function formatCricketPercent(value: number, digits = 1) {
+  return `${(value * 100).toFixed(digits)}%`;
+}
+
+function formatCricketOdds(value: number | null) {
+  if (!value || !Number.isFinite(value)) return "-";
+  return value.toFixed(2);
+}
+
+function formatCricketSignedPts(value: number | null) {
+  if (value === null || !Number.isFinite(value)) return "-";
+  const sign = value >= 0 ? "+" : "";
+  return `${sign}${(value * 100).toFixed(1)} pts`;
+}
+
+function getCricketPickLabel(fixture: CricketComputedFixture) {
+  if (fixture.valuePick === "home") return fixture.home;
+  if (fixture.valuePick === "away") return fixture.away;
+  if (fixture.valuePick === "draw") return "Draw";
+  return "No premium play";
+}
+
+function CricketAccessPanel({
+  email,
+  onRequestAccess,
+}: {
+  email: string | null;
+  onRequestAccess: () => void;
+}) {
+  return (
+    <div className="mx-auto flex min-h-[58vh] w-full max-w-[760px] items-center">
+      <GlassCard className="w-full p-8 sm:p-10">
+        <div className="mb-6 inline-flex items-center gap-2 border border-[#1E1E2E] bg-[#16161D] px-4 py-2 text-xs font-medium uppercase tracking-widest text-[#9CA3AF]">
+          <Lock className="h-4 w-4" />
+          Elliott-only preview
+        </div>
+        <h1 className="mb-4 text-3xl font-semibold uppercase tracking-tight text-white sm:text-5xl">
+          RightEdge Cricket is private.
+        </h1>
+        <p className="max-w-[620px] text-sm leading-7 text-[#9CA3AF] sm:text-base">
+          The cricket prototype is currently limited to elliott@woodbry.com while the BBL and summer Test product is shaped separately from the live NRL experience.
+        </p>
+        {email && (
+          <div className="mt-6 border border-[#1E1E2E] bg-[#0A0A0F] p-4 text-xs font-medium uppercase tracking-widest text-[#9CA3AF]">
+            Signed in as {email}. This email is not enabled for the cricket preview.
+          </div>
+        )}
+        <button
+          type="button"
+          onClick={onRequestAccess}
+          className="mt-8 inline-flex items-center justify-center gap-3 border border-white bg-white px-6 py-3 text-sm font-medium uppercase tracking-wider text-[#0A0A0F] transition hover:opacity-85"
+        >
+          Sign in with Elliott email
+          <ArrowRight className="h-4 w-4 stroke-[3px]" />
+        </button>
+      </GlassCard>
+    </div>
+  );
+}
+
+function CricketFixtureCard({ fixture }: { fixture: CricketComputedFixture }) {
+  const pickLabel = getCricketPickLabel(fixture);
+  const pickOdds =
+    fixture.valuePick === "home"
+      ? fixture.marketOdds.home
+      : fixture.valuePick === "away"
+        ? fixture.marketOdds.away
+        : fixture.valuePick === "draw"
+          ? fixture.marketOdds.draw
+          : null;
+
+  return (
+    <GlassCard className="flex h-full flex-col p-5 sm:p-6">
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <div className="inline-flex items-center gap-2 border border-[#1E1E2E] bg-[#16161D] px-3 py-1.5 text-[10px] font-medium uppercase tracking-widest text-[#9CA3AF]">
+          <CalendarDays className="h-3.5 w-3.5" />
+          {fixture.stage}
+        </div>
+        <span className="border border-[#1E1E2E] px-3 py-1.5 text-[10px] font-medium uppercase tracking-widest text-white">
+          {fixture.format}
+        </span>
+      </div>
+
+      <div className="mb-6 grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+        <div>
+          <div className="text-lg font-semibold uppercase tracking-tight text-white sm:text-xl">
+            {fixture.home}
+          </div>
+          <div className="mt-1 text-xs font-medium uppercase tracking-widest text-[#9CA3AF]">
+            Home
+          </div>
+        </div>
+        <div className="text-xs font-black uppercase tracking-widest text-[#6B7280]">vs</div>
+        <div className="text-right">
+          <div className="text-lg font-semibold uppercase tracking-tight text-white sm:text-xl">
+            {fixture.away}
+          </div>
+          <div className="mt-1 text-xs font-medium uppercase tracking-widest text-[#9CA3AF]">
+            Away
+          </div>
+        </div>
+      </div>
+
+      {fixture.format === "BBL" && fixture.projectedHome && fixture.projectedAway && (
+        <div className="mb-5 border border-[#1E1E2E] bg-[#0A0A0F] p-4">
+          <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-widest text-[#9CA3AF]">
+            <BarChart3 className="h-4 w-4" />
+            Projected score
+          </div>
+          <div className="text-2xl font-semibold uppercase tracking-tight text-white">
+            {fixture.projectedHome.toFixed(0)} - {fixture.projectedAway.toFixed(0)}
+          </div>
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 gap-3">
+        <div className="border border-[#1E1E2E] bg-[#16161D] p-4">
+          <div className="mb-1 text-[10px] font-medium uppercase tracking-widest text-[#9CA3AF]">
+            Home win
+          </div>
+          <div className="text-xl font-semibold text-white">{formatCricketPercent(fixture.probHome)}</div>
+          <div className="mt-1 text-xs text-[#9CA3AF]">Fair {formatCricketOdds(fixture.fairHome)}</div>
+        </div>
+        <div className="border border-[#1E1E2E] bg-[#16161D] p-4">
+          <div className="mb-1 text-[10px] font-medium uppercase tracking-widest text-[#9CA3AF]">
+            Away win
+          </div>
+          <div className="text-xl font-semibold text-white">{formatCricketPercent(fixture.probAway)}</div>
+          <div className="mt-1 text-xs text-[#9CA3AF]">Fair {formatCricketOdds(fixture.fairAway)}</div>
+        </div>
+      </div>
+
+      {fixture.format === "Test" && (
+        <div className="mt-3 border border-[#1E1E2E] bg-[#16161D] p-4">
+          <div className="mb-1 text-[10px] font-medium uppercase tracking-widest text-[#9CA3AF]">
+            Draw probability
+          </div>
+          <div className="text-xl font-semibold text-white">{formatCricketPercent(fixture.probDraw)}</div>
+          <div className="mt-1 text-xs text-[#9CA3AF]">Fair {formatCricketOdds(fixture.fairDraw)}</div>
+        </div>
+      )}
+
+      <div className="mt-5 grid grid-cols-3 gap-2 text-center text-[10px] font-medium uppercase tracking-widest text-[#9CA3AF]">
+        <div className="border border-[#1E1E2E] p-3">
+          <div>Home edge</div>
+          <div className={fixture.edgeHome > 0 ? "mt-1 text-white" : "mt-1 text-[#6B7280]"}>
+            {formatCricketSignedPts(fixture.edgeHome)}
+          </div>
+        </div>
+        <div className="border border-[#1E1E2E] p-3">
+          <div>Away edge</div>
+          <div className={fixture.edgeAway > 0 ? "mt-1 text-white" : "mt-1 text-[#6B7280]"}>
+            {formatCricketSignedPts(fixture.edgeAway)}
+          </div>
+        </div>
+        <div className="border border-[#1E1E2E] p-3">
+          <div>Market</div>
+          <div className="mt-1 text-white">
+            {fixture.marketOdds.home.toFixed(2)} / {fixture.marketOdds.away.toFixed(2)}
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-auto pt-5">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#1E1E2E] pt-5">
+          <div>
+            <div className="text-[10px] font-medium uppercase tracking-widest text-[#9CA3AF]">
+              Premium play
+            </div>
+            <div className="mt-1 text-base font-semibold uppercase tracking-tight text-white">
+              {pickLabel}
+            </div>
+            {pickOdds && (
+              <div className="mt-1 text-xs text-[#9CA3AF]">
+                betr sample {pickOdds.toFixed(2)} | Kelly {(fixture.kellyFraction * 100).toFixed(1)}%
+              </div>
+            )}
+          </div>
+          <span className={`border px-3 py-1.5 text-[10px] font-black uppercase tracking-widest ${
+            fixture.confidence
+              ? "border-white bg-white text-[#0A0A0F]"
+              : "border-[#1E1E2E] text-[#6B7280]"
+          }`}>
+            {fixture.confidence || "Watch"}
+          </span>
+        </div>
+      </div>
+    </GlassCard>
+  );
+}
+
+function CricketPrototypePage({
+  authState,
+  onRequestAccess,
+}: {
+  authState: RuntimeAuthState;
+  onRequestAccess: () => void;
+}) {
+  const [view, setView] = useState<"slate" | "model" | "build">("slate");
+  const hasAccess = canAccessCricketPrototype(authState.email);
+  const fixtures = useMemo(
+    () => CRICKET_PROTOTYPE_FIXTURES.map(computeCricketFixture),
+    [],
+  );
+  const premiumCount = fixtures.filter((fixture) => fixture.confidence).length;
+
+  if (!hasAccess) {
+    return (
+      <CricketAccessPanel
+        email={authState.email}
+        onRequestAccess={onRequestAccess}
+      />
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-8">
+      <section className="grid gap-6 border-b border-[#1E1E2E] pb-8 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <div>
+          <div className="mb-5 flex flex-wrap items-center gap-3">
+            <span className="inline-flex items-center gap-2 border border-[#1E1E2E] bg-[#16161D] px-4 py-2 text-xs font-medium uppercase tracking-widest text-[#9CA3AF]">
+              <Sparkles className="h-4 w-4" />
+              Private prototype
+            </span>
+            <span className="inline-flex items-center gap-2 border border-[#1E1E2E] bg-[#0A0A0F] px-4 py-2 text-xs font-medium uppercase tracking-widest text-white">
+              elliott@woodbry.com
+            </span>
+          </div>
+          <h1 className="max-w-[820px] text-4xl font-semibold uppercase leading-none tracking-tight text-white sm:text-6xl lg:text-7xl">
+            RightEdge Cricket
+          </h1>
+          <p className="mt-5 max-w-[760px] text-base leading-8 text-[#9CA3AF] sm:text-lg">
+            A separate cricket surface for the October BBL launch window and the Australian summer Test slate: same RightEdge discipline, a cleaner Supabase-ready model pipeline, and no bleed into the live NRL product.
+          </p>
+        </div>
+        <GlassCard className="p-5">
+          <img
+            src="/logo-square.png"
+            alt="RightEdge"
+            className="mb-5 h-14 w-14 border border-[#1E1E2E] object-cover"
+          />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="border border-[#1E1E2E] bg-[#16161D] p-4">
+              <div className="text-2xl font-semibold text-white">8</div>
+              <div className="mt-1 text-[10px] font-medium uppercase tracking-widest text-[#9CA3AF]">BBL teams</div>
+            </div>
+            <div className="border border-[#1E1E2E] bg-[#16161D] p-4">
+              <div className="text-2xl font-semibold text-white">{premiumCount}</div>
+              <div className="mt-1 text-[10px] font-medium uppercase tracking-widest text-[#9CA3AF]">Sample plays</div>
+            </div>
+            <div className="col-span-2 border border-[#1E1E2E] bg-[#16161D] p-4">
+              <div className="text-[10px] font-medium uppercase tracking-widest text-[#9CA3AF]">Ratings export</div>
+              <div className="mt-1 text-sm font-semibold text-white">
+                {new Date(CRICKET_RATINGS_GENERATED_AT).toLocaleDateString("en-AU", {
+                  day: "2-digit",
+                  month: "short",
+                  year: "numeric",
+                })}
+              </div>
+            </div>
+          </div>
+        </GlassCard>
+      </section>
+
+      <div className="flex flex-wrap gap-2 border border-[#1E1E2E] bg-[#111116] p-2">
+        {[
+          { id: "slate", label: "Model slate", icon: Target },
+          { id: "model", label: "Offline brain", icon: Gauge },
+          { id: "build", label: "Production path", icon: Activity },
+        ].map((item) => {
+          const Icon = item.icon;
+          const active = view === item.id;
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => setView(item.id as "slate" | "model" | "build")}
+              className={`inline-flex h-10 items-center gap-2 px-4 text-xs font-medium uppercase tracking-widest transition ${
+                active
+                  ? "bg-white text-[#0A0A0F]"
+                  : "bg-[#16161D] text-[#9CA3AF] hover:text-white"
+              }`}
+            >
+              <Icon className="h-4 w-4" />
+              {item.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {view === "slate" && (
+        <section className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+          {fixtures.map((fixture) => (
+            <CricketFixtureCard key={fixture.id} fixture={fixture} />
+          ))}
+        </section>
+      )}
+
+      {view === "model" && (
+        <section className="grid gap-5 lg:grid-cols-3">
+          {[
+            {
+              icon: Shield,
+              title: "Leakage-safe ratings",
+              text: "Python ingests Cricsheet data, builds pre-match Elo and scoring form, then exports only ratings and constants for production.",
+            },
+            {
+              icon: Percent,
+              title: "Calibrated probabilities",
+              text: "BBL uses projected run distributions. Tests split decisive results from draw probability so the three-way market is handled honestly.",
+            },
+            {
+              icon: Wallet,
+              title: "Value layer",
+              text: "Fair odds are compared with the actual betr price, de-vigged, confidence-tagged, and sized with capped fractional Kelly.",
+            },
+          ].map((item) => {
+            const Icon = item.icon;
+            return (
+              <GlassCard key={item.title} className="p-6">
+                <div className="mb-5 inline-flex border border-[#1E1E2E] bg-[#16161D] p-3 text-white">
+                  <Icon className="h-5 w-5" />
+                </div>
+                <h2 className="mb-3 text-xl font-semibold uppercase tracking-tight text-white">
+                  {item.title}
+                </h2>
+                <p className="text-sm leading-7 text-[#9CA3AF]">{item.text}</p>
+              </GlassCard>
+            );
+          })}
+        </section>
+      )}
+
+      {view === "build" && (
+        <section className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
+          <GlassCard className="p-6 sm:p-8">
+            <SectionHeader
+              title="Cricket production sequence"
+              subtitle="Built to become cricket.rightedge.com.au, then port back into NRL next season"
+            />
+            <div className="mt-6 grid gap-3">
+              {[
+                "Push Supabase schema: teams, model_params, fixtures, odds_snapshots, edges, picks and click_outs.",
+                "Port the BBL and Test simulator to a Supabase Edge Function with the same model constants.",
+                "Use The Odds API for cricket_big_bash and cricket_test_match, then compute user-facing edge against betr prices.",
+                "Render free probabilities publicly, keep value_pick, edge and Kelly behind a server-side profile tier check.",
+                "Send Bet now through a clickout route so betr CPA referrals are logged before redirect.",
+              ].map((item, index) => (
+                <div key={item} className="flex gap-4 border border-[#1E1E2E] bg-[#16161D] p-4">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center border border-[#1E1E2E] bg-[#0A0A0F] text-xs font-semibold text-white">
+                    {index + 1}
+                  </div>
+                  <p className="text-sm leading-6 text-[#9CA3AF]">{item}</p>
+                </div>
+              ))}
+            </div>
+          </GlassCard>
+          <GlassCard className="p-6">
+            <div className="mb-5 flex items-center gap-3">
+              <img src="/betr-square.png" alt="betr" className="h-10 w-10 border border-[#1E1E2E] object-cover" />
+              <div>
+                <div className="text-sm font-semibold uppercase tracking-tight text-white">CPA-ready flow</div>
+                <div className="text-[10px] font-medium uppercase tracking-widest text-[#9CA3AF]">Placeholder until betr links are confirmed</div>
+              </div>
+            </div>
+            <div className="space-y-3 text-sm leading-7 text-[#9CA3AF]">
+              <p>
+                This prototype shows the cards and premium-play mechanics without calling live odds APIs from the browser.
+              </p>
+              <p>
+                The production version should compute and gate all premium fields server-side before Vercel renders the page.
+              </p>
+            </div>
+            <div className="mt-6 border border-[#1E1E2E] bg-[#0A0A0F] p-4 text-[10px] font-medium uppercase tracking-widest text-[#9CA3AF]">
+              18+ only. Statistical estimates, not guarantees. Gamble responsibly.
+            </div>
+          </GlassCard>
+        </section>
+      )}
     </div>
   );
 }
@@ -9572,6 +10202,8 @@ function AppDashboard({
   useEffect(() => {
     const handleAdminAuth = () => {
       setIsAdmin(isUserAdmin());
+      setAuthState({ ...runtimeAuthState });
+      setPaidAccessState(hasPaidAccess());
     };
     window.addEventListener('adminAuthChanged', handleAdminAuth);
     return () => window.removeEventListener('adminAuthChanged', handleAdminAuth);
@@ -10271,6 +10903,7 @@ export default function App() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [showEmailGate, setShowEmailGate] = useState(false);
+  const [emailGateTarget, setEmailGateTarget] = useState<"app" | "cricket">("app");
   const [showPaymentGate, setShowPaymentGate] = useState(false);
   const [authState, setAuthState] = useState<RuntimeAuthState>(() => runtimeAuthState);
   const [paidAccessState, setPaidAccessState] = useState(() => hasPaidAccess());
@@ -10477,8 +11110,19 @@ export default function App() {
       setSitePage("app");
       window.location.hash = "matches";
     } else {
+      setEmailGateTarget("app");
       setShowEmailGate(true);
     }
+  };
+
+  const requestCricketAccess = () => {
+    if (canAccessCricketPrototype(authState.email)) {
+      setSitePage("cricket");
+      window.location.hash = "cricket";
+      return;
+    }
+    setEmailGateTarget("cricket");
+    setShowEmailGate(true);
   };
 
   const requestPremiumAccess = (source: string = 'unknown') => {
@@ -10520,7 +11164,7 @@ export default function App() {
     const hash = window.location.hash.replace("#", "");
     const appHashes = ["matches", "origin", "best-bets", "try-scorers", "performance", "admin"];
     const premiumHashes = ["origin", "best-bets", "try-scorers"];
-    const publicHashes = ["results", "methodology", "ad-studio", "articles", "article-round-5-2026", "article-methodology"];
+    const publicHashes = ["results", "methodology", "ad-studio", "articles", "article-round-5-2026", "article-methodology", "cricket"];
 
     if (hash === "origin" && !canViewOriginPage()) {
       window.history.replaceState({}, document.title, `${window.location.pathname}#matches`);
@@ -10707,6 +11351,11 @@ export default function App() {
 
   const handleEmailSuccess = () => {
     setShowEmailGate(false);
+    if (emailGateTarget === "cricket") {
+      setSitePage("cricket");
+      window.location.hash = "cricket";
+      return;
+    }
     setSitePage("app");
     window.location.hash = "matches";
   };
@@ -10830,6 +11479,7 @@ export default function App() {
             page={sitePage}
             setPage={handleSetPage}
             onPremiumLogin={() => requestPremiumAccess("nav_premium_login")}
+            showCricketLink={canAccessCricketPrototype(authState.email)}
           />
         </div>
 
@@ -10847,6 +11497,12 @@ export default function App() {
         {sitePage === "methodology" && <MethodologyPage />}
         {sitePage === "articles" && <ArticlesPage />}
         {sitePage === "article-round-5-2026" && <ArticleRound5 />}
+        {sitePage === "cricket" && (
+          <CricketPrototypePage
+            authState={authState}
+            onRequestAccess={requestCricketAccess}
+          />
+        )}
         {sitePage === "ad-studio" && (
           <AdStudio
             onExit={() => {
@@ -10911,6 +11567,7 @@ export default function App() {
           open={showEmailGate}
           onClose={() => {
             (window as any).trackAnalyticsEvent?.('paywall_dismiss');
+            setEmailGateTarget("app");
             setShowEmailGate(false);
           }}
           onSuccess={handleEmailSuccess}
