@@ -1,0 +1,24 @@
+# RightEdge
+> NRL sports betting analytics platform built on a proprietary mathematical model.
+
+RightEdge simulates every NRL match to identify where bookmakers are mispricing the market. We calculate true win probabilities, projected scores, and mathematical edges vs market odds. Updated every round of the NRL season.
+
+## What we offer
+- Round-by-round NRL match predictions
+- True win probability vs market implied probability
+- Mathematical edge identification
+- Official best bets with staking plans
+- Live bookmaker price comparison
+- One free featured match pick per round
+
+## Pricing
+- Free: Featured match pick each round
+- Full access: $9 per round
+
+## Key pages
+- /predictions — Current round predictions and model outputs
+- /results — Historical track record and performance
+- /methodology — How the model works
+
+## Contact
+- Website: https://www.rightedge.com.au
