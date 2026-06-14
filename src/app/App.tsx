@@ -3483,10 +3483,11 @@ type CricketTeamRating = {
 type CricketFixturePrototype = {
   id: string;
   competition: string;
-  format: "BBL" | "Test";
+  format: "BBL" | "Test" | "T20I";
   stage: string;
   home: string;
   away: string;
+  suppressValuePick?: boolean;
   marketOdds: {
     home: number;
     away: number;
@@ -3512,6 +3513,29 @@ type CricketComputedFixture = CricketFixturePrototype & {
   kellyFraction: number;
 };
 
+type CricketLiveOddsOutcome = {
+  name: string;
+  price: number;
+};
+
+type CricketLiveOddsEvent = {
+  id: string;
+  sport_key: string;
+  sport_title: string;
+  commence_time: string;
+  home_team: string;
+  away_team: string;
+  bookmakers?: Array<{
+    key: string;
+    title: string;
+    last_update: string;
+    markets?: Array<{
+      key: string;
+      outcomes?: CricketLiveOddsOutcome[];
+    }>;
+  }>;
+};
+
 const CRICKET_MODEL_PARAMS = {
   bbl_league_avg_runs: 164,
   bbl_runs_std: 26.5,
@@ -3524,6 +3548,11 @@ const CRICKET_MODEL_PARAMS = {
 const CRICKET_RATINGS_GENERATED_AT = "2026-06-14T13:23:58.500949+00:00";
 
 const CRICKET_RATINGS: Record<string, Record<string, CricketTeamRating>> = {
+  "T20 Internationals": {
+    // Neutral seed for live API smoke tests only. Replace with exported T20I ratings before publishing picks.
+    "West Indies": { elo: 1500, runs_for: 164, runs_against: 164, n_matches: 0, last_seen: "seed" },
+    "Sri Lanka": { elo: 1500, runs_for: 164, runs_against: 164, n_matches: 0, last_seen: "seed" },
+  },
   "Big Bash League": {
     "Sydney Sixers": { elo: 1586.43, runs_for: 143.8, runs_against: 135.6, n_matches: 12, last_seen: "2026-01-25" },
     "Brisbane Heat": { elo: 1509.08, runs_for: 180.2, runs_against: 188.8, n_matches: 12, last_seen: "2026-01-18" },
@@ -3638,7 +3667,7 @@ function computeCricketFixture(fixture: CricketFixturePrototype): CricketCompute
   let projectedHome: number | null = null;
   let projectedAway: number | null = null;
 
-  if (fixture.format === "BBL") {
+  if (fixture.format !== "Test") {
     const leagueAverage = CRICKET_MODEL_PARAMS.bbl_league_avg_runs;
     const homeRaw = 0.5 * home.runs_for + 0.5 * away.runs_against;
     const awayRaw = 0.5 * away.runs_for + 0.5 * home.runs_against;
@@ -3691,10 +3720,10 @@ function computeCricketFixture(fixture: CricketFixturePrototype): CricketCompute
     edgeDraw,
     projectedHome,
     projectedAway,
-    valuePick: confidence && best ? best.side : null,
+    valuePick: fixture.suppressValuePick ? null : (confidence && best ? best.side : null),
     bestEdge: best?.edge || 0,
-    confidence,
-    kellyFraction: confidence && best ? cricketKelly(best.probability, best.odds) : 0,
+    confidence: fixture.suppressValuePick ? null : confidence,
+    kellyFraction: fixture.suppressValuePick ? 0 : (confidence && best ? cricketKelly(best.probability, best.odds) : 0),
   };
 }
 
@@ -3718,6 +3747,56 @@ function getCricketPickLabel(fixture: CricketComputedFixture) {
   if (fixture.valuePick === "away") return fixture.away;
   if (fixture.valuePick === "draw") return "Draw";
   return "No premium play";
+}
+
+function getCricketBetrH2h(event?: CricketLiveOddsEvent | null) {
+  const betrBook = event?.bookmakers?.find((bookmaker) => isBetrBookmaker(bookmaker.key || bookmaker.title));
+  return betrBook?.markets?.find((market) => market.key === "h2h")?.outcomes || [];
+}
+
+function findCricketOutcomePrice(outcomes: CricketLiveOddsOutcome[], team: string) {
+  const target = team.trim().toLowerCase();
+  const outcome = outcomes.find((item) => item.name.trim().toLowerCase() === target);
+  const price = Number(outcome?.price);
+  return Number.isFinite(price) ? price : null;
+}
+
+async function fetchCricketLiveOddsCached(home = "West Indies", away = "Sri Lanka") {
+  const cacheKey = `rightedge_cricket_live_odds_v1_${home}_${away}`.toLowerCase().replace(/[^a-z0-9]+/g, "_");
+
+  if (fetchOddsPromises.has(cacheKey)) {
+    return fetchOddsPromises.get(cacheKey)! as Promise<CricketLiveOddsEvent[]>;
+  }
+
+  const params = new URLSearchParams({
+    bookmaker: "betr",
+    home,
+    away,
+    _: String(Date.now()),
+  });
+
+  const fetchPromise = fetch(`/api/cricket-live-odds?${params.toString()}`, {
+    cache: "no-store",
+    headers: {
+      Authorization: `Bearer ${publicAnonKey}`,
+      Accept: "application/json",
+      "Cache-Control": "no-cache",
+    },
+  })
+    .then(async (res) => {
+      if (!res.ok) throw new Error("Cricket API Error");
+      const data = await res.json();
+      if (data.error || !Array.isArray(data)) throw new Error("Invalid Cricket Data");
+      fetchOddsPromises.delete(cacheKey);
+      return data as CricketLiveOddsEvent[];
+    })
+    .catch((err) => {
+      fetchOddsPromises.delete(cacheKey);
+      throw err;
+    });
+
+  fetchOddsPromises.set(cacheKey, fetchPromise);
+  return fetchPromise as Promise<CricketLiveOddsEvent[]>;
 }
 
 function CricketAccessPanel({
@@ -3889,6 +3968,142 @@ function CricketFixtureCard({ fixture }: { fixture: CricketComputedFixture }) {
   );
 }
 
+function CricketLiveTestCard({
+  event,
+  loading,
+  error,
+  onRefresh,
+}: {
+  event: CricketLiveOddsEvent | null;
+  loading: boolean;
+  error: string;
+  onRefresh: () => void;
+}) {
+  const outcomes = getCricketBetrH2h(event);
+  const homeTeam = event?.home_team || "West Indies";
+  const awayTeam = event?.away_team || "Sri Lanka";
+  const homePrice = findCricketOutcomePrice(outcomes, homeTeam);
+  const awayPrice = findCricketOutcomePrice(outcomes, awayTeam);
+  const canRunHarness = !!event && !!homePrice && !!awayPrice;
+  const fixture = canRunHarness
+    ? computeCricketFixture({
+        id: `live-betr-${event.id}`,
+        competition: "T20 Internationals",
+        format: "T20I",
+        stage: "Live Betr API test",
+        home: homeTeam,
+        away: awayTeam,
+        suppressValuePick: true,
+        marketOdds: { home: homePrice!, away: awayPrice! },
+      })
+    : null;
+  const marketProbabilities = homePrice && awayPrice ? devigProbabilities([homePrice, awayPrice]) : [];
+
+  return (
+    <GlassCard className="p-6 sm:p-8">
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <div className="mb-3 inline-flex items-center gap-2 border border-[#1E1E2E] bg-[#16161D] px-3 py-1.5 text-[10px] font-medium uppercase tracking-widest text-[#9CA3AF]">
+            <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+            Betr cricket live feed
+          </div>
+          <h2 className="text-2xl font-semibold uppercase tracking-tight text-white sm:text-3xl">
+            West Indies v Sri Lanka
+          </h2>
+          <p className="mt-2 text-sm leading-7 text-[#9CA3AF]">
+            This card pulls the match from the BlueBet/Betr cricket API and runs the RightEdge T20 model harness against the live head-to-head price.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onRefresh}
+          className="inline-flex h-10 items-center gap-2 border border-white bg-white px-4 text-xs font-medium uppercase tracking-widest text-[#0A0A0F] transition hover:opacity-85"
+        >
+          <RefreshCw className="h-4 w-4" />
+          Refresh
+        </button>
+      </div>
+
+      {error && (
+        <div className="mb-5 border border-[#7F1D1D] bg-[#1F0A0A] p-4 text-sm leading-6 text-[#FCA5A5]">
+          {error}
+        </div>
+      )}
+
+      {loading && !event ? (
+        <div className="border border-[#1E1E2E] bg-[#16161D] p-5 text-sm font-medium uppercase tracking-widest text-[#9CA3AF]">
+          Pulling live Betr cricket odds...
+        </div>
+      ) : fixture ? (
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="border border-[#1E1E2E] bg-[#16161D] p-4">
+              <div className="text-[10px] font-medium uppercase tracking-widest text-[#9CA3AF]">Betr price</div>
+              <div className="mt-2 flex items-end justify-between gap-3">
+                <div className="text-lg font-semibold uppercase tracking-tight text-white">{homeTeam}</div>
+                <div className="text-3xl font-semibold text-white">{homePrice!.toFixed(2)}</div>
+              </div>
+              <div className="mt-2 text-xs text-[#9CA3AF]">
+                Market {formatCricketPercent(marketProbabilities[0] || 0)}
+              </div>
+            </div>
+            <div className="border border-[#1E1E2E] bg-[#16161D] p-4">
+              <div className="text-[10px] font-medium uppercase tracking-widest text-[#9CA3AF]">Betr price</div>
+              <div className="mt-2 flex items-end justify-between gap-3">
+                <div className="text-lg font-semibold uppercase tracking-tight text-white">{awayTeam}</div>
+                <div className="text-3xl font-semibold text-white">{awayPrice!.toFixed(2)}</div>
+              </div>
+              <div className="mt-2 text-xs text-[#9CA3AF]">
+                Market {formatCricketPercent(marketProbabilities[1] || 0)}
+              </div>
+            </div>
+
+            <div className="border border-[#1E1E2E] bg-[#0A0A0F] p-4">
+              <div className="mb-1 text-[10px] font-medium uppercase tracking-widest text-[#9CA3AF]">Model fair</div>
+              <div className="text-xl font-semibold text-white">
+                {formatCricketPercent(fixture.probHome)} / {formatCricketPercent(fixture.probAway)}
+              </div>
+              <div className="mt-1 text-xs text-[#9CA3AF]">
+                Fair {formatCricketOdds(fixture.fairHome)} / {formatCricketOdds(fixture.fairAway)}
+              </div>
+            </div>
+            <div className="border border-[#1E1E2E] bg-[#0A0A0F] p-4">
+              <div className="mb-1 text-[10px] font-medium uppercase tracking-widest text-[#9CA3AF]">Edge check</div>
+              <div className="text-xl font-semibold text-white">
+                {formatCricketSignedPts(fixture.edgeHome)} / {formatCricketSignedPts(fixture.edgeAway)}
+              </div>
+              <div className="mt-1 text-xs text-[#9CA3AF]">
+                Premium pick disabled for this smoke test.
+              </div>
+            </div>
+          </div>
+
+          <div className="border border-[#1E1E2E] bg-[#16161D] p-5">
+            <div className="mb-4 inline-flex items-center gap-2 border border-[#1E1E2E] bg-[#0A0A0F] px-3 py-1.5 text-[10px] font-medium uppercase tracking-widest text-white">
+              <BadgeCheck className="h-3.5 w-3.5" />
+              Pipeline check
+            </div>
+            <div className="space-y-3 text-sm leading-6 text-[#9CA3AF]">
+              <p>BlueBet event ID: {event?.id}</p>
+              <p>
+                Start: {event?.commence_time ? new Date(event.commence_time).toLocaleString("en-AU", {
+                  dateStyle: "medium",
+                  timeStyle: "short",
+                }) : "-"}
+              </p>
+              <p>Model seed: neutral T20I placeholder. Real T20I ratings still need to be exported from the Python cricket model before this can publish a play.</p>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="border border-[#1E1E2E] bg-[#16161D] p-5 text-sm leading-7 text-[#9CA3AF]">
+          No live Betr head-to-head market was returned for West Indies v Sri Lanka.
+        </div>
+      )}
+    </GlassCard>
+  );
+}
+
 function CricketPrototypePage({
   authState,
   onRequestAccess,
@@ -3896,13 +4111,35 @@ function CricketPrototypePage({
   authState: RuntimeAuthState;
   onRequestAccess: () => void;
 }) {
-  const [view, setView] = useState<"slate" | "model" | "build">("slate");
+  const [view, setView] = useState<"slate" | "live" | "model" | "build">("slate");
+  const [liveEvents, setLiveEvents] = useState<CricketLiveOddsEvent[]>([]);
+  const [liveLoading, setLiveLoading] = useState(false);
+  const [liveError, setLiveError] = useState("");
   const hasAccess = canAccessCricketPrototype(authState.email);
   const fixtures = useMemo(
     () => CRICKET_PROTOTYPE_FIXTURES.map(computeCricketFixture),
     [],
   );
   const premiumCount = fixtures.filter((fixture) => fixture.confidence).length;
+
+  const refreshCricketLiveTest = () => {
+    setLiveLoading(true);
+    setLiveError("");
+    fetchCricketLiveOddsCached()
+      .then((events) => {
+        setLiveEvents(events);
+      })
+      .catch((err) => {
+        setLiveError((err as Error)?.message || "Unable to load cricket live odds");
+      })
+      .finally(() => {
+        setLiveLoading(false);
+      });
+  };
+
+  useEffect(() => {
+    if (hasAccess) refreshCricketLiveTest();
+  }, [hasAccess]);
 
   if (!hasAccess) {
     return (
@@ -3965,6 +4202,7 @@ function CricketPrototypePage({
       <div className="flex flex-wrap gap-2 border border-[#1E1E2E] bg-[#111116] p-2">
         {[
           { id: "slate", label: "Model slate", icon: Target },
+          { id: "live", label: "Live Betr test", icon: RefreshCw },
           { id: "model", label: "Offline brain", icon: Gauge },
           { id: "build", label: "Production path", icon: Activity },
         ].map((item) => {
@@ -3974,7 +4212,7 @@ function CricketPrototypePage({
             <button
               key={item.id}
               type="button"
-              onClick={() => setView(item.id as "slate" | "model" | "build")}
+              onClick={() => setView(item.id as "slate" | "live" | "model" | "build")}
               className={`inline-flex h-10 items-center gap-2 px-4 text-xs font-medium uppercase tracking-widest transition ${
                 active
                   ? "bg-white text-[#0A0A0F]"
@@ -3993,6 +4231,17 @@ function CricketPrototypePage({
           {fixtures.map((fixture) => (
             <CricketFixtureCard key={fixture.id} fixture={fixture} />
           ))}
+        </section>
+      )}
+
+      {view === "live" && (
+        <section>
+          <CricketLiveTestCard
+            event={liveEvents[0] || null}
+            loading={liveLoading}
+            error={liveError}
+            onRefresh={refreshCricketLiveTest}
+          />
         </section>
       )}
 
