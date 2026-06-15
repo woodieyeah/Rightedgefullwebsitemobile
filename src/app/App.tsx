@@ -8889,6 +8889,117 @@ function OriginPage({
         </div>
       </GlassCard>
 
+      {/* THE EDGE — top play this game (hero) */}
+      {(() => {
+        const lead = originPremiumPlays[0] || null;
+        const margin = Math.abs(
+          originRow.predictedHomeScore - originRow.predictedAwayScore,
+        );
+        const marginLabel =
+          originRow.predictedHomeScore >= originRow.predictedAwayScore
+            ? `NSW by ${margin}`
+            : `QLD by ${margin}`;
+        if (!lead) {
+          return (
+            <GlassCard className="p-4 md:p-6 border-l-4 border-l-[#6B7280]">
+              <div className="text-[10px] font-black uppercase tracking-[0.18em] text-[#6B7280] mb-2">
+                No positive edge
+              </div>
+              <div className="text-lg md:text-2xl font-black uppercase tracking-tight text-white">
+                Waiting for Betr to move into value range.
+              </div>
+            </GlassCard>
+          );
+        }
+        const isLine = lead.type === "Line";
+        const rationale = isLine ? (
+          <>
+            Our model sees a <span className="font-black text-white">{margin}-point game</span> (NSW{" "}
+            {originRow.predictedHomeScore}–{originRow.predictedAwayScore}). The market is laying{" "}
+            <span className="font-black text-white">{lead.selection}</span>, so we&apos;re taking the underdog
+            start <span className="font-black text-white">plus the hook</span> on a margin the model rates tighter
+            than the price implies.
+          </>
+        ) : (
+          <>
+            Our model sees a <span className="font-black text-white">{margin}-point game</span> (NSW{" "}
+            {originRow.predictedHomeScore}–{originRow.predictedAwayScore}).{" "}
+            <span className="font-black text-white">{lead.selection}</span> beats the market price our model
+            implies — this isn&apos;t just the bookies&apos; favourite.
+          </>
+        );
+        return (
+          <GlassCard className="overflow-hidden p-0 border-l-4 border-l-[#00E676]">
+            <div className="flex items-center justify-between gap-3 bg-[#0A0A0F] px-4 py-3 md:px-6">
+              <div className="text-[10px] font-black uppercase tracking-[0.18em] text-white">
+                The edge — top play this game
+              </div>
+              <div className="bg-[#00E676] px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.18em] text-white">
+                Best bet
+              </div>
+            </div>
+            <div className="flex flex-col gap-4 p-4 md:p-6">
+              <div>
+                <div className="text-2xl md:text-4xl font-black uppercase tracking-tight text-white leading-none">
+                  {lead.selection}
+                </div>
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-[#6B7280]">
+                  <span>{lead.type}</span>
+                  <span className="text-[#6B7280]">·</span>
+                  <span>NSW Blues v QLD Maroons</span>
+                  <span className="text-[#6B7280]">·</span>
+                  <span>{lead.bookmaker || "Betr"}</span>
+                </div>
+              </div>
+              <div className="border-l-2 border-l-[#00E676] bg-[#111116] px-4 py-3">
+                <p className="text-[12px] md:text-sm font-medium leading-relaxed text-white/70">
+                  {rationale}
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-2 md:grid-cols-4 md:gap-3">
+                <div className="border border-[#1E1E2E] bg-[#16161D] p-3 md:p-4">
+                  <div className="text-[8px] md:text-[9px] font-black uppercase tracking-[0.18em] text-[#6B7280] mb-1.5">
+                    Model margin
+                  </div>
+                  <div className="text-base md:text-2xl font-black text-white">{marginLabel}</div>
+                </div>
+                <div className="border border-[#1E1E2E] bg-[#16161D] p-3 md:p-4">
+                  <div className="text-[8px] md:text-[9px] font-black uppercase tracking-[0.18em] text-[#6B7280] mb-1.5">
+                    Market line
+                  </div>
+                  <div className="text-base md:text-2xl font-black text-white">
+                    QLD {formatSgmLine(originMarketLine.point)}
+                  </div>
+                </div>
+                <div className="border border-[#1E1E2E] bg-[#16161D] p-3 md:p-4">
+                  <div className="text-[8px] md:text-[9px] font-black uppercase tracking-[0.18em] text-[#6B7280] mb-1.5">
+                    Model %
+                  </div>
+                  <div className="text-base md:text-2xl font-black text-white">
+                    {formatPercent(lead.modelPct, 1)}
+                  </div>
+                </div>
+                <div className="border border-[#1E1E2E] bg-[#16161D] p-3 md:p-4">
+                  <div className="text-[8px] md:text-[9px] font-black uppercase tracking-[0.18em] text-[#6B7280] mb-1.5">
+                    Edge
+                  </div>
+                  <div className="text-base md:text-2xl font-black text-[#00E676]">
+                    +{formatPercent(lead.modelEdge, 1)}
+                  </div>
+                </div>
+              </div>
+              <AffiliateMarketButton
+                payload="rightedge_origin_top_play"
+                bookmaker={lead.bookmaker || "Betr"}
+                odds={lead.odds}
+                label={`Back at ${lead.bookmaker || "Betr"} · $${lead.odds.toFixed(2)}`}
+                className="w-full justify-center py-3.5 text-sm"
+              />
+            </div>
+          </GlassCard>
+        );
+      })()}
+
       <GlassCard className="p-4 md:p-6">
         <div className="flex flex-col gap-5">
           <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
@@ -8989,123 +9100,79 @@ function OriginPage({
               </div>
             </div>
           </div>
-
-          <div className="border border-[#1E1E2E] bg-[#0A0A0F] p-1">
-            <div className="grid grid-cols-3 gap-1">
-              {originMarketReadGroups.map((group) => (
-                <button
-                  key={group.id}
-                  type="button"
-                  onClick={() => setActiveOriginMarketRead(group.id)}
-                  className={`min-h-[36px] px-2 text-[10px] font-medium uppercase tracking-widest transition ${
-                    activeOriginMarketRead === group.id
-                      ? "bg-white text-[#0A0A0F]"
-                      : "bg-transparent text-[#6B7280] hover:bg-white/5 hover:text-white"
-                  }`}
-                >
-                  {group.id === "total" ? "Total" : group.title}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:gap-3">
-            {activeOriginMarketReadGroup.reads.map((read) => (
-              <div
-                key={`${activeOriginMarketReadGroup.title}-${read.label}`}
-                className="border border-[#1E1E2E] bg-[#111116] p-3 md:p-4"
-              >
-                <div className="mb-3 flex min-w-0 items-center justify-between gap-3">
-                  <div className="min-w-0 truncate text-sm font-black uppercase tracking-tight text-white md:text-base">
-                    {read.label}
-                  </div>
-                  <div className="shrink-0 text-[8px] font-black uppercase tracking-[0.18em] text-[#6B7280]">
-                    {activeOriginMarketReadGroup.title}
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="border border-[#1E1E2E] bg-[#16161D] px-3 py-2.5">
-                    <div className="text-[8px] font-black uppercase tracking-[0.18em] text-[#6B7280]">
-                      Model %
-                    </div>
-                    <div className="mt-1 text-lg font-black text-white md:text-xl">
-                      {read.modelPct ? formatPercent(read.modelPct, 1) : "—"}
-                    </div>
-                  </div>
-                  <div className="border border-[#1E1E2E] bg-[#16161D] px-3 py-2.5">
-                    <div className="text-[8px] font-black uppercase tracking-[0.18em] text-[#6B7280]">
-                      Edge
-                    </div>
-                    <div className={`mt-1 text-lg font-black md:text-xl ${
-                      read.edge > 0 ? "text-[#00E676]" : "text-[#9CA3AF]"
-                    }`}>
-                      {read.modelPct ? `${read.edge >= 0 ? "+" : ""}${formatPercent(read.edge, 1)}` : "—"}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
         </div>
       </GlassCard>
 
-      <div className="flex flex-col gap-4">
-        <div>
-          <h3 className="text-lg md:text-2xl font-black text-white uppercase tracking-tight">
-            Premium Plays
-          </h3>
-          {originPremiumPlays.length > 0 && (
-            <p className="mt-2 text-[11px] font-medium leading-relaxed text-white/45">
-              {(() => {
-                const lead = originPremiumPlays[0];
-                const margin = Math.abs(
-                  originRow.predictedHomeScore - originRow.predictedAwayScore,
-                );
-                const leadIn =
-                  margin <= 6
-                    ? `The model sees a tight ${margin}-point game (NSW ${originRow.predictedHomeScore}–${originRow.predictedAwayScore}). `
-                    : `The model projects NSW ${originRow.predictedHomeScore}–${originRow.predictedAwayScore}. `;
-                if (lead.type === "Line") {
-                  return (
-                    <>
-                      {leadIn}
-                      <span className="font-black text-white">
-                        The value is on the margin—not just who wins.
-                      </span>{" "}
-                      Every play below beats the market price our model implies.
-                    </>
-                  );
-                }
-                return (
-                  <>
-                    {leadIn}
-                    <span className="font-black text-white">
-                      Every play below beats the market price our model implies
-                    </span>{" "}
-                    — these aren&apos;t just the bookies&apos; favourites.
-                  </>
-                );
-              })()}
-            </p>
-          )}
+      {/* ALSO WORTH A LOOK — secondary positive-edge plays (lead is already in the hero) */}
+      {originPremiumPlays.length > 1 && (
+        <div className="flex flex-col gap-4">
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-lg md:text-2xl font-black text-white uppercase tracking-tight">
+              Also worth a look
+            </h3>
+            <span className="border border-[#1E1E2E] bg-[#16161D] px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.18em] text-[#6B7280]">
+              Positive edge
+            </span>
+          </div>
+          <div className="grid grid-cols-1 gap-4 md:gap-5">
+            {originPremiumPlays.slice(1).map((play) => (
+              <GlassCard key={play.id} className="overflow-hidden p-0">
+                <div className="flex items-center justify-between gap-3 px-4 py-3 md:px-5">
+                  <div className="min-w-0 truncate text-lg md:text-2xl font-black uppercase tracking-tight text-white">
+                    {play.selection}
+                  </div>
+                  <span className="shrink-0 border border-[#1E1E2E] bg-[#16161D] px-2 py-1 text-[8px] font-black uppercase tracking-[0.18em] text-[#6B7280]">
+                    {play.type === "Total" ? "Total" : play.type === "Line" ? "Line" : "H2H"}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 px-4 md:grid-cols-4 md:gap-3 md:px-5">
+                  <div className="border border-[#1E1E2E] bg-[#16161D] p-3">
+                    <div className="text-[8px] font-black uppercase tracking-[0.18em] text-[#6B7280] mb-1.5">
+                      Model %
+                    </div>
+                    <div className="text-base md:text-xl font-black text-[#00E676]">
+                      {formatPercent(play.modelPct, 1)}
+                    </div>
+                  </div>
+                  <div className="border border-[#1E1E2E] bg-[#16161D] p-3">
+                    <div className="text-[8px] font-black uppercase tracking-[0.18em] text-[#6B7280] mb-1.5">
+                      Market %
+                    </div>
+                    <div className="text-base md:text-xl font-black text-white">
+                      {formatPercent(getImpliedWinPctFromOdds(play.odds), 1)}
+                    </div>
+                  </div>
+                  <div className="border border-[#1E1E2E] bg-[#16161D] p-3">
+                    <div className="text-[8px] font-black uppercase tracking-[0.18em] text-[#6B7280] mb-1.5">
+                      Edge
+                    </div>
+                    <div className="text-base md:text-xl font-black text-[#00E676]">
+                      +{formatPercent(play.modelEdge, 1)}
+                    </div>
+                  </div>
+                  <div className="border border-[#1E1E2E] bg-[#16161D] p-3">
+                    <div className="text-[8px] font-black uppercase tracking-[0.18em] text-[#6B7280] mb-1.5">
+                      Odds
+                    </div>
+                    <div className="text-base md:text-xl font-black text-white">
+                      ${play.odds.toFixed(2)}
+                    </div>
+                  </div>
+                </div>
+                <div className="p-4 md:p-5">
+                  <AffiliateMarketButton
+                    payload="rightedge_origin_secondary_play"
+                    bookmaker={play.bookmaker || "Betr"}
+                    odds={play.odds}
+                    label={`Back at ${play.bookmaker || "Betr"} · $${play.odds.toFixed(2)}`}
+                    className="w-full justify-center py-3 text-sm"
+                  />
+                </div>
+              </GlassCard>
+            ))}
+          </div>
         </div>
-        <div className="grid grid-cols-1 gap-4 md:gap-5">
-          {originPremiumPlays.length ? (
-            originPremiumPlays.map((play) => (
-              <PremiumMarketPlayCard key={play.id} play={play} now={now} />
-            ))
-          ) : (
-            <GlassCard className="p-4 md:p-6 border-l-4 border-l-[#6B7280]">
-              <div className="text-[10px] font-black uppercase tracking-[0.18em] text-[#6B7280] mb-2">
-                No positive edge
-              </div>
-              <div className="text-lg md:text-2xl font-black uppercase tracking-tight text-white">
-                Waiting for Betr to move into value range.
-              </div>
-            </GlassCard>
-          )}
-        </div>
-      </div>
+      )}
 
       <div className="flex flex-col gap-4">
         <div>
@@ -9117,12 +9184,18 @@ function OriginPage({
           // Hero = the single highest positive-edge scorer (value play).
           const heroScorer = positiveOriginTryScorerSignals[0] || null;
           const heroPlayerKey = heroScorer ? normalizeOriginPlayerName(heroScorer.prop.player) : "";
-          // Context list = every OTHER scorer, sorted by model % only. We show
-          // model probability only here (no edge) — these are shown for context,
-          // not called as plays.
+          // Context list = every OTHER scorer, grouped BY TEAM. We show model
+          // probability only here (no edge) — shown for context, not called as plays.
           const contextScorers = originTryScorerSignals
-            .filter((s) => normalizeOriginPlayerName(s.prop.player) !== heroPlayerKey)
-            .sort((a, b) => b.prop.probability - a.prop.probability);
+            .filter((s) => normalizeOriginPlayerName(s.prop.player) !== heroPlayerKey);
+          const contextByTeam = states
+            .map((state) => ({
+              state,
+              scorers: contextScorers
+                .filter((s) => s.state.key === state.key)
+                .sort((a, b) => b.prop.probability - a.prop.probability),
+            }))
+            .filter((group) => group.scorers.length > 0);
           return (
             <div className="flex flex-col gap-4">
               {heroScorer ? (
@@ -9188,28 +9261,49 @@ function OriginPage({
                 </GlassCard>
               )}
 
-              {contextScorers.length > 0 && (
-                <div className="flex flex-col gap-3">
+              {contextByTeam.length > 0 && (
+                <div className="flex flex-col gap-4">
                   <p className="text-[11px] font-medium leading-relaxed text-white/45">
                     The model&apos;s read on every other scorer in this game. None are priced as value right now, so they&apos;re
                     <span className="font-black text-white"> shown for context only — not called as plays.</span>
                   </p>
-                  <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-                    {contextScorers.map(({ state, prop }) => (
-                      <div
-                        key={`origin-context-scorer-${state.key}-${prop.player}`}
-                        className="flex items-center justify-between gap-3 border border-[#1E1E2E] bg-[#111116] px-3 py-2.5"
-                      >
-                        <div className="min-w-0 truncate text-sm font-black text-white">
-                          {prop.player}
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    {contextByTeam.map(({ state, scorers }) => (
+                      <div key={`origin-context-team-${state.key}`} className="flex flex-col gap-2">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className="flex h-6 w-9 shrink-0 items-center justify-center border text-[8px] font-black uppercase tracking-widest"
+                            style={{
+                              backgroundColor: state.colors.primary,
+                              borderColor: state.colors.secondary,
+                              color: state.colors.secondary,
+                            }}
+                          >
+                            {state.short}
+                          </span>
+                          <span className="text-[10px] font-black uppercase tracking-[0.18em] text-white/45">
+                            {state.name}
+                          </span>
                         </div>
-                        <div className="flex shrink-0 items-baseline gap-1.5">
-                          <span className="text-[7px] font-black uppercase tracking-[0.18em] text-white/45">
-                            Model
-                          </span>
-                          <span className="text-sm font-black text-white/70">
-                            {formatPercent(prop.probability, 1)}
-                          </span>
+                        <div className="flex flex-col gap-2">
+                          {scorers.map(({ prop }) => (
+                            <div
+                              key={`origin-context-scorer-${state.key}-${prop.player}`}
+                              className="flex items-center justify-between gap-3 border border-[#1E1E2E] bg-[#111116] px-3 py-2.5"
+                            >
+                              <div className="min-w-0 truncate text-sm font-black text-white">
+                                {prop.player}
+                              </div>
+                              <div className="flex shrink-0 items-baseline gap-1.5">
+                                <span className="text-[7px] font-black uppercase tracking-[0.18em] text-white/45">
+                                  Model
+                                </span>
+                                <span className="text-sm font-black text-white/70">
+                                  {formatPercent(prop.probability, 1)}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
                         </div>
                       </div>
                     ))}
