@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { HelmetProvider, Helmet } from "react-helmet-async";
 import {
   projectId,
@@ -809,8 +809,34 @@ const ROUND_15_LIVE_PROOF: RoundArchive = {
   ],
 };
 
-const ROUND_PROOF_ARCHIVES: RoundArchive[] = [ROUND_15_LIVE_PROOF, ROUND_14_PROOF];
-const ROUND_ARCHIVES: RoundArchive[] = [ROUND_14_PROOF];
+// Hardcoded proof archives (kept working as-is). New rounds are derived from KV
+// at runtime and merged in via registerKvDerivedArchives() below.
+const HARDCODED_PROOF_ARCHIVES: RoundArchive[] = [ROUND_15_LIVE_PROOF, ROUND_14_PROOF];
+const HARDCODED_ROUND_ARCHIVES: RoundArchive[] = [ROUND_14_PROOF];
+
+// KV-derived archives (rolled-over rounds). Replaced wholesale when KV loads.
+let KV_DERIVED_ARCHIVES: RoundArchive[] = [];
+
+// Live, merged views consumed by helpers + JSX. Hardcoded archives win on round
+// collision so ROUND_14_PROOF / ROUND_15_LIVE_PROOF always render as authored.
+let ROUND_PROOF_ARCHIVES: RoundArchive[] = [...HARDCODED_PROOF_ARCHIVES];
+let ROUND_ARCHIVES: RoundArchive[] = [...HARDCODED_ROUND_ARCHIVES];
+
+function rebuildArchiveRegistries() {
+  const hardcodedRounds = new Set(HARDCODED_PROOF_ARCHIVES.map((a) => a.round));
+  const extraProof = KV_DERIVED_ARCHIVES.filter((a) => !hardcodedRounds.has(a.round));
+  ROUND_PROOF_ARCHIVES = [...extraProof, ...HARDCODED_PROOF_ARCHIVES];
+
+  const hardcodedArchiveRounds = new Set(HARDCODED_ROUND_ARCHIVES.map((a) => a.round));
+  const extraArchive = KV_DERIVED_ARCHIVES.filter((a) => !hardcodedArchiveRounds.has(a.round));
+  ROUND_ARCHIVES = [...extraArchive, ...HARDCODED_ROUND_ARCHIVES].sort((a, b) => b.round - a.round);
+}
+
+// Called by the App once KV-derived (rolled-over) archives are loaded.
+function registerKvDerivedArchives(archives: RoundArchive[]) {
+  KV_DERIVED_ARCHIVES = archives;
+  rebuildArchiveRegistries();
+}
 
 function splitMatchTeams(match: string) {
   const [home = "", away = ""] = String(match || "").split(/\s+v\s+/i);
@@ -964,6 +990,12 @@ function getAppPages(isAdmin: boolean, canViewOrigin: boolean) {
   if (isAdmin) {
     return [
       ...visiblePages,
+      {
+        id: "admin-results",
+        label: "Results Entry",
+        mobileLabel: "Results",
+        icon: <CheckCircle2 className="w-5 h-5" />,
+      },
       {
         id: "admin",
         label: "Admin",
@@ -1885,6 +1917,546 @@ function getRoundProofForTryScorer(row: TryScorerRow) {
       getMatchPairKeyFromLabel(proof.match) === pairKey &&
       proof.player.trim().toLowerCase() === playerKey,
   ) || null;
+}
+
+// ---------------------------------------------------------------------------
+// Freeze-at-kickoff + results: shared types, helpers, and data hook.
+// ---------------------------------------------------------------------------
+
+type FrozenTryScorer = {
+  player: string;
+  team: string;
+  position?: string;
+  odds: number;
+  bookmaker: string;
+};
+
+type FrozenPlayPayload = {
+  selection: string;
+  type: PremiumMarketPlay["type"];
+  odds: number;
+  bookmaker: string;
+  modelPct: number;
+  modelEdge: number;
+  marketPoint?: number;
+  projectedValue?: number;
+  predictedScore?: string;
+  homeTeam: string;
+  awayTeam: string;
+  round: number;
+  fixture: {
+    match: string;
+    day: string;
+    dateISO: string;
+    dateLabel: string;
+    aedt: string;
+    stadium: string;
+    tz?: string;
+  } | null;
+  tryScorers: FrozenTryScorer[];
+};
+
+type FrozenSnapshot = {
+  round: number;
+  match: string;
+  matchKey: string;
+  payload: FrozenPlayPayload;
+  frozenAt?: string;
+};
+
+type SavedRoundResult = {
+  round: number;
+  match: string;
+  matchKey: string;
+  finalHome: number | null;
+  finalAway: number | null;
+  playResult: "HIT" | "MISS" | "PUSH" | null;
+  tryScorerHits: Record<string, boolean>;
+  updatedAt?: string;
+};
+
+function normalizeTryScorerPlayerKey(player: string) {
+  return String(player || "").trim().toLowerCase();
+}
+
+// Map admin HIT/MISS/PUSH onto the existing ProofResult palette so we can reuse
+// PremiumResultBadge / getProofResultClass without new colors.
+function playResultToProof(result: SavedRoundResult["playResult"]): ProofResult | undefined {
+  if (result === "HIT") return "Hit";
+  if (result === "MISS") return "Miss";
+  if (result === "PUSH") return "Needs Check";
+  return undefined;
+}
+
+// Build the snapshot payload for a live play + its try scorers at kickoff.
+function buildFrozenPayloadFromPlay(
+  play: PremiumMarketPlay,
+  tryScorers: FrozenTryScorer[],
+): FrozenPlayPayload {
+  const { row } = play;
+  const predictedScore =
+    row.predictedHomeScore || row.predictedAwayScore
+      ? `${Math.round(row.predictedHomeScore)}-${Math.round(row.predictedAwayScore)}`
+      : "";
+  return {
+    selection: play.selection,
+    type: play.type,
+    odds: play.odds,
+    bookmaker: play.bookmaker,
+    modelPct: play.modelPct,
+    modelEdge: play.modelEdge,
+    marketPoint: play.marketPoint,
+    projectedValue: play.projectedValue,
+    predictedScore,
+    homeTeam: row.homeTeam,
+    awayTeam: row.awayTeam,
+    round: row.roundNumber,
+    fixture: row.fixture
+      ? {
+          match: `${row.homeTeam} v ${row.awayTeam}`,
+          day: row.fixture.day,
+          dateISO: row.fixture.dateISO,
+          dateLabel: row.fixture.dateLabel,
+          aedt: row.fixture.aedt,
+          stadium: row.fixture.stadium,
+          tz: row.fixture.tz,
+        }
+      : null,
+    tryScorers,
+  };
+}
+
+// Reconstruct a PremiumMarketPlay from a frozen snapshot, reusing the live
+// prediction row where available so PremiumMarketPlayCard renders identically.
+function reconstructFrozenPlay(
+  snapshot: FrozenSnapshot,
+  row: PredictionRow | null,
+): PremiumMarketPlay {
+  const payload = snapshot.payload;
+  const baseRow: PredictionRow =
+    row || ({
+      match: snapshot.match,
+      roundNumber: payload.round,
+      homeTeam: payload.homeTeam,
+      awayTeam: payload.awayTeam,
+      predictedWinner: payload.homeTeam,
+      predictedHomeScore: payload.predictedScore
+        ? parseScorePair(payload.predictedScore).homeScore
+        : 0,
+      predictedAwayScore: payload.predictedScore
+        ? parseScorePair(payload.predictedScore).awayScore
+        : 0,
+      modelHomeOdds: 0,
+      modelAwayOdds: 0,
+      marketHomeOdds: 0,
+      marketAwayOdds: 0,
+      homeOverlay: 0,
+      awayOverlay: 0,
+      bestBet: "",
+      side: "",
+      stake: 0,
+      confidence: "Lean",
+      bestEdge: 0,
+      fixture: payload.fixture
+        ? {
+            roundNumber: payload.round,
+            roundLabel: `Round ${payload.round}`,
+            day: payload.fixture.day,
+            dateISO: payload.fixture.dateISO,
+            dateLabel: payload.fixture.dateLabel,
+            tz: payload.fixture.tz || "AEST",
+            homeTeam: payload.homeTeam,
+            awayTeam: payload.awayTeam,
+            stadium: payload.fixture.stadium,
+            network: "",
+            aedt: payload.fixture.aedt,
+            local: payload.fixture.aedt,
+          }
+        : null,
+    } as PredictionRow);
+
+  return {
+    id: `frozen-${snapshot.round}-${snapshot.matchKey}`,
+    row: baseRow,
+    type: payload.type,
+    selection: payload.selection,
+    bookmaker: payload.bookmaker,
+    odds: payload.odds,
+    modelPct: payload.modelPct,
+    modelEdge: payload.modelEdge,
+    marketPoint: payload.marketPoint,
+    projectedValue: payload.projectedValue,
+  };
+}
+
+// Convert a frozen snapshot + saved result into a RoundProofMatchPlay (for the
+// rolled-over archive view).
+function frozenToProofMatchPlay(
+  snapshot: FrozenSnapshot,
+  result: SavedRoundResult | null,
+): RoundProofMatchPlay {
+  const payload = snapshot.payload;
+  const finalScore =
+    result && result.finalHome != null && result.finalAway != null
+      ? `${result.finalHome}-${result.finalAway}`
+      : "";
+  return {
+    match: payload.fixture?.match || snapshot.match,
+    selection: payload.selection,
+    market: payload.type,
+    modelScore: payload.predictedScore || "—",
+    finalScore,
+    modelPct: payload.modelPct,
+    odds: payload.odds,
+    bookmaker: payload.bookmaker,
+    result: playResultToProof(result?.playResult ?? null) || "Pending",
+    note: "",
+  };
+}
+
+// Australia/Sydney is UTC+10 (AEST) or UTC+11 (AEDT, ~Oct–Apr). NRL rounds in
+// this app are stamped AEST, so use +10 for the rollover boundary calc.
+const AEST_OFFSET_HOURS = 10;
+
+// Compute the archive boundary: the Tuesday 00:00 AEST AFTER the round's last
+// fixture. Before this instant settled cards stay in place; after it the round
+// rolls into the dropdown archive.
+function getRoundArchiveBoundaryMs(lastFixtureKickoffMs: number): number {
+  if (!Number.isFinite(lastFixtureKickoffMs)) return Number.MAX_SAFE_INTEGER;
+  // Shift into AEST local time so day-of-week + midnight are computed locally.
+  const aestMs = lastFixtureKickoffMs + AEST_OFFSET_HOURS * 60 * 60 * 1000;
+  const d = new Date(aestMs);
+  const dow = d.getUTCDay(); // 0 Sun .. 2 Tue
+  // Days until the NEXT Tuesday strictly after this fixture day.
+  let daysUntilTue = (2 - dow + 7) % 7;
+  if (daysUntilTue === 0) daysUntilTue = 7;
+  const tue = new Date(aestMs);
+  tue.setUTCDate(tue.getUTCDate() + daysUntilTue);
+  tue.setUTCHours(0, 0, 0, 0);
+  // Convert the AEST-local midnight back to a real UTC instant.
+  return tue.getTime() - AEST_OFFSET_HOURS * 60 * 60 * 1000;
+}
+
+// Returns the set of normalized match keys whose round has rolled over past the
+// Tuesday-after boundary (so they should leave the live page and enter the
+// archive). Computed per round from the latest fixture kickoff in that round.
+function getArchivedMatchKeys(data: DashboardData, now: number): Set<string> {
+  const lastKickoffByRound = new Map<number, number>();
+  for (const row of data.predictions) {
+    if (!Number.isFinite(row.roundNumber)) continue;
+    const ko = getFixtureUtcKickoffMs(row.fixture);
+    if (!Number.isFinite(ko) || ko === Number.MAX_SAFE_INTEGER) continue;
+    const prev = lastKickoffByRound.get(row.roundNumber) ?? 0;
+    if (ko > prev) lastKickoffByRound.set(row.roundNumber, ko);
+  }
+
+  const archivedRounds = new Set<number>();
+  for (const [round, lastKo] of lastKickoffByRound) {
+    if (now >= getRoundArchiveBoundaryMs(lastKo)) archivedRounds.add(round);
+  }
+
+  const keys = new Set<string>();
+  if (archivedRounds.size === 0) return keys;
+  for (const row of data.predictions) {
+    if (archivedRounds.has(row.roundNumber)) keys.add(getPredictionPairKey(row));
+  }
+  return keys;
+}
+
+// Build a RoundArchive (the shape the dropdown archive UI consumes) for a single
+// rolled-over round from its frozen snapshots + saved results. Renders through
+// the SAME archive UI as ROUND_14_PROOF.
+function buildKvDerivedArchive(
+  round: number,
+  snapshots: FrozenSnapshot[],
+  results: SavedRoundResult[],
+): RoundArchive | null {
+  if (snapshots.length === 0) return null;
+  const resultByKey = new Map<string, SavedRoundResult>();
+  for (const r of results) {
+    if (r?.matchKey) resultByKey.set(r.matchKey, r);
+  }
+
+  const fixtures: RoundArchiveFixture[] = [];
+  const matchPlays: RoundProofMatchPlay[] = [];
+  const tryScorers: RoundProofTryScorer[] = [];
+
+  for (const snapshot of snapshots) {
+    const result = resultByKey.get(snapshot.matchKey) || null;
+    const matchLabel = snapshot.payload.fixture?.match || snapshot.match;
+
+    if (snapshot.payload.fixture) {
+      const fx = snapshot.payload.fixture;
+      fixtures.push({
+        match: matchLabel,
+        day: fx.day || "",
+        dateISO: fx.dateISO || "",
+        dateLabel: fx.dateLabel || "",
+        aedt: fx.aedt || "",
+        stadium: fx.stadium || "",
+      });
+    }
+
+    matchPlays.push(frozenToProofMatchPlay(snapshot, result));
+
+    for (const ts of snapshot.payload.tryScorers || []) {
+      const hit = Boolean(result?.tryScorerHits?.[normalizeTryScorerPlayerKey(ts.player)]);
+      tryScorers.push({
+        match: matchLabel,
+        player: ts.player,
+        team: ts.team,
+        odds: ts.odds,
+        bookmaker: ts.bookmaker,
+        result: result ? (hit ? "Hit" : "Miss") : "Pending",
+        note: "",
+      });
+    }
+  }
+
+  return {
+    round,
+    label: `Round ${round} Results`,
+    status: "Results",
+    fixtures,
+    matchPlays,
+    tryScorers,
+  };
+}
+
+// Load + register KV-derived archives for every round that has rolled past the
+// Tuesday boundary. Returns the count registered so the App can bump a version.
+async function loadKvDerivedArchivesForRounds(rounds: number[]): Promise<RoundArchive[]> {
+  const built = await Promise.all(
+    rounds.map(async (round) => {
+      const [snaps, res] = await Promise.all([
+        fetchRoundSnapshots(round),
+        fetchRoundResults(round),
+      ]);
+      return buildKvDerivedArchive(round, snaps, res);
+    }),
+  );
+  return built.filter(Boolean) as RoundArchive[];
+}
+
+// Rounds whose Tuesday boundary has passed (eligible for the dropdown archive).
+function getArchivedRoundNumbers(data: DashboardData, now: number): number[] {
+  const lastKickoffByRound = new Map<number, number>();
+  for (const row of data.predictions) {
+    if (!Number.isFinite(row.roundNumber)) continue;
+    const ko = getFixtureUtcKickoffMs(row.fixture);
+    if (!Number.isFinite(ko) || ko === Number.MAX_SAFE_INTEGER) continue;
+    const prev = lastKickoffByRound.get(row.roundNumber) ?? 0;
+    if (ko > prev) lastKickoffByRound.set(row.roundNumber, ko);
+  }
+  const rounds: number[] = [];
+  for (const [round, lastKo] of lastKickoffByRound) {
+    if (now >= getRoundArchiveBoundaryMs(lastKo)) rounds.push(round);
+  }
+  return rounds;
+}
+
+async function fetchRoundSnapshots(round: number): Promise<FrozenSnapshot[]> {
+  try {
+    const res = await fetch(`/api/round-snapshots?round=${round}`, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${publicAnonKey}` },
+      credentials: "include",
+    });
+    if (!res.ok) return [];
+    const json = await res.json();
+    return Array.isArray(json?.snapshots) ? json.snapshots : [];
+  } catch {
+    return [];
+  }
+}
+
+async function fetchRoundResults(round: number): Promise<SavedRoundResult[]> {
+  try {
+    const res = await fetch(`/api/round-results?round=${round}`, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${publicAnonKey}` },
+      credentials: "include",
+    });
+    if (!res.ok) return [];
+    const json = await res.json();
+    return Array.isArray(json?.results) ? json.results : [];
+  } catch {
+    return [];
+  }
+}
+
+async function postRoundSnapshot(body: {
+  round: number;
+  match: string;
+  matchKey: string;
+  payload: FrozenPlayPayload;
+}): Promise<FrozenSnapshot | null> {
+  try {
+    const res = await fetch(`/api/round-snapshot`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${publicAnonKey}`,
+      },
+      credentials: "include",
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json?.snapshot || null;
+  } catch {
+    return null;
+  }
+}
+
+async function postAdminRoundResult(body: {
+  round: number;
+  match: string;
+  matchKey: string;
+  finalHome: number | null;
+  finalAway: number | null;
+  playResult: "HIT" | "MISS" | "PUSH" | null;
+  tryScorerHits: Record<string, boolean>;
+}): Promise<SavedRoundResult | null> {
+  try {
+    const res = await fetch(`/api/admin/round-results`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${publicAnonKey}`,
+      },
+      credentials: "include",
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json?.result || null;
+  } catch {
+    return null;
+  }
+}
+
+// The active live round (max round number across predictions).
+function getActiveRound(data: DashboardData): number {
+  return Math.max(
+    0,
+    ...data.predictions
+      .map((row) => row.roundNumber)
+      .filter((r) => Number.isFinite(r)),
+  );
+}
+
+// Shared freeze + results data for the active round. Loads snapshots/results
+// from KV, snapshots newly-kicked-off plays (first-write-wins), and exposes
+// lookup maps keyed by normalized match key.
+function useFrozenRoundData(
+  data: DashboardData,
+  marketMap: SgmMarketMap,
+  now: number,
+  options?: { enableFreeze?: boolean },
+) {
+  const enableFreeze = options?.enableFreeze !== false;
+  const round = getActiveRound(data);
+  const [snapshots, setSnapshots] = useState<FrozenSnapshot[]>([]);
+  const [results, setResults] = useState<SavedRoundResult[]>([]);
+  const [refreshTick, setRefreshTick] = useState(0);
+  const postedKeysRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!round) return;
+    let mounted = true;
+    Promise.all([fetchRoundSnapshots(round), fetchRoundResults(round)]).then(
+      ([snaps, res]) => {
+        if (!mounted) return;
+        setSnapshots(snaps);
+        setResults(res);
+        for (const s of snaps) {
+          if (s?.matchKey) postedKeysRef.current.add(s.matchKey);
+        }
+      },
+    );
+    return () => {
+      mounted = false;
+    };
+  }, [round, refreshTick]);
+
+  const snapshotByKey = useMemo(() => {
+    const map = new Map<string, FrozenSnapshot>();
+    for (const s of snapshots) {
+      if (s?.matchKey) map.set(s.matchKey, s);
+    }
+    return map;
+  }, [snapshots]);
+
+  const resultByKey = useMemo(() => {
+    const map = new Map<string, SavedRoundResult>();
+    for (const r of results) {
+      if (r?.matchKey) map.set(r.matchKey, r);
+    }
+    return map;
+  }, [results]);
+
+  // Freeze trigger: for each match that has kicked off and has a live play but
+  // no snapshot yet, POST it once. First-write-wins on the server locks values.
+  useEffect(() => {
+    if (!enableFreeze || !round) return;
+    if (Object.keys(marketMap || {}).length === 0) return;
+
+    const toPost: {
+      round: number;
+      match: string;
+      matchKey: string;
+      payload: FrozenPlayPayload;
+    }[] = [];
+
+    for (const row of data.predictions) {
+      if (!hasPredictionKickedOff(row, now)) continue;
+      const matchKey = getPredictionPairKey(row);
+      if (postedKeysRef.current.has(matchKey)) continue;
+      if (snapshotByKey.has(matchKey)) {
+        postedKeysRef.current.add(matchKey);
+        continue;
+      }
+      const play = getBestPremiumMarketPlayForMatch(row, marketMap);
+      if (!play) continue; // odds already gone and no live play — nothing to lock
+      const tryScorerSignals = getTryScorerSignalsForPrediction(data, row, 5);
+      const frozenScorers: FrozenTryScorer[] = tryScorerSignals.map(({ row: ts }) => ({
+        player: ts.player,
+        team: ts.team,
+        position: ts.position,
+        odds: ts.bestOdds,
+        bookmaker: ts.bookmaker,
+      }));
+      postedKeysRef.current.add(matchKey);
+      toPost.push({
+        round: row.roundNumber,
+        match: `${row.homeTeam} v ${row.awayTeam}`,
+        matchKey,
+        payload: buildFrozenPayloadFromPlay(play, frozenScorers),
+      });
+    }
+
+    if (toPost.length === 0) return;
+    let mounted = true;
+    Promise.all(toPost.map((b) => postRoundSnapshot(b))).then((saved) => {
+      if (!mounted) return;
+      const added = saved.filter(Boolean) as FrozenSnapshot[];
+      if (added.length) setSnapshots((prev) => [...prev, ...added]);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, [enableFreeze, round, data, marketMap, now, snapshotByKey]);
+
+  const refresh = () => setRefreshTick((t) => t + 1);
+  const applyResult = (result: SavedRoundResult) => {
+    setResults((prev) => {
+      const others = prev.filter((r) => r.matchKey !== result.matchKey);
+      return [...others, result];
+    });
+  };
+
+  return { round, snapshots, results, snapshotByKey, resultByKey, refresh, applyResult };
 }
 
 function getFeaturedPrediction(predictions: PredictionRow[]) {
@@ -7031,11 +7603,13 @@ function PredictionsPage({
   data,
   onRequestAccess,
   isPremium,
+  isAdmin = false,
   selectedArchive,
 }: {
   data: DashboardData;
   onRequestAccess: (targetHash?: string) => void;
   isPremium: boolean;
+  isAdmin?: boolean;
   selectedArchive?: RoundArchive | null;
 }) {
   const now = useMinuteNow();
@@ -7046,6 +7620,10 @@ function PredictionsPage({
     [data.predictions, selectedArchive],
   );
   const [marketMap, setMarketMap] = useState<SgmMarketMap>({});
+  // Freeze + results data for the live page (disabled in archive view).
+  const frozen = useFrozenRoundData(data, marketMap, now, {
+    enableFreeze: !selectedArchive,
+  });
 
   useEffect(() => {
     if (selectedArchive) {
@@ -7108,16 +7686,75 @@ function PredictionsPage({
           const hasPredictedWinner = homeIsPredictedWinner || awayIsPredictedWinner;
           const homeColors = getTeamColors(row.homeTeam);
           const awayColors = getTeamColors(row.awayTeam);
-          const premiumMarketPlay = selectedArchive ? null : getBestPremiumMarketPlayForMatch(row, marketMap);
+          const matchPairKey = getPredictionPairKey(row);
+          const frozenSnapshot = selectedArchive ? undefined : frozen.snapshotByKey.get(matchPairKey);
+          const savedResult = selectedArchive ? null : frozen.resultByKey.get(matchPairKey) || null;
+          const rowKickedOff = !selectedArchive && hasPredictionKickedOff(row, now);
+          const livePlay = selectedArchive ? null : getBestPremiumMarketPlayForMatch(row, marketMap);
+          // After kickoff the live odds stop feeding — render the frozen play so
+          // the strip keeps its kickoff values instead of vanishing.
+          const premiumMarketPlay =
+            !livePlay && rowKickedOff && frozenSnapshot
+              ? reconstructFrozenPlay(frozenSnapshot, row)
+              : livePlay;
           const settledPremiumBet = selectedArchive ? null : getSettledBetForPrediction(data, row);
-          const tryScorerSignals = selectedArchive ? [] : getTryScorerSignalsForPrediction(data, row);
+          const liveTryScorerSignals = selectedArchive ? [] : getTryScorerSignalsForPrediction(data, row);
+          // Frozen try scorers fill in if the live sheet signals dropped out.
+          const tryScorerSignals =
+            liveTryScorerSignals.length === 0 && rowKickedOff && frozenSnapshot
+              ? (frozenSnapshot.payload.tryScorers || []).map((ts) => ({
+                  row: {
+                    round: frozenSnapshot.round,
+                    match: frozenSnapshot.payload.fixture?.match || frozenSnapshot.match,
+                    player: ts.player,
+                    team: ts.team,
+                    position: ts.position || "",
+                    statsInsiderPct: 0,
+                    bestOdds: ts.odds,
+                    bookmaker: ts.bookmaker,
+                    marketImpliedPct: 0,
+                    edgePct: 0,
+                    value: "",
+                  } as TryScorerRow,
+                  signal: null as ReturnType<typeof getTryScorerSignal>,
+                }))
+              : liveTryScorerSignals;
+          const frozenScorerList: FrozenTryScorer[] =
+            frozenSnapshot?.payload.tryScorers ??
+            liveTryScorerSignals.map(({ row: ts }) => ({
+              player: ts.player,
+              team: ts.team,
+              position: ts.position,
+              odds: ts.bestOdds,
+              bookmaker: ts.bookmaker,
+            }));
           const proofMatchPlays = getRoundProofMatchPlaysForPrediction(row, selectedArchive);
           const proofTryScorerHits = getRoundProofTryScorerHitsForPrediction(row, selectedArchive);
           const proofFinalScore = proofMatchPlays.find((play) => play.finalScore)?.finalScore || "";
           const proofFinalScorePair = proofFinalScore ? parseScorePair(proofFinalScore) : null;
-          const displayHomeScore = proofFinalScorePair ? proofFinalScorePair.homeScore : projectedHomeScore;
-          const displayAwayScore = proofFinalScorePair ? proofFinalScorePair.awayScore : projectedAwayScore;
-          const matchCompleted = Boolean(selectedArchive) || isFixtureCompleted(row.fixture, now) || hasSettledRoundProofForPrediction(row, selectedArchive);
+          // An admin-entered result (final score or HIT/MISS/PUSH) settles the card
+          // immediately, even before the fixture's scheduled completion — so dummy
+          // results entered in the Results tab render the settled view right away.
+          const hasSavedSettlement = Boolean(
+            savedResult &&
+              ((savedResult.finalHome != null && savedResult.finalAway != null) ||
+                savedResult.playResult),
+          );
+          const savedFinalScorePair =
+            savedResult && savedResult.finalHome != null && savedResult.finalAway != null
+              ? { homeScore: savedResult.finalHome, awayScore: savedResult.finalAway }
+              : null;
+          const displayHomeScore = proofFinalScorePair
+            ? proofFinalScorePair.homeScore
+            : savedFinalScorePair
+              ? savedFinalScorePair.homeScore
+              : projectedHomeScore;
+          const displayAwayScore = proofFinalScorePair
+            ? proofFinalScorePair.awayScore
+            : savedFinalScorePair
+              ? savedFinalScorePair.awayScore
+              : projectedAwayScore;
+          const matchCompleted = Boolean(selectedArchive) || isFixtureCompleted(row.fixture, now) || hasSettledRoundProofForPrediction(row, selectedArchive) || hasSavedSettlement;
           const fixtureStatus = matchCompleted
             ? {
                 label: "Completed",
@@ -7198,6 +7835,9 @@ function PredictionsPage({
                       tryScorerSignals={tryScorerSignals}
                       proofMatchPlays={proofMatchPlays}
                       proofTryScorerHits={proofTryScorerHits}
+                      matchLabel={`${row.homeTeam} v ${row.awayTeam}`}
+                      savedResult={savedResult}
+                      frozenTryScorers={frozenScorerList}
                     />
                   )}
                 </div>
@@ -7307,6 +7947,9 @@ function PredictionsPage({
                         tryScorerSignals={tryScorerSignals}
                         proofMatchPlays={proofMatchPlays}
                         proofTryScorerHits={proofTryScorerHits}
+                        matchLabel={`${row.homeTeam} v ${row.awayTeam}`}
+                        savedResult={savedResult}
+                        frozenTryScorers={frozenScorerList}
                       />
                     )}
                     {!matchCompleted && !isPremium && (
@@ -7362,6 +8005,9 @@ function MatchPremiumSignalStrip({
   tryScorerSignals,
   proofMatchPlays = [],
   proofTryScorerHits = [],
+  matchLabel,
+  savedResult,
+  frozenTryScorers,
 }: {
   matchCompleted: boolean;
   isPremium: boolean;
@@ -7370,7 +8016,38 @@ function MatchPremiumSignalStrip({
   tryScorerSignals: { row: TryScorerRow; signal: ReturnType<typeof getTryScorerSignal> }[];
   proofMatchPlays?: RoundProofMatchPlay[];
   proofTryScorerHits?: RoundProofTryScorer[];
+  matchLabel?: string;
+  savedResult?: SavedRoundResult | null;
+  frozenTryScorers?: FrozenTryScorer[];
 }) {
+  // Settled try-scorer hits entered by an admin in the Results tab are synthesized
+  // into the same proof shape so they render exactly like a hardcoded archive's
+  // try-scorer hits, when no hardcoded proof exists for this match.
+  const savedTryScorerProofHits: RoundProofTryScorer[] =
+    !proofTryScorerHits.length && savedResult?.tryScorerHits && frozenTryScorers?.length
+      ? frozenTryScorers
+          .filter((ts) => savedResult.tryScorerHits[normalizeTryScorerPlayerKey(ts.player)])
+          .map((ts) => ({
+            match: matchLabel || ts.team,
+            player: ts.player,
+            team: ts.team,
+            odds: ts.odds,
+            bookmaker: ts.bookmaker,
+            result: "Hit" as const,
+            note: "",
+          }))
+      : [];
+  const tryScorerProofHits = proofTryScorerHits.length
+    ? proofTryScorerHits
+    : savedTryScorerProofHits;
+  const savedFinalScoreLine =
+    savedResult && savedResult.finalHome != null && savedResult.finalAway != null ? (
+      <div className="mt-2 text-[10px] font-black uppercase tracking-widest text-white/55">
+        Final {savedResult.finalHome}–{savedResult.finalAway}
+      </div>
+    ) : null;
+  const savedPlayProof = playResultToProof(savedResult?.playResult ?? null);
+
   const hasTryScorers = tryScorerSignals.length > 0;
   const scorerLabel = hasTryScorers
     ? tryScorerSignals.map(({ row }) => row.player).join(" / ")
@@ -7401,9 +8078,36 @@ function MatchPremiumSignalStrip({
           note: "",
         }]
       : [];
-    const matchPlays = proofMatchPlays.length ? proofMatchPlays : fallbackMatchPlay;
+    // If an admin has saved a result for this match (but no hardcoded proof
+    // exists), synthesize a settled play from the frozen snapshot + result so
+    // the completed card shows the final score + HIT/MISS badge.
+    const savedResultMatchPlay =
+      !proofMatchPlays.length && savedResult && play
+        ? [{
+            match: matchLabel || play.selection,
+            selection: play.selection,
+            market: play.type,
+            modelScore:
+              play.row.predictedHomeScore || play.row.predictedAwayScore
+                ? `${Math.round(play.row.predictedHomeScore)}-${Math.round(play.row.predictedAwayScore)}`
+                : "",
+            finalScore:
+              savedResult.finalHome != null && savedResult.finalAway != null
+                ? `${savedResult.finalHome}-${savedResult.finalAway}`
+                : "",
+            odds: play.odds,
+            bookmaker: play.bookmaker,
+            result: savedPlayProof || "Pending",
+            note: "",
+          } as RoundProofMatchPlay]
+        : [];
+    const matchPlays = proofMatchPlays.length
+      ? proofMatchPlays
+      : savedResultMatchPlay.length
+        ? savedResultMatchPlay
+        : fallbackMatchPlay;
 
-    if (!matchPlays.length && !proofTryScorerHits.length) return null;
+    if (!matchPlays.length && !tryScorerProofHits.length) return null;
 
     return (
       <div className="mt-3 flex flex-col gap-2">
@@ -7445,7 +8149,7 @@ function MatchPremiumSignalStrip({
           </div>
         ))}
 
-        {proofTryScorerHits.length > 0 && (
+        {tryScorerProofHits.length > 0 && (
           <div className="border border-[#1E1E2E] bg-[#111116] px-3 py-2.5">
             <div className="mb-2 flex items-center gap-2">
               <span className="text-[8px] font-black uppercase tracking-widest text-[#6B7280]">
@@ -7453,7 +8157,7 @@ function MatchPremiumSignalStrip({
               </span>
             </div>
             <div className="flex flex-wrap gap-2">
-              {proofTryScorerHits.map((scorer) => (
+              {tryScorerProofHits.map((scorer) => (
                 <span
                   key={`${scorer.match}-${scorer.player}`}
                   className="inline-flex max-w-full items-center gap-1.5 border border-[#00E676]/30 bg-[#00E676]/10 px-2 py-1 text-[10px] font-black uppercase tracking-wide text-[#00E676]"
@@ -7501,6 +8205,12 @@ function MatchPremiumSignalStrip({
       {isPremium && !play && !hasTryScorers && (
         <div className="px-3 py-2 text-[9px] font-black uppercase tracking-widest text-[#6B7280]">
           Premium signals will appear as markets settle.
+        </div>
+      )}
+      {savedPlayProof && (
+        <div className="flex items-center justify-between gap-2 px-3 py-2">
+          {savedFinalScoreLine}
+          <PremiumResultBadge result={savedPlayProof} />
         </div>
       )}
     </div>
@@ -7844,10 +8554,209 @@ function buildPremiumMarketPlays(
     .filter(Boolean) as PremiumMarketPlay[];
 }
 
-function PremiumMarketPlayCard({ play, now }: { play: PremiumMarketPlay; now: number }) {
+// Admin-only inline form to enter a match result. Pre-fills from a saved
+// result. Renders nothing for non-admins (callers also gate on isAdmin).
+function AdminResultEntryForm({
+  round,
+  matchKey,
+  matchLabel,
+  hasPlay,
+  playSelection,
+  tryScorers,
+  savedResult,
+  onSaved,
+  compact = false,
+}: {
+  round: number;
+  matchKey: string;
+  matchLabel: string;
+  hasPlay: boolean;
+  playSelection?: string;
+  tryScorers: FrozenTryScorer[];
+  savedResult?: SavedRoundResult | null;
+  onSaved: (result: SavedRoundResult) => void;
+  compact?: boolean;
+}) {
+  const [finalHome, setFinalHome] = useState<string>(
+    savedResult?.finalHome != null ? String(savedResult.finalHome) : "",
+  );
+  const [finalAway, setFinalAway] = useState<string>(
+    savedResult?.finalAway != null ? String(savedResult.finalAway) : "",
+  );
+  const [playResult, setPlayResult] = useState<"HIT" | "MISS" | "PUSH" | null>(
+    savedResult?.playResult ?? null,
+  );
+  const [scorerHits, setScorerHits] = useState<Record<string, boolean>>(
+    savedResult?.tryScorerHits ?? {},
+  );
+  const [saving, setSaving] = useState(false);
+  const [saveState, setSaveState] = useState<"idle" | "saved" | "error">("idle");
+
+  useEffect(() => {
+    setFinalHome(savedResult?.finalHome != null ? String(savedResult.finalHome) : "");
+    setFinalAway(savedResult?.finalAway != null ? String(savedResult.finalAway) : "");
+    setPlayResult(savedResult?.playResult ?? null);
+    setScorerHits(savedResult?.tryScorerHits ?? {});
+  }, [savedResult]);
+
+  const toggleResult = (value: "HIT" | "MISS" | "PUSH") =>
+    setPlayResult((prev) => (prev === value ? null : value));
+
+  const handleSave = async () => {
+    setSaving(true);
+    setSaveState("idle");
+    const saved = await postAdminRoundResult({
+      round,
+      match: matchLabel,
+      matchKey,
+      finalHome: finalHome === "" ? null : Number(finalHome),
+      finalAway: finalAway === "" ? null : Number(finalAway),
+      playResult,
+      tryScorerHits: scorerHits,
+    });
+    setSaving(false);
+    if (saved) {
+      setSaveState("saved");
+      onSaved(saved);
+    } else {
+      setSaveState("error");
+    }
+  };
+
+  const resultBtnClass = (value: "HIT" | "MISS" | "PUSH") => {
+    const active = playResult === value;
+    if (!active) return "border-white/15 bg-white/[0.03] text-white/55";
+    if (value === "HIT") return "border-[#00E676]/45 bg-[#00E676]/12 text-[#00E676]";
+    if (value === "MISS") return "border-[#FF2E63]/45 bg-[#FF2E63]/12 text-[#FF2E63]";
+    return "border-[#FFEA00]/45 bg-[#FFEA00]/12 text-[#FFEA00]";
+  };
+
+  return (
+    <div className={`border border-[#1E1E2E] bg-[#0E0E13] ${compact ? "p-3" : "p-3 md:p-4"}`}>
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <div className="text-[9px] md:text-[10px] font-black uppercase tracking-widest text-[#FFEA00]">
+          Admin · Enter result
+        </div>
+        {saveState === "saved" && (
+          <span className="text-[9px] font-black uppercase tracking-widest text-[#00E676]">Saved</span>
+        )}
+        {saveState === "error" && (
+          <span className="text-[9px] font-black uppercase tracking-widest text-[#FF2E63]">Save failed</span>
+        )}
+      </div>
+
+      <div className="flex flex-wrap items-end gap-3">
+        <div>
+          <div className="mb-1 text-[8px] font-black uppercase tracking-widest text-white/45">Home</div>
+          <input
+            type="number"
+            inputMode="numeric"
+            value={finalHome}
+            onChange={(e) => setFinalHome(e.target.value)}
+            className="w-16 border border-[#1E1E2E] bg-[#16161D] px-2 py-1.5 text-sm font-black text-white"
+          />
+        </div>
+        <div className="pb-1.5 text-white/40 font-black">–</div>
+        <div>
+          <div className="mb-1 text-[8px] font-black uppercase tracking-widest text-white/45">Away</div>
+          <input
+            type="number"
+            inputMode="numeric"
+            value={finalAway}
+            onChange={(e) => setFinalAway(e.target.value)}
+            className="w-16 border border-[#1E1E2E] bg-[#16161D] px-2 py-1.5 text-sm font-black text-white"
+          />
+        </div>
+      </div>
+
+      {hasPlay && (
+        <div className="mt-3">
+          <div className="mb-1 text-[8px] font-black uppercase tracking-widest text-white/45">
+            Best play{playSelection ? ` · ${playSelection}` : ""}
+          </div>
+          <div className="flex gap-2">
+            {(["HIT", "MISS", "PUSH"] as const).map((value) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => toggleResult(value)}
+                className={`border px-3 py-1.5 text-[9px] md:text-[10px] font-black uppercase tracking-widest transition ${resultBtnClass(value)}`}
+              >
+                {value}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="mt-3">
+        <div className="mb-1.5 text-[8px] font-black uppercase tracking-widest text-white/45">
+          Try scorers — tick if scored
+        </div>
+        {tryScorers.length > 0 ? (
+          <div className="flex flex-col gap-1.5">
+            {tryScorers.map((ts) => {
+              const key = normalizeTryScorerPlayerKey(ts.player);
+              const checked = Boolean(scorerHits[key]);
+              return (
+                <label key={key} className="flex items-center gap-2 text-[11px] font-bold text-white/80">
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={(e) =>
+                      setScorerHits((prev) => ({ ...prev, [key]: e.target.checked }))
+                    }
+                    className="h-4 w-4 accent-[#00E676]"
+                  />
+                  <span className="truncate">{ts.player}</span>
+                  <span className="text-white/35 uppercase tracking-widest text-[9px]">{ts.team}</span>
+                </label>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="border border-[#1E1E2E] bg-[#111116] px-3 py-2 text-[10px] font-bold leading-relaxed text-white/45">
+            Try-scorer players will appear here once this round's try-scorer model is published.
+          </div>
+        )}
+      </div>
+
+      <button
+        type="button"
+        onClick={handleSave}
+        disabled={saving}
+        className="mt-3 w-full border border-[#00E676]/45 bg-[#00E676]/12 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-[#00E676] transition hover:bg-[#00E676]/20 disabled:opacity-50"
+      >
+        {saving ? "Saving…" : "Save result"}
+      </button>
+    </div>
+  );
+}
+
+// Public settled summary: final score line shown under a settled card.
+function FrozenFinalScoreLine({ result }: { result: SavedRoundResult }) {
+  if (result.finalHome == null || result.finalAway == null) return null;
+  return (
+    <div className="mt-3 md:mt-4 text-[10px] md:text-xs font-black uppercase tracking-widest text-white/55">
+      Final {result.finalHome}–{result.finalAway}
+    </div>
+  );
+}
+
+function PremiumMarketPlayCard({
+  play,
+  now,
+  savedResult,
+}: {
+  play: PremiumMarketPlay;
+  now: number;
+  savedResult?: SavedRoundResult | null;
+}) {
   const { row } = play;
   const fixtureStatus = getFixtureStatusBadge(row.fixture, now);
-  const proofResult = getRoundProofForPremiumPlay(play)?.result;
+  // Prefer an admin-entered result for this match; fall back to hardcoded proof.
+  const savedProofResult = playResultToProof(savedResult?.playResult ?? null);
+  const proofResult = savedProofResult ?? getRoundProofForPremiumPlay(play)?.result;
   const edgeLabel = formatPremiumMatchEdge(play.modelPct, play.odds);
   const predictedScore =
     row.predictedHomeScore || row.predictedAwayScore
@@ -7958,6 +8867,7 @@ function PremiumMarketPlayCard({ play, now }: { play: PremiumMarketPlay; now: nu
       <div className="mt-3 md:mt-4 text-[10px] md:text-xs font-bold text-white/45 uppercase tracking-widest leading-relaxed">
         {detail}
       </div>
+      {savedResult ? <FrozenFinalScoreLine result={savedResult} /> : null}
     </GlassCard>
   );
 }
@@ -8057,6 +8967,111 @@ function RoundProofMarketPlayCard({ play }: { play: RoundProofMatchPlay }) {
   );
 }
 
+// REQ2 — Dedicated admin-only results entry page. Lists every kicked-off
+// fixture in the active round with a compact AdminResultEntryForm each, prefilled
+// from saved KV results. Try-scorer signals come from the frozen snapshot (locked
+// at kickoff) when present, else computed live.
+function AdminResultsPage({
+  data,
+  isAdmin = false,
+}: {
+  data: DashboardData;
+  isAdmin?: boolean;
+}) {
+  const [marketMap, setMarketMap] = useState<SgmMarketMap>({});
+  const now = useMinuteNow();
+
+  useEffect(() => {
+    let isMounted = true;
+    fetchLiveOddsCached()
+      .then((rawOdds) => {
+        if (isMounted) setMarketMap(buildSgmMarketMap(rawOdds));
+      })
+      .catch(() => {
+        if (isMounted) setMarketMap({});
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Freeze is already driven by the public pages; here we only read.
+  const frozen = useFrozenRoundData(data, marketMap, now, { enableFreeze: false });
+
+  const fixtures = useMemo(() => {
+    return data.predictions
+      .filter((row) => row.roundNumber === frozen.round)
+      .map((row) => {
+        const matchKey = getPredictionPairKey(row);
+        const matchLabel = `${row.homeTeam} v ${row.awayTeam}`;
+        const snapshot = frozen.snapshotByKey.get(matchKey) || null;
+        const livePlay = getBestPremiumMarketPlayForMatch(row, marketMap);
+        const playSelection =
+          snapshot?.payload?.selection || livePlay?.selection || undefined;
+        const hasPlay = Boolean(snapshot?.payload?.selection || livePlay);
+        const frozenScorers: FrozenTryScorer[] = snapshot?.payload?.tryScorers?.length
+          ? snapshot.payload.tryScorers
+          : getTryScorerSignalsForPrediction(data, row, 5).map(({ row: ts }) => ({
+              player: ts.player,
+              team: ts.team,
+              position: ts.position,
+              odds: ts.bestOdds,
+              bookmaker: ts.bookmaker,
+            }));
+        return { row, matchKey, matchLabel, hasPlay, playSelection, frozenScorers };
+      })
+      .sort((a, b) => getFixtureSortValue(a.row) - getFixtureSortValue(b.row));
+  }, [data, frozen.round, frozen.snapshotByKey, marketMap, now]);
+
+  if (!isAdmin) return null;
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <div className="text-[10px] md:text-xs font-black uppercase tracking-widest text-[#FFEA00]">
+          Admin
+        </div>
+        <h1 className="text-3xl md:text-4xl font-black uppercase tracking-tight text-white">
+          Results Entry · Round {frozen.round || data.currentRoundLabel}
+        </h1>
+        <p className="mt-2 text-sm font-medium text-white/55">
+          Every fixture this round — enter results at any time. Enter the final score, mark the best
+          play, and tick try scorers that scored. Saved results publish to the live cards.
+        </p>
+      </div>
+
+      {fixtures.length === 0 ? (
+        <GlassCard className="p-8">
+          <div className="text-sm font-bold uppercase tracking-widest text-white/55">
+            No fixtures found for this round yet.
+          </div>
+        </GlassCard>
+      ) : (
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          {fixtures.map((fx) => (
+            <GlassCard key={fx.matchKey} className="p-4 md:p-5">
+              <div className="mb-3 text-base md:text-lg font-black uppercase tracking-tight text-white">
+                {fx.matchLabel}
+              </div>
+              <AdminResultEntryForm
+                round={fx.row.roundNumber}
+                matchKey={fx.matchKey}
+                matchLabel={fx.matchLabel}
+                hasPlay={fx.hasPlay}
+                playSelection={fx.playSelection}
+                tryScorers={fx.frozenScorers}
+                savedResult={frozen.resultByKey.get(fx.matchKey) || null}
+                onSaved={frozen.applyResult}
+                compact
+              />
+            </GlassCard>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function BestBetsPage({
   data,
   onRequestAccess,
@@ -8094,12 +9109,43 @@ function BestBetsPage({
     };
   }, []);
 
+  const frozen = useFrozenRoundData(data, marketMap, now, { enableFreeze: true });
+  // Match keys for matches whose round has rolled over into the archive — these
+  // are removed from the live Premium Plays page and shown in the dropdown.
+  const archivedMatchKeys = useMemo(
+    () => getArchivedMatchKeys(data, now),
+    [data, now],
+  );
+
+  const predictionByPairKey = useMemo(() => {
+    const map = new Map<string, PredictionRow>();
+    for (const row of data.predictions) map.set(getPredictionPairKey(row), row);
+    return map;
+  }, [data.predictions]);
+
   const canViewStartedPremiumPlays = isPremium || isAdmin;
   // BEST BETS: hit-rate / feel-good list — H2H favourites led, headline odds capped.
-  const matchReads = useMemo(
-    () => buildPremiumMarketPlays(data, marketMap, now, canViewStartedPremiumPlays, "bestbet").slice(0, isAdmin ? 50 : 8),
-    [data, marketMap, now, canViewStartedPremiumPlays, isAdmin],
-  );
+  // After kickoff the live odds stop feeding, so we merge in frozen snapshots so
+  // the play stays visible exactly as it was at kickoff (first-write-wins).
+  const matchReads = useMemo(() => {
+    const live = buildPremiumMarketPlays(data, marketMap, now, canViewStartedPremiumPlays, "bestbet");
+    const byKey = new Map<string, PremiumMarketPlay>();
+    for (const play of live) {
+      const key = getPredictionPairKey(play.row);
+      if (archivedMatchKeys.has(key)) continue;
+      byKey.set(key, play);
+    }
+    // Overlay frozen plays for kicked-off matches (replaces empty-odds live play).
+    for (const snapshot of frozen.snapshots) {
+      if (archivedMatchKeys.has(snapshot.matchKey)) continue;
+      const row = predictionByPairKey.get(snapshot.matchKey) || null;
+      if (row && !hasPredictionKickedOff(row, now)) continue;
+      byKey.set(snapshot.matchKey, reconstructFrozenPlay(snapshot, row));
+    }
+    return [...byKey.values()]
+      .sort((a, b) => getFixtureSortValue(a.row) - getFixtureSortValue(b.row))
+      .slice(0, isAdmin ? 50 : 8);
+  }, [data, marketMap, now, canViewStartedPremiumPlays, isAdmin, frozen.snapshots, archivedMatchKeys, predictionByPairKey]);
   // VALUE PLAYS: ROI list — value-edge ranked, longer prices allowed. Deduped
   // against Best Bets so the same match never shows the identical selection twice.
   const valuePlayReads = useMemo(() => {
@@ -8134,7 +9180,7 @@ function BestBetsPage({
   );
   const isTryScorerMatchLive = (row: TryScorerRow) =>
     hasPredictionKickedOff(predictionByMatch.get(buildMatchLabelKey(row.match)), now);
-  const tryScorerBestBets = Object.values(tryScorerGroups)
+  const liveTryScorerBestBets = Object.values(tryScorerGroups)
     .flatMap((players) => {
       const keys = getMatchBestBetKeys(players);
       return players
@@ -8144,7 +9190,43 @@ function BestBetsPage({
           row,
           signal: getTryScorerSignal(row, keys),
         }));
-    })
+    });
+  // Overlay frozen try scorers for kicked-off matches so the scorer signals do
+  // not vanish when the sheet stops feeding their odds.
+  const liveScorerKeys = new Set(
+    liveTryScorerBestBets.map(
+      ({ row }) => `${getMatchPairKeyFromLabel(row.match)}|${normalizeTryScorerPlayerKey(row.player)}`,
+    ),
+  );
+  const frozenTryScorerBestBets = frozen.snapshots
+    .filter((snapshot) => !archivedMatchKeys.has(snapshot.matchKey))
+    .flatMap((snapshot) =>
+      (snapshot.payload.tryScorers || [])
+        .filter(
+          (ts) =>
+            !liveScorerKeys.has(
+              `${snapshot.matchKey}|${normalizeTryScorerPlayerKey(ts.player)}`,
+            ),
+        )
+        .map((ts) => ({
+          row: {
+            round: snapshot.round,
+            match: snapshot.payload.fixture?.match || snapshot.match,
+            player: ts.player,
+            team: ts.team,
+            position: ts.position || "",
+            statsInsiderPct: 0,
+            bestOdds: ts.odds,
+            bookmaker: ts.bookmaker,
+            marketImpliedPct: 0,
+            edgePct: 0,
+            value: "",
+          } as TryScorerRow,
+          signal: null as ReturnType<typeof getTryScorerSignal>,
+        })),
+    );
+  const tryScorerBestBets = [...liveTryScorerBestBets, ...frozenTryScorerBestBets]
+    .filter(({ row }) => !archivedMatchKeys.has(getMatchPairKeyFromLabel(row.match)))
     .sort((a, b) => {
       const aFixture = predictionByMatch.get(buildMatchLabelKey(a.row.match));
       const bFixture = predictionByMatch.get(buildMatchLabelKey(b.row.match));
@@ -8158,6 +9240,14 @@ function BestBetsPage({
       return b.row.statsInsiderPct - a.row.statsInsiderPct;
     })
     .slice(0, isAdmin ? 50 : 8);
+
+  // Per-card settled overlay context (results entry now lives in the Results tab).
+  const cardPropsForPlay = (play: PremiumMarketPlay) => {
+    const matchKey = getPredictionPairKey(play.row);
+    return {
+      savedResult: frozen.resultByKey.get(matchKey) || null,
+    };
+  };
 
   if (!isPremium && !isAdmin) {
     return (
@@ -8195,7 +9285,7 @@ function BestBetsPage({
             Match Best Bets
           </h3>
           <div className="text-[10px] md:text-xs font-black text-white/45 uppercase tracking-widest mt-1">
-            Highest-confidence plays — winners first, capped odds for hit-rate
+            Where our model sees the most value against the market this round
           </div>
         </div>
         {isLoadingMarkets ? (
@@ -8213,7 +9303,7 @@ function BestBetsPage({
         ) : (
           <div className="grid grid-cols-1 gap-5 md:gap-6">
             {matchReads.map((play) => (
-              <PremiumMarketPlayCard key={play.id} play={play} now={now} />
+              <PremiumMarketPlayCard key={play.id} play={play} now={now} {...cardPropsForPlay(play)} />
             ))}
           </div>
         )}
@@ -8231,7 +9321,7 @@ function BestBetsPage({
           </div>
           <div className="grid grid-cols-1 gap-5 md:gap-6">
             {valuePlayReads.map((play) => (
-              <PremiumMarketPlayCard key={play.id} play={play} now={now} />
+              <PremiumMarketPlayCard key={play.id} play={play} now={now} {...cardPropsForPlay(play)} />
             ))}
           </div>
         </div>
@@ -8255,7 +9345,17 @@ function BestBetsPage({
         ) : (
           <div className="grid grid-cols-1 gap-5 md:gap-6">
             {tryScorerBestBets.map(({ row, signal }) => {
-              const proofResult = getRoundProofForTryScorer(row)?.result;
+              const scorerMatchKey = getMatchPairKeyFromLabel(row.match);
+              const savedScorerResult = frozen.resultByKey.get(scorerMatchKey);
+              const scorerHit = savedScorerResult?.tryScorerHits?.[
+                normalizeTryScorerPlayerKey(row.player)
+              ];
+              const proofResult =
+                scorerHit === true
+                  ? ("Hit" as ProofResult)
+                  : scorerHit === false && savedScorerResult?.playResult
+                    ? ("Miss" as ProofResult)
+                    : getRoundProofForTryScorer(row)?.result;
               return (
               <GlassCard
                 key={getTryScorerKey(row)}
@@ -10643,7 +11743,7 @@ function AppDashboard({
       return "matches";
     }
     if (
-      ["matches", "origin", "best-bets", "try-scorers", "performance", "admin"].includes(
+      ["matches", "origin", "best-bets", "try-scorers", "performance", "admin", "admin-results"].includes(
         hash,
       )
     ) {
@@ -10653,9 +11753,30 @@ function AppDashboard({
   });
   const [selectedArchiveRound, setSelectedArchiveRound] = useState<number | null>(null);
   const [showRetentionOffer, setShowRetentionOffer] = useState(false);
+  // Bumped after KV-derived (rolled-over) archives register so the archive
+  // dropdown + selected-archive lookup re-read the module-level registry.
+  const [archiveVersion, setArchiveVersion] = useState(0);
+
+  // REQ3 rollover: load archives for rounds past their Tuesday boundary and
+  // register them so they render through the same dropdown UI as ROUND_14_PROOF.
+  useEffect(() => {
+    if (!data) return;
+    const rounds = getArchivedRoundNumbers(data, Date.now());
+    if (rounds.length === 0) return;
+    let mounted = true;
+    loadKvDerivedArchivesForRounds(rounds).then((archives) => {
+      if (!mounted || archives.length === 0) return;
+      registerKvDerivedArchives(archives);
+      setArchiveVersion((v) => v + 1);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, [data]);
+
   const selectedRoundArchive = useMemo(
     () => ROUND_ARCHIVES.find((archive) => archive.round === selectedArchiveRound) || null,
-    [selectedArchiveRound],
+    [selectedArchiveRound, archiveVersion],
   );
 
   useEffect(() => {
@@ -10674,6 +11795,7 @@ function AppDashboard({
           "try-scorers",
           "performance",
           "admin",
+          "admin-results",
         ].includes(hash)
       ) {
         setPage(hash);
@@ -10985,6 +12107,7 @@ function AppDashboard({
                   data={data}
                   onRequestAccess={onRequestAccess}
                   isPremium={isPremium || isAdmin}
+                  isAdmin={isAdmin}
                   selectedArchive={selectedRoundArchive}
                 />
               )}
@@ -11009,6 +12132,9 @@ function AppDashboard({
                     window.location.hash = "ad-studio";
                   }}
                 />
+              )}
+              {page === "admin-results" && isAdmin && (
+                <AdminResultsPage data={data} isAdmin={isAdmin} />
               )}
               {page === "performance" && (
                 <div className="space-y-8">
@@ -11528,7 +12654,7 @@ export default function App() {
     const analyticsName = rawHash.replace(/-/g, "_");
     (window as any).trackAnalyticsEvent?.(`${analyticsName}_view`, {
       section: rawHash,
-      app_section: ["matches", "origin", "best-bets", "try-scorers", "performance", "admin"].includes(rawHash),
+      app_section: ["matches", "origin", "best-bets", "try-scorers", "performance", "admin", "admin-results"].includes(rawHash),
     });
   };
 
@@ -11590,7 +12716,7 @@ export default function App() {
 
   const checkHash = () => {
     const hash = window.location.hash.replace("#", "");
-    const appHashes = ["matches", "origin", "best-bets", "try-scorers", "performance", "admin"];
+    const appHashes = ["matches", "origin", "best-bets", "try-scorers", "performance", "admin", "admin-results"];
     const premiumHashes = ["origin", "best-bets", "try-scorers"];
     const publicHashes = ["results", "methodology", "ad-studio", "articles", "article-round-5-2026", "article-methodology", "cricket"];
 
