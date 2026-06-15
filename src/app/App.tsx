@@ -8020,9 +8020,9 @@ function MatchPremiumSignalStrip({
   frozenTryScorers?: FrozenTryScorer[];
   onResultSaved?: (result: SavedRoundResult) => void;
 }) {
-  // Admin entry form (kicked-off live matches) + public settled overlay.
+  // Admin entry form (available any time) + public settled overlay.
   const adminForm =
-    isAdmin && kickedOff && round != null && matchKey ? (
+    isAdmin && round != null && matchKey ? (
       <AdminResultEntryForm
         round={round}
         matchKey={matchKey}
@@ -8872,7 +8872,7 @@ function PremiumMarketPlayCard({
         {detail}
       </div>
       {savedResult ? <FrozenFinalScoreLine result={savedResult} /> : null}
-      {isAdmin && kickedOff && round != null && matchKey ? (
+      {isAdmin && round != null && matchKey ? (
         <div className="mt-3 md:mt-4">
           <AdminResultEntryForm
             round={round}
@@ -9019,7 +9019,6 @@ function AdminResultsPage({
   const fixtures = useMemo(() => {
     return data.predictions
       .filter((row) => row.roundNumber === frozen.round)
-      .filter((row) => hasPredictionKickedOff(row, now))
       .map((row) => {
         const matchKey = getPredictionPairKey(row);
         const matchLabel = `${row.homeTeam} v ${row.awayTeam}`;
@@ -9054,7 +9053,7 @@ function AdminResultsPage({
           Results Entry · Round {frozen.round || data.currentRoundLabel}
         </h1>
         <p className="mt-2 text-sm font-medium text-white/55">
-          Every kicked-off fixture this round. Enter the final score, mark the best
+          Every fixture this round — enter results at any time. Enter the final score, mark the best
           play, and tick try scorers that scored. Saved results publish to the live cards.
         </p>
       </div>
@@ -9062,7 +9061,7 @@ function AdminResultsPage({
       {fixtures.length === 0 ? (
         <GlassCard className="p-8">
           <div className="text-sm font-bold uppercase tracking-widest text-white/55">
-            No fixtures have kicked off yet this round.
+            No fixtures found for this round yet.
           </div>
         </GlassCard>
       ) : (
@@ -9319,7 +9318,7 @@ function BestBetsPage({
             Match Best Bets
           </h3>
           <div className="text-[10px] md:text-xs font-black text-white/45 uppercase tracking-widest mt-1">
-            Highest-confidence plays — winners first, capped odds for hit-rate
+            Where our model sees the most value against the market this round
           </div>
         </div>
         {isLoadingMarkets ? (
