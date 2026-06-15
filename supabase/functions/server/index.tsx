@@ -15,8 +15,6 @@ const BLUEBET_AFFILIATE_USER_AGENT =
   Deno.env.get("BLUEBET_AFFILIATE_USER_AGENT") || "rightedge.com.au";
 const AUTH_SESSION_COOKIE = "rightedge_session";
 const AUTH_SESSION_MAX_AGE_SECONDS = 7_776_000;
-const DEFAULT_STRIPE_PREMIUM_WEEKLY_PRICE_ID = "price_1TE76qHbbDQt0kPBF1BrLgdQ";
-const DEFAULT_STRIPE_PREMIUM_MONTHLY_PRICE_ID = "price_1TeeatHbbDQt0kPBBQ3xzV1d";
 const STRIPE_PREMIUM_EXPECTED_PRODUCT_ID = "prod_UhpquzY3WK2YXs";
 const STRIPE_PREMIUM_WEEKLY_AMOUNT_CENTS = 1400;
 const STRIPE_CHECKOUT_VERSION = "2026-06-05-current-premium-product";
@@ -90,23 +88,9 @@ function normalizePremiumCheckoutPlan(plan: unknown): PremiumCheckoutPlan {
 }
 
 function getConfiguredPremiumStripePriceId(plan: PremiumCheckoutPlan = "weekly") {
-  if (plan === "monthly") {
-    return (
-      Deno.env.get("STRIPE_PREMIUM_MONTHLY_PRICE_ID")?.trim() ||
-      DEFAULT_STRIPE_PREMIUM_MONTHLY_PRICE_ID
-    );
-  }
-
-  return (
-    Deno.env.get("STRIPE_PREMIUM_WEEKLY_PRICE_ID")?.trim() ||
-    DEFAULT_STRIPE_PREMIUM_WEEKLY_PRICE_ID
-  );
-}
-
-function getDefaultPremiumStripePriceId(plan: PremiumCheckoutPlan = "weekly") {
   return plan === "monthly"
-    ? DEFAULT_STRIPE_PREMIUM_MONTHLY_PRICE_ID
-    : DEFAULT_STRIPE_PREMIUM_WEEKLY_PRICE_ID;
+    ? Deno.env.get("STRIPE_PREMIUM_MONTHLY_PRICE_ID")?.trim() || ""
+    : Deno.env.get("STRIPE_PREMIUM_WEEKLY_PRICE_ID")?.trim() || "";
 }
 
 async function getPremiumProductDefaultPriceId(stripe: Stripe) {
@@ -133,7 +117,6 @@ function getStripePriceProductId(price: any) {
 
 async function resolvePremiumStripePriceId(stripe: Stripe, plan: PremiumCheckoutPlan = "weekly") {
   const configuredPriceId = getConfiguredPremiumStripePriceId(plan);
-  const fallbackPriceId = getDefaultPremiumStripePriceId(plan);
   const validatePrice = (price: any, priceId: string) => {
     const productId = getStripePriceProductId(price);
 
@@ -154,20 +137,14 @@ async function resolvePremiumStripePriceId(stripe: Stripe, plan: PremiumCheckout
     }
   };
 
-  try {
-    const configuredPrice = await stripe.prices.retrieve(configuredPriceId);
-    validatePrice(configuredPrice, configuredPriceId);
-    return configuredPriceId;
-  } catch (err: any) {
-    console.warn(`[Stripe] Could not validate configured ${plan} price ${configuredPriceId}:`, err?.message || err);
-  }
-
-  const fallbackPrice = await stripe.prices.retrieve(fallbackPriceId);
-  try {
-    validatePrice(fallbackPrice, fallbackPriceId);
-    return fallbackPriceId;
-  } catch (err: any) {
-    console.warn(`[Stripe] Could not validate fallback ${plan} price ${fallbackPriceId}:`, err?.message || err);
+  if (configuredPriceId) {
+    try {
+      const configuredPrice = await stripe.prices.retrieve(configuredPriceId);
+      validatePrice(configuredPrice, configuredPriceId);
+      return configuredPriceId;
+    } catch (err: any) {
+      console.warn(`[Stripe] Could not validate configured ${plan} price ${configuredPriceId}:`, err?.message || err);
+    }
   }
 
   if (plan === "weekly") {
