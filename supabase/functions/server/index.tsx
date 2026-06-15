@@ -18,6 +18,7 @@ const AUTH_SESSION_MAX_AGE_SECONDS = 7_776_000;
 const DEFAULT_STRIPE_PREMIUM_WEEKLY_PRICE_ID = "price_1TE76qHbbDQt0kPBF1BrLgdQ";
 const DEFAULT_STRIPE_PREMIUM_MONTHLY_PRICE_ID = "price_1TeeatHbbDQt0kPBBQ3xzV1d";
 const STRIPE_PREMIUM_EXPECTED_PRODUCT_ID = "prod_UCW96IffvVLL3c";
+const STRIPE_PREMIUM_WEEKLY_AMOUNT_CENTS = 1400;
 const STRIPE_CHECKOUT_VERSION = "2026-06-05-current-premium-product";
 const STRIPE_RETENTION_COUPON_KV_KEY = "stripe_retention_coupon_id";
 const STRIPE_RETENTION_OFFER_INVOICES = 2;
@@ -116,30 +117,36 @@ function getStripePriceProductId(price: any) {
 async function resolvePremiumStripePriceId(stripe: Stripe, plan: PremiumCheckoutPlan = "weekly") {
   const configuredPriceId = getConfiguredPremiumStripePriceId(plan);
   const fallbackPriceId = getDefaultPremiumStripePriceId(plan);
+  const validatePrice = (price: any, priceId: string) => {
+    const productId = getStripePriceProductId(price);
+
+    if (price.active === false || productId !== STRIPE_PREMIUM_EXPECTED_PRODUCT_ID) {
+      throw new Error(
+        `${plan} price ${priceId} is not usable for expected product ${STRIPE_PREMIUM_EXPECTED_PRODUCT_ID}.`
+      );
+    }
+
+    if (plan === "weekly") {
+      const interval = String(price?.recurring?.interval || "").toLowerCase();
+      const unitAmount = Number(price?.unit_amount);
+      if (interval !== "week" || unitAmount !== STRIPE_PREMIUM_WEEKLY_AMOUNT_CENTS) {
+        throw new Error(
+          `Weekly price ${priceId} must be ${STRIPE_PREMIUM_WEEKLY_AMOUNT_CENTS} cents per week.`
+        );
+      }
+    }
+  };
 
   try {
     const configuredPrice = await stripe.prices.retrieve(configuredPriceId);
-    const configuredProductId = getStripePriceProductId(configuredPrice);
-
-    if (configuredPrice.active !== false && configuredProductId === STRIPE_PREMIUM_EXPECTED_PRODUCT_ID) {
-      return configuredPriceId;
-    }
-
-    console.warn(
-      `[Stripe] Ignoring configured ${plan} price ${configuredPriceId}; product=${configuredProductId || "unknown"} active=${configuredPrice.active}`
-    );
+    validatePrice(configuredPrice, configuredPriceId);
+    return configuredPriceId;
   } catch (err: any) {
     console.warn(`[Stripe] Could not validate configured ${plan} price ${configuredPriceId}:`, err?.message || err);
   }
 
   const fallbackPrice = await stripe.prices.retrieve(fallbackPriceId);
-  const fallbackProductId = getStripePriceProductId(fallbackPrice);
-
-  if (fallbackPrice.active === false || fallbackProductId !== STRIPE_PREMIUM_EXPECTED_PRODUCT_ID) {
-    throw new Error(
-      `Fallback ${plan} price ${fallbackPriceId} is not usable for expected product ${STRIPE_PREMIUM_EXPECTED_PRODUCT_ID}.`
-    );
-  }
+  validatePrice(fallbackPrice, fallbackPriceId);
 
   return fallbackPriceId;
 }
@@ -1491,7 +1498,7 @@ function buildNurtureEmail(stepId: LeadNurtureStepId, ctx: Awaited<ReturnType<ty
       subject: `Round ${ctx.round} starts ${nextKickoffDay} — premium view is live`,
       eyebrow: "Day 14 - Before Kickoff",
       headline: `The premium view for Round ${ctx.round} is live.`,
-      body: `First game is <strong>${nextMatch}</strong> — ${nextKickoffTime}.<br/><br/>If you want the full model read before kickoff — the plays, the try scorer value, the filtered signals — this is the window.<br/><br/>After the first game starts, the round's already underway and some prices will have moved.<br/><br/>The model has identified ${tryScorerCount} try scorer signals for Round ${ctx.round}.<br/><br/>One week access is $9. No lock-in.`,
+      body: `First game is <strong>${nextMatch}</strong> — ${nextKickoffTime}.<br/><br/>If you want the full model read before kickoff — the plays, the try scorer value, the filtered signals — this is the window.<br/><br/>After the first game starts, the round's already underway and some prices will have moved.<br/><br/>The model has identified ${tryScorerCount} try scorer signals for Round ${ctx.round}.<br/><br/>One week access is $14. No lock-in.`,
       cta: `Unlock Round ${ctx.round} Access`,
       href: "https://www.rightedge.com.au/#best-bets",
     },

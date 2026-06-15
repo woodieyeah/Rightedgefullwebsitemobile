@@ -2937,7 +2937,7 @@ function PaymentGateModal({
               Premium Access
             </h3>
             <p className="text-[10px] font-medium text-[#9CA3AF] uppercase tracking-widest">
-              Subscriber login or $9/week
+              Subscriber login or $14/week
             </p>
           </div>
         </div>
@@ -2987,7 +2987,7 @@ function PaymentGateModal({
                 <RefreshCw className="w-5 h-5 animate-spin" />
               ) : (
                 <>
-                  Unlock Premium — $9/week
+                  Unlock Premium — $14/week
                   <ArrowRight className="w-5 h-5 stroke-[3px]" />
                 </>
               )}
@@ -3029,7 +3029,7 @@ function PaymentGateModal({
                 <RefreshCw className="w-5 h-5 animate-spin" />
               ) : step === "email" ? (
                 <>
-                  Unlock Premium Plays — $9/week
+                  Unlock Premium Plays — $14/week
                   <ArrowRight className="w-5 h-5 stroke-[3px]" />
                 </>
               ) : null}
@@ -8058,7 +8058,7 @@ function BestBetsPage({
               onClick={() => onRequestAccess("best-bets")}
               className="inline-flex items-center justify-center gap-3 bg-[#FF2E63] text-white px-8 py-4 text-base font-black uppercase tracking-wider hover:bg-[#E62959] transition-colors shadow-[4px_4px_0_0_#0047FF]"
             >
-              Unlock Premium Plays — $9/week
+              Unlock Premium Plays — $14/week
               <ArrowRight className="w-5 h-5 stroke-[3px]" />
             </button>
           </div>
@@ -9183,7 +9183,7 @@ function TryScorersPage({
               onClick={() => onRequestAccess("try-scorers")}
               className="inline-flex items-center justify-center gap-3 re-primary-cta border px-8 py-4 text-base font-medium uppercase tracking-wider transition hover:opacity-90"
             >
-              Unlock Premium Plays — $9/week
+              Unlock Premium Plays — $14/week
               <ArrowRight className="w-5 h-5 stroke-[2px]" />
             </button>
           </div>
@@ -10093,7 +10093,7 @@ function SgmBuilderPage({
               onClick={() => onRequestAccess("sgm-builder")}
               className="inline-flex items-center justify-center gap-3 bg-[#FF2E63] text-white px-8 py-4 text-base font-black uppercase tracking-wider hover:bg-[#E62959] transition-colors shadow-[4px_4px_0_0_#0047FF]"
             >
-              Unlock Premium Plays — $9/week
+              Unlock Premium Plays — $14/week
               <ArrowRight className="w-5 h-5 stroke-[3px]" />
             </button>
           </div>

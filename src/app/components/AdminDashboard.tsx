@@ -650,7 +650,7 @@ export function AdminDashboard({ data, onNavigateAdStudio }: { data?: any, onNav
 
         <div style="background:#111116;border:1px solid #1E1E2E;margin-top:16px;padding:22px 24px;">
           <div style="font-family:Inter,Arial,Helvetica,sans-serif;font-size:13px;line-height:1.7;color:#9CA3AF;">Free shows the model read. Premium shows where to act. The full ${safeRound} card is live now.</div>
-          ${adminEmailCtaHtml('https://www.rightedge.com.au/#best-bets', 'Unlock Premium - $9/week ->', 'secondary')}
+          ${adminEmailCtaHtml('https://www.rightedge.com.au/#best-bets', 'Unlock Premium - $14/week ->', 'secondary')}
         </div>`
     ));
   };
