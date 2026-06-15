@@ -7578,7 +7578,7 @@ const RIGHTEDGE_TUNING = {
   minValueEdgePct: 0.5,
   // Odds bounds.
   minOdds: 1.55,
-  minH2hOdds: 1.35,
+  minH2hOdds: 1.25, // was 1.35 — let genuinely short favourites anchor Best Bets
   // Headline Best Bets cap odds for "feel-good" hit-rate; Value Plays may go higher.
   maxOddsHeadline: 2.4,
 } as const;
@@ -7692,6 +7692,13 @@ function getBestPremiumMarketPlayForMatch(
   const withinHeadlineOdds = (odds: number) =>
     !isHeadline || odds <= RIGHTEDGE_TUNING.maxOddsHeadline;
 
+  // H2H is the safe hit-rate ANCHOR. In bestbet mode we deliberately do NOT
+  // require a positive value edge: a strong favourite the model likes is a
+  // legitimate hit-rate play even when the market prices it short (no "value").
+  // Value Plays mode still demands a value edge to justify chasing the price.
+  const h2hPassesValue = (winPct: number, odds: number) =>
+    isHeadline ? true : hasPremiumMatchValueEdge(winPct, odds);
+
   Object.entries(matchMarkets).forEach(([bookKey, bookData]) => {
     const bookmaker = displayBookmakerName(bookKey);
 
@@ -7757,7 +7764,7 @@ function getBestPremiumMarketPlayForMatch(
       // H2H is a true win-probability market — the safe hit-rate anchor.
       if (winnerWinPct < RIGHTEDGE_TUNING.minH2hWinPct) { if (trackGates) rejectGate("h2h:winFloor"); return; }
       if (odds < RIGHTEDGE_TUNING.minH2hOdds || !withinHeadlineOdds(odds)) { if (trackGates) rejectGate("h2h:oddsBand"); return; }
-      if (!hasPremiumMatchValueEdge(winnerWinPct, odds)) { if (trackGates) rejectGate("h2h:valueGate"); return; }
+      if (!h2hPassesValue(winnerWinPct, odds)) { if (trackGates) rejectGate("h2h:valueGate"); return; }
 
       candidates.push({
         id: `${row.match}-${bookKey}-h2h-${team}`,
@@ -7783,7 +7790,7 @@ function getBestPremiumMarketPlayForMatch(
       .sort((a, b) => b.odds - a.odds)[0];
 
     if (
-      hasPremiumMatchValueEdge(winnerWinPct, sheetWinnerMarketOdds) &&
+      h2hPassesValue(winnerWinPct, sheetWinnerMarketOdds) &&
       (!bestLiveH2hCandidate || sheetWinnerMarketOdds > bestLiveH2hCandidate.odds)
     ) {
       candidates.push({
@@ -7806,7 +7813,7 @@ function getBestPremiumMarketPlayForMatch(
       winnerWinPct >= RIGHTEDGE_TUNING.minH2hWinPct &&
       odds >= RIGHTEDGE_TUNING.minH2hOdds &&
       withinHeadlineOdds(odds) &&
-      hasPremiumMatchValueEdge(winnerWinPct, odds)
+      h2hPassesValue(winnerWinPct, odds)
     ) {
       if (trackGates) RIGHTEDGE_MATCHES_WITH_PLAY += 1;
       return {
