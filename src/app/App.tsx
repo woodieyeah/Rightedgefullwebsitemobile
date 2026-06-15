@@ -8809,12 +8809,18 @@ function OriginPage({
           projectedValue: originRow.predictedAwayScore - originRow.predictedHomeScore,
         }
       : null;
-  const originPremiumPlays = [
+  const originAllPremiumPlays = [
     originPremiumPlay,
     originQueenslandLinePlay && originPremiumPlay?.id !== originQueenslandLinePlay.id
       ? originQueenslandLinePlay
       : null,
   ].filter(Boolean) as PremiumMarketPlay[];
+  // Lead with the margin (Line) play as the headline — that's where the model
+  // adds value over the market. H2H and other markets fall in behind it.
+  const originPremiumPlays = [
+    ...originAllPremiumPlays.filter((play) => play.type === "Line"),
+    ...originAllPremiumPlays.filter((play) => play.type !== "Line"),
+  ];
   const originTryScorerSignals = states.flatMap((state) =>
     state.props.map((prop) => {
       const liveOdds = originTryScorerOddsByPlayer[normalizeOriginPlayerName(prop.player)];
@@ -8883,6 +8889,98 @@ function OriginPage({
                 <span>Wednesday Jun 17</span>
                 <span className="text-[#6B7280]">/</span>
                 <span>8:05 PM AEST</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </GlassCard>
+
+      <GlassCard className="p-4 md:p-6">
+        <div className="flex flex-col gap-5">
+          <div className="grid grid-cols-1 gap-3">
+            {states.map((state, index) => (
+              <div
+                key={state.key}
+                className="relative grid grid-cols-1 items-center gap-3 border border-[#1E1E2E] bg-[#111116] p-3 sm:grid-cols-[minmax(0,1fr)_auto] md:p-4"
+              >
+                <span
+                  className="absolute left-0 top-0 h-full w-1"
+                  style={{ backgroundColor: state.colors.primary }}
+                />
+                <div className="flex min-w-0 items-center gap-3 pl-2">
+                  <div
+                    className="flex h-11 w-11 shrink-0 items-center justify-center border text-[10px] font-semibold uppercase tracking-widest md:h-12 md:w-12"
+                    style={{
+                      backgroundColor: state.colors.primary,
+                      borderColor: state.colors.secondary,
+                      color: state.colors.secondary,
+                    }}
+                  >
+                    {state.short}
+                  </div>
+                  <div className="min-w-0">
+                    <div className={`truncate text-xl md:text-3xl font-semibold tracking-tight uppercase ${
+                      index === 0 ? "text-white" : "text-[#9CA3AF]"
+                    }`}>
+                      {state.name}
+                    </div>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2 sm:w-auto md:gap-3">
+                  <div className="min-w-[70px] border border-[#1E1E2E] bg-[#16161D] px-2 py-2 text-center md:min-w-[90px]">
+                    <div className="text-[8px] uppercase tracking-[0.18em] text-[#6B7280] font-medium mb-1">
+                      Score
+                    </div>
+                    <div className={`text-2xl md:text-3xl font-semibold leading-none ${
+                      index === 0 ? "text-white" : "text-[#9CA3AF]"
+                    }`}>
+                      {state.score}
+                    </div>
+                  </div>
+                  <div className="min-w-[70px] border border-[#1E1E2E] bg-[#16161D] px-2 py-2 text-center md:min-w-[90px]">
+                    <div className="text-[8px] uppercase tracking-[0.18em] text-[#6B7280] font-medium mb-1">
+                      Model %
+                    </div>
+                    <div className="text-2xl md:text-3xl font-semibold leading-none text-[#00E676]">
+                      {formatPercent(state.winPct, 1)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-4 md:gap-3">
+            <div className="border border-[#1E1E2E] bg-[#16161D] p-3 md:p-4">
+              <div className="text-[8px] md:text-[9px] font-medium uppercase tracking-[0.18em] text-[#6B7280] mb-1.5">
+                Model margin
+              </div>
+              <div className="text-base md:text-2xl font-semibold text-white">
+                2 pts
+              </div>
+            </div>
+            <div className="border border-[#1E1E2E] bg-[#16161D] p-3 md:p-4">
+              <div className="text-[8px] md:text-[9px] font-medium uppercase tracking-[0.18em] text-[#6B7280] mb-1.5">
+                Market line
+              </div>
+              <div className="text-base md:text-2xl font-semibold text-white">
+                QLD {formatSgmLine(originMarketLine.point)}
+              </div>
+            </div>
+            <div className="border border-[#1E1E2E] bg-[#16161D] p-3 md:p-4">
+              <div className="text-[8px] md:text-[9px] font-medium uppercase tracking-[0.18em] text-[#6B7280] mb-1.5">
+                Model total
+              </div>
+              <div className="text-base md:text-2xl font-semibold text-white">
+                {originRow.predictedHomeScore + originRow.predictedAwayScore}
+              </div>
+            </div>
+            <div className="border border-[#1E1E2E] bg-[#16161D] p-3 md:p-4">
+              <div className="text-[8px] md:text-[9px] font-medium uppercase tracking-[0.18em] text-[#6B7280] mb-1.5">
+                Market total
+              </div>
+              <div className="text-base md:text-2xl font-semibold text-white">
+                {originMarketTotal.point}
               </div>
             </div>
           </div>
@@ -9000,186 +9098,7 @@ function OriginPage({
         );
       })()}
 
-      <GlassCard className="p-4 md:p-6">
-        <div className="flex flex-col gap-5">
-          <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
-            <div>
-              <div className="text-[10px] md:text-xs uppercase tracking-[0.2em] text-[#9CA3AF] font-medium mb-2">
-                Main model prediction
-              </div>
-              <h3 className="text-xl md:text-3xl font-semibold tracking-tight text-white uppercase">
-                Game 2 model
-              </h3>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 gap-3">
-            {states.map((state, index) => (
-              <div
-                key={state.key}
-                className="relative grid grid-cols-1 items-center gap-3 border border-[#1E1E2E] bg-[#111116] p-3 sm:grid-cols-[minmax(0,1fr)_auto] md:p-4"
-              >
-                <span
-                  className="absolute left-0 top-0 h-full w-1"
-                  style={{ backgroundColor: state.colors.primary }}
-                />
-                <div className="flex min-w-0 items-center gap-3 pl-2">
-                  <div
-                    className="flex h-11 w-11 shrink-0 items-center justify-center border text-[10px] font-semibold uppercase tracking-widest md:h-12 md:w-12"
-                    style={{
-                      backgroundColor: state.colors.primary,
-                      borderColor: state.colors.secondary,
-                      color: state.colors.secondary,
-                    }}
-                  >
-                    {state.short}
-                  </div>
-                  <div className="min-w-0">
-                    <div className={`truncate text-xl md:text-3xl font-semibold tracking-tight uppercase ${
-                      index === 0 ? "text-white" : "text-[#9CA3AF]"
-                    }`}>
-                      {state.name}
-                    </div>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-2 sm:w-auto md:gap-3">
-                  <div className="min-w-[70px] border border-[#1E1E2E] bg-[#16161D] px-2 py-2 text-center md:min-w-[90px]">
-                    <div className="text-[8px] uppercase tracking-[0.18em] text-[#6B7280] font-medium mb-1">
-                      Score
-                    </div>
-                    <div className={`text-2xl md:text-3xl font-semibold leading-none ${
-                      index === 0 ? "text-white" : "text-[#9CA3AF]"
-                    }`}>
-                      {state.score}
-                    </div>
-                  </div>
-                  <div className="min-w-[70px] border border-[#1E1E2E] bg-[#16161D] px-2 py-2 text-center md:min-w-[90px]">
-                    <div className="text-[8px] uppercase tracking-[0.18em] text-[#6B7280] font-medium mb-1">
-                      Model %
-                    </div>
-                    <div className="text-2xl md:text-3xl font-semibold leading-none text-[#00E676]">
-                      {formatPercent(state.winPct, 1)}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="grid grid-cols-2 gap-2 md:grid-cols-4 md:gap-3">
-            <div className="border border-[#1E1E2E] bg-[#16161D] p-3 md:p-4">
-              <div className="text-[8px] md:text-[9px] font-medium uppercase tracking-[0.18em] text-[#6B7280] mb-1.5">
-                Model margin
-              </div>
-              <div className="text-base md:text-2xl font-semibold text-white">
-                2 pts
-              </div>
-            </div>
-            <div className="border border-[#1E1E2E] bg-[#16161D] p-3 md:p-4">
-              <div className="text-[8px] md:text-[9px] font-medium uppercase tracking-[0.18em] text-[#6B7280] mb-1.5">
-                Market line
-              </div>
-              <div className="text-base md:text-2xl font-semibold text-white">
-                QLD {formatSgmLine(originMarketLine.point)}
-              </div>
-            </div>
-            <div className="border border-[#1E1E2E] bg-[#16161D] p-3 md:p-4">
-              <div className="text-[8px] md:text-[9px] font-medium uppercase tracking-[0.18em] text-[#6B7280] mb-1.5">
-                Model total
-              </div>
-              <div className="text-base md:text-2xl font-semibold text-white">
-                {originRow.predictedHomeScore + originRow.predictedAwayScore}
-              </div>
-            </div>
-            <div className="border border-[#1E1E2E] bg-[#16161D] p-3 md:p-4">
-              <div className="text-[8px] md:text-[9px] font-medium uppercase tracking-[0.18em] text-[#6B7280] mb-1.5">
-                Market total
-              </div>
-              <div className="text-base md:text-2xl font-semibold text-white">
-                {originMarketTotal.point}
-              </div>
-            </div>
-          </div>
-        </div>
-      </GlassCard>
-
-      {/* ALSO WORTH A LOOK — secondary positive-edge plays (lead is already in the hero) */}
-      {originPremiumPlays.length > 1 && (
-        <div className="flex flex-col gap-4">
-          <div className="flex items-center justify-between gap-3">
-            <h3 className="text-lg md:text-2xl font-black text-white uppercase tracking-tight">
-              Also worth a look
-            </h3>
-            <span className="border border-[#1E1E2E] bg-[#16161D] px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.18em] text-[#6B7280]">
-              Positive edge
-            </span>
-          </div>
-          <div className="grid grid-cols-1 gap-4 md:gap-5">
-            {originPremiumPlays.slice(1).map((play) => (
-              <GlassCard key={play.id} className="overflow-hidden p-0">
-                <div className="flex items-center justify-between gap-3 px-4 py-3 md:px-5">
-                  <div className="min-w-0 truncate text-lg md:text-2xl font-black uppercase tracking-tight text-white">
-                    {play.selection}
-                  </div>
-                  <span className="shrink-0 border border-[#1E1E2E] bg-[#16161D] px-2 py-1 text-[8px] font-black uppercase tracking-[0.18em] text-[#6B7280]">
-                    {play.type === "Total" ? "Total" : play.type === "Line" ? "Line" : "H2H"}
-                  </span>
-                </div>
-                <div className="grid grid-cols-2 gap-2 px-4 md:grid-cols-4 md:gap-3 md:px-5">
-                  <div className="border border-[#1E1E2E] bg-[#16161D] p-3">
-                    <div className="text-[8px] font-black uppercase tracking-[0.18em] text-[#6B7280] mb-1.5">
-                      Model %
-                    </div>
-                    <div className="text-base md:text-xl font-black text-[#00E676]">
-                      {formatPercent(play.modelPct, 1)}
-                    </div>
-                  </div>
-                  <div className="border border-[#1E1E2E] bg-[#16161D] p-3">
-                    <div className="text-[8px] font-black uppercase tracking-[0.18em] text-[#6B7280] mb-1.5">
-                      Market %
-                    </div>
-                    <div className="text-base md:text-xl font-black text-white">
-                      {formatPercent(getImpliedWinPctFromOdds(play.odds), 1)}
-                    </div>
-                  </div>
-                  <div className="border border-[#1E1E2E] bg-[#16161D] p-3">
-                    <div className="text-[8px] font-black uppercase tracking-[0.18em] text-[#6B7280] mb-1.5">
-                      Edge
-                    </div>
-                    <div className="text-base md:text-xl font-black text-[#00E676]">
-                      +{formatPercent(play.modelEdge, 1)}
-                    </div>
-                  </div>
-                  <div className="border border-[#1E1E2E] bg-[#16161D] p-3">
-                    <div className="text-[8px] font-black uppercase tracking-[0.18em] text-[#6B7280] mb-1.5">
-                      Odds
-                    </div>
-                    <div className="text-base md:text-xl font-black text-white">
-                      ${play.odds.toFixed(2)}
-                    </div>
-                  </div>
-                </div>
-                <div className="p-4 md:p-5">
-                  <AffiliateMarketButton
-                    payload="rightedge_origin_secondary_play"
-                    bookmaker={play.bookmaker || "Betr"}
-                    odds={play.odds}
-                    label={`Back at ${play.bookmaker || "Betr"} · $${play.odds.toFixed(2)}`}
-                    className="w-full justify-center py-3 text-sm"
-                  />
-                </div>
-              </GlassCard>
-            ))}
-          </div>
-        </div>
-      )}
-
       <div className="flex flex-col gap-4">
-        <div>
-          <h3 className="text-lg md:text-2xl font-black text-white uppercase tracking-tight">
-            Try Scorer Best Bet
-          </h3>
-        </div>
         {(() => {
           // Hero = the single highest positive-edge scorer (value play).
           const heroScorer = positiveOriginTryScorerSignals[0] || null;
@@ -9200,12 +9119,9 @@ function OriginPage({
             <div className="flex flex-col gap-4">
               {heroScorer ? (
                 <GlassCard className="overflow-hidden border-l-4 border-l-[#00E676] p-0">
-                  <div className="flex items-center justify-between gap-3 bg-[#00E676] px-4 py-2.5 md:px-5">
+                  <div className="flex items-center gap-3 bg-[#00E676] px-4 py-2.5 md:px-5">
                     <div className="text-[10px] font-black uppercase tracking-[0.18em] text-white">
                       Value scorer of the game
-                    </div>
-                    <div className="text-[10px] font-black uppercase tracking-[0.18em] text-white">
-                      {heroScorer.liveOdds?.bookmaker || "Betr"}
                     </div>
                   </div>
                   <div className="flex flex-col gap-4 p-4 md:flex-row md:items-center md:justify-between md:p-5">
@@ -9314,6 +9230,77 @@ function OriginPage({
           );
         })()}
       </div>
+
+      {/* ALSO WORTH A LOOK — secondary positive-edge plays (lead is already in the hero) */}
+      {originPremiumPlays.length > 1 && (
+        <div className="flex flex-col gap-4">
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-lg md:text-2xl font-black text-white uppercase tracking-tight">
+              Also worth a look
+            </h3>
+            <span className="border border-[#1E1E2E] bg-[#16161D] px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.18em] text-[#6B7280]">
+              Positive edge
+            </span>
+          </div>
+          <div className="grid grid-cols-1 gap-4 md:gap-5">
+            {originPremiumPlays.slice(1).map((play) => (
+              <GlassCard key={play.id} className="overflow-hidden p-0">
+                <div className="flex items-center justify-between gap-3 px-4 py-3 md:px-5">
+                  <div className="min-w-0 truncate text-lg md:text-2xl font-black uppercase tracking-tight text-white">
+                    {play.selection}
+                  </div>
+                  <span className="shrink-0 border border-[#1E1E2E] bg-[#16161D] px-2 py-1 text-[8px] font-black uppercase tracking-[0.18em] text-[#6B7280]">
+                    {play.type === "Total" ? "Total" : play.type === "Line" ? "Line" : "H2H"}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 px-4 md:grid-cols-4 md:gap-3 md:px-5">
+                  <div className="border border-[#1E1E2E] bg-[#16161D] p-3">
+                    <div className="text-[8px] font-black uppercase tracking-[0.18em] text-[#6B7280] mb-1.5">
+                      Model %
+                    </div>
+                    <div className="text-base md:text-xl font-black text-[#00E676]">
+                      {formatPercent(play.modelPct, 1)}
+                    </div>
+                  </div>
+                  <div className="border border-[#1E1E2E] bg-[#16161D] p-3">
+                    <div className="text-[8px] font-black uppercase tracking-[0.18em] text-[#6B7280] mb-1.5">
+                      Market %
+                    </div>
+                    <div className="text-base md:text-xl font-black text-white">
+                      {formatPercent(getImpliedWinPctFromOdds(play.odds), 1)}
+                    </div>
+                  </div>
+                  <div className="border border-[#1E1E2E] bg-[#16161D] p-3">
+                    <div className="text-[8px] font-black uppercase tracking-[0.18em] text-[#6B7280] mb-1.5">
+                      Edge
+                    </div>
+                    <div className="text-base md:text-xl font-black text-[#00E676]">
+                      +{formatPercent(play.modelEdge, 1)}
+                    </div>
+                  </div>
+                  <div className="border border-[#1E1E2E] bg-[#16161D] p-3">
+                    <div className="text-[8px] font-black uppercase tracking-[0.18em] text-[#6B7280] mb-1.5">
+                      Odds
+                    </div>
+                    <div className="text-base md:text-xl font-black text-white">
+                      ${play.odds.toFixed(2)}
+                    </div>
+                  </div>
+                </div>
+                <div className="p-4 md:p-5">
+                  <AffiliateMarketButton
+                    payload="rightedge_origin_secondary_play"
+                    bookmaker={play.bookmaker || "Betr"}
+                    odds={play.odds}
+                    label={`Back at ${play.bookmaker || "Betr"} · $${play.odds.toFixed(2)}`}
+                    className="w-full justify-center py-3 text-sm"
+                  />
+                </div>
+              </GlassCard>
+            ))}
+          </div>
+        </div>
+      )}
 
       <GlassCard className="p-4 md:p-5 border-l-4 border-l-[#00E676]">
         <div className="flex flex-col gap-4">
