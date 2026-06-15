@@ -8196,18 +8196,18 @@ function BestBetsPage({
 
 const ORIGIN_RAPID_PROPS = {
   nsw: [
-    { player: "Brian To'o", probability: 40.0 },
-    { player: "Tolutau Koula", probability: 37.2 },
-    { player: "Kotoni Staggs", probability: 34.6 },
-    { player: "James Tedesco", probability: 34.3 },
-    { player: "Casey McLean", probability: 33.1 },
+    { player: "Mark Nawaqanitawase", probability: 43.5 },
+    { player: "Brian To'o", probability: 37.5 },
+    { player: "Tolutau Koula", probability: 34.0 },
+    { player: "James Tedesco", probability: 32.4 },
+    { player: "Kotoni Staggs", probability: 32.0 },
   ],
   qld: [
-    { player: "Selwyn Cobbo", probability: 41.2 },
-    { player: "Hamiso Tabuai-Fidow", probability: 38.0 },
-    { player: "Jojo Fifita", probability: 36.4 },
-    { player: "Robert Toia", probability: 26.1 },
-    { player: "Harry Grant", probability: 24.2 },
+    { player: "Selwyn Cobbo", probability: 40.1 },
+    { player: "Hamiso Tabuai-Fidow", probability: 37.2 },
+    { player: "Jojo Fifita", probability: 35.7 },
+    { player: "Robert Toia", probability: 25.7 },
+    { player: "Harry Grant", probability: 23.4 },
   ],
 };
 
