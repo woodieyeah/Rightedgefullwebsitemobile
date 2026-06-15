@@ -7570,15 +7570,17 @@ const RIGHTEDGE_TUNING = {
   // Minimum POINTS the model must beat the market by (selectivity, not win%).
   minLineEdgePts: 2.5, // was 3.0 — too tight, starved the headline list
   minTotalEdgePts: 4.0,
-  // H2H is a true win-probability market — gate on real win %.
-  // 56% keeps us favourite-leaning (NRL favs win ~62%) without starving the
-  // safe H2H anchor that should lead Best Bets.
-  minH2hWinPct: 56, // was 58
+  // H2H is a true win-probability market. This is now just a sanity floor: the
+  // model must rate the team as a genuine winner (>50%). The VALUE gate
+  // (model% > market implied%) is what actually qualifies the play — so a value
+  // underdog the market underrates (e.g. model 52% vs implied 45%) can surface,
+  // which is exactly the priced-up pick subscribers can't get from the bookie.
+  minH2hWinPct: 50, // was 56/58 — lowered so value underdogs aren't blocked
   // Minimum value edge (model% minus implied%) for a play to count.
   minValueEdgePct: 0.5,
   // Odds bounds.
   minOdds: 1.55,
-  minH2hOdds: 1.25, // was 1.35 — let genuinely short favourites anchor Best Bets
+  minH2hOdds: 1.35, // H2H must clear positive value edge; short favs rarely do, so keep a real-price floor
   // Headline Best Bets cap odds for "feel-good" hit-rate; Value Plays may go higher.
   maxOddsHeadline: 2.4,
 } as const;
@@ -7692,12 +7694,13 @@ function getBestPremiumMarketPlayForMatch(
   const withinHeadlineOdds = (odds: number) =>
     !isHeadline || odds <= RIGHTEDGE_TUNING.maxOddsHeadline;
 
-  // H2H is the safe hit-rate ANCHOR. In bestbet mode we deliberately do NOT
-  // require a positive value edge: a strong favourite the model likes is a
-  // legitimate hit-rate play even when the market prices it short (no "value").
-  // Value Plays mode still demands a value edge to justify chasing the price.
+  // EVERY market — including H2H — must clear a positive value edge in ALL
+  // modes. We do NOT headline negative-edge short favourites: that just tells
+  // subscribers what the bookies already tell them. H2H stays eligible so that
+  // when the model genuinely rates an underdog (or finds value in a close
+  // match), that priced-up play surfaces — the kind of pick worth paying for.
   const h2hPassesValue = (winPct: number, odds: number) =>
-    isHeadline ? true : hasPremiumMatchValueEdge(winPct, odds);
+    hasPremiumMatchValueEdge(winPct, odds);
 
   Object.entries(matchMarkets).forEach(([bookKey, bookData]) => {
     const bookmaker = displayBookmakerName(bookKey);
@@ -7836,16 +7839,22 @@ function getBestPremiumMarketPlayForMatch(
     const bValueEdge = getPremiumMatchValueEdgePct(b.modelPct, b.odds);
 
     if (isHeadline) {
-      // BEST BETS (hit-rate): lead with H2H favourites, then big points gaps.
-      // H2H ranked highest because it is the only true win-prob market.
+      // BEST BETS: every candidate already cleared a POSITIVE value edge above.
+      // Lead with the size of that value edge (the defensible "the model beats
+      // the market price" signal), then prefer margin markets (lines/totals)
+      // where the model has the most consistent edge. H2H stays eligible and
+      // ranks on its own value edge — so a genuine underdog/close-match value
+      // pick can headline, but a short favourite without edge never does.
       const typeRank = (play: PremiumMarketPlay) =>
-        play.type === "Head 2 Head" ? 3 : play.type === "Line" ? 2 : 1;
-      const aScore = a.modelPct + (typeRank(a) * 6) + Math.min(6, Math.max(0, a.modelEdge));
-      const bScore = b.modelPct + (typeRank(b) * 6) + Math.min(6, Math.max(0, b.modelEdge));
+        play.type === "Line" ? 3 : play.type === "Total" ? 2 : 1;
+      const aScore = (aValueEdge * 3) + (typeRank(a) * 1.5) + Math.min(6, Math.max(0, a.modelEdge));
+      const bScore = (bValueEdge * 3) + (typeRank(b) * 1.5) + Math.min(6, Math.max(0, b.modelEdge));
       const scoreDiff = bScore - aScore;
       if (Math.abs(scoreDiff) > 0.001) return scoreDiff;
       const betrPreference = compareBetrPreferenceForSameOffer(a, b);
       if (betrPreference) return betrPreference;
+      const valueEdgeDiff = bValueEdge - aValueEdge;
+      if (Math.abs(valueEdgeDiff) > 0.001) return valueEdgeDiff;
       return b.modelPct - a.modelPct;
     }
 
