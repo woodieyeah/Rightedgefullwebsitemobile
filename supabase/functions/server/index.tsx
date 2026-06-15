@@ -336,6 +336,50 @@ async function clearAuthSession(c: any) {
   clearAuthSessionCookie(c);
 }
 
+// Mirrors the frontend ADMIN_EMAILS list (App.tsx). Server-side guard for
+// admin-only write endpoints (results entry).
+const ADMIN_EMAILS = [
+  "elliott@woodbry.com",
+  "ewoodbry@gmail.com",
+  "elliott@rightedge.com.au",
+];
+
+// Returns the session only if the logged-in user is an admin, else null.
+async function requireAdmin(c: any): Promise<StoredAuthSession | null> {
+  const session = await getAuthSessionFromRequest(c);
+  if (!session?.email) return null;
+  if (!ADMIN_EMAILS.includes(session.email.toLowerCase())) return null;
+  return session;
+}
+
+// Normalize a free-text match label into a stable key. Mirrors the frontend
+// getMatchPairKeyFromLabel (sorted, normalized team pair) so client + server
+// agree even if the client forgets to send a pre-normalized matchKey.
+function normalizeServerMatchKey(match: string): string {
+  const raw = String(match || "").trim();
+  if (!raw) return "";
+  const parts = raw.split(/\s+v\s+/i);
+  const normalizeTeam = (team: string) =>
+    String(team || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "")
+      .trim();
+  if (parts.length === 2) {
+    return [normalizeTeam(parts[0]), normalizeTeam(parts[1])]
+      .sort((a, b) => a.localeCompare(b))
+      .join("__");
+  }
+  return raw.toLowerCase();
+}
+
+function buildPlaySnapshotKey(round: number, matchKey: string) {
+  return `play_snapshot:${round}:${matchKey}`;
+}
+
+function buildRoundResultKey(round: number, matchKey: string) {
+  return `round_result:${round}:${matchKey}`;
+}
+
 // Enable logger
 app.use('*', logger(console.log));
 
@@ -4785,5 +4829,147 @@ Deno.cron("Sunday Ledger Review", "0 8 * * 0", async () => {
   }
 });
 }
+
+// ---------------------------------------------------------------------------
+// Premium Plays freeze-at-kickoff + results entry
+// ---------------------------------------------------------------------------
+
+// First-write-wins snapshot of a match's premium play + try scorer signals at
+// kickoff so the card keeps its kickoff values after the odds feed stops.
+// Public + idempotent: once a snapshot exists it is never overwritten.
+app.post("/round-snapshot", async (c) => {
+  try {
+    const body = await c.req.json().catch(() => null);
+    if (!body || typeof body !== "object") {
+      return c.json({ error: "Invalid body" }, 400);
+    }
+    const round = Number(body.round);
+    const match = typeof body.match === "string" ? body.match : "";
+    if (!Number.isFinite(round) || round <= 0) {
+      return c.json({ error: "Invalid round" }, 400);
+    }
+    if (!match.trim() && !String(body.matchKey || "").trim()) {
+      return c.json({ error: "Invalid match" }, 400);
+    }
+    if (body.payload == null || typeof body.payload !== "object") {
+      return c.json({ error: "Invalid payload" }, 400);
+    }
+
+    const matchKey = String(body.matchKey || "").trim() || normalizeServerMatchKey(match);
+    if (!matchKey) return c.json({ error: "Invalid matchKey" }, 400);
+
+    const key = buildPlaySnapshotKey(round, matchKey);
+    const existing = await kv.get(key);
+    if (existing) {
+      const parsed = parseKvValue(existing);
+      return c.json({ ok: true, frozen: true, snapshot: parsed });
+    }
+
+    const snapshot = {
+      round,
+      match: match || matchKey,
+      matchKey,
+      payload: body.payload,
+      frozenAt: new Date().toISOString(),
+    };
+    await kv.set(key, snapshot);
+    return c.json({ ok: true, frozen: true, snapshot });
+  } catch (error: any) {
+    console.error("[round-snapshot] error:", error);
+    return c.json({ error: "Internal server error", message: error?.message }, 500);
+  }
+});
+
+// Public read of all frozen snapshots for a round (used after kickoff to render
+// the locked-in play values).
+app.get("/round-snapshots", async (c) => {
+  try {
+    const round = Number(c.req.query("round"));
+    if (!Number.isFinite(round) || round <= 0) {
+      return c.json({ error: "Invalid round" }, 400);
+    }
+    const rows = await kv.getByPrefix(`play_snapshot:${round}:`);
+    const snapshots = (rows || [])
+      .map((row: any) => parseKvValue(row))
+      .filter(Boolean);
+    return c.json({ round, snapshots });
+  } catch (error: any) {
+    console.error("[round-snapshots] error:", error);
+    return c.json({ error: "Internal server error", message: error?.message }, 500);
+  }
+});
+
+// Admin-only: save (upsert) the settled result for a match. Admin can re-mark.
+app.post("/admin/round-results", async (c) => {
+  try {
+    const session = await requireAdmin(c);
+    if (!session) return c.json({ error: "Unauthorized" }, 401);
+
+    const body = await c.req.json().catch(() => null);
+    if (!body || typeof body !== "object") {
+      return c.json({ error: "Invalid body" }, 400);
+    }
+    const round = Number(body.round);
+    const match = typeof body.match === "string" ? body.match : "";
+    if (!Number.isFinite(round) || round <= 0) {
+      return c.json({ error: "Invalid round" }, 400);
+    }
+    const matchKey = String(body.matchKey || "").trim() || normalizeServerMatchKey(match);
+    if (!matchKey) return c.json({ error: "Invalid match" }, 400);
+
+    const playResult =
+      body.playResult === "HIT" || body.playResult === "MISS" || body.playResult === "PUSH"
+        ? body.playResult
+        : null;
+
+    const finalHome =
+      body.finalHome == null || body.finalHome === "" ? null : Number(body.finalHome);
+    const finalAway =
+      body.finalAway == null || body.finalAway === "" ? null : Number(body.finalAway);
+
+    const tryScorerHits: Record<string, boolean> = {};
+    if (body.tryScorerHits && typeof body.tryScorerHits === "object") {
+      for (const [k, v] of Object.entries(body.tryScorerHits)) {
+        tryScorerHits[k] = Boolean(v);
+      }
+    }
+
+    const result = {
+      round,
+      match: match || matchKey,
+      matchKey,
+      finalHome: Number.isFinite(finalHome as number) ? finalHome : null,
+      finalAway: Number.isFinite(finalAway as number) ? finalAway : null,
+      playResult,
+      tryScorerHits,
+      updatedAt: new Date().toISOString(),
+      updatedBy: session.email,
+    };
+    await kv.set(buildRoundResultKey(round, matchKey), result);
+    return c.json({ ok: true, result });
+  } catch (error: any) {
+    console.error("[admin/round-results] error:", error);
+    return c.json({ error: "Internal server error", message: error?.message }, 500);
+  }
+});
+
+// Public read of all saved results for a round (results are shown publicly once
+// an admin has entered them).
+app.get("/round-results", async (c) => {
+  try {
+    const round = Number(c.req.query("round"));
+    if (!Number.isFinite(round) || round <= 0) {
+      return c.json({ error: "Invalid round" }, 400);
+    }
+    const rows = await kv.getByPrefix(`round_result:${round}:`);
+    const results = (rows || [])
+      .map((row: any) => parseKvValue(row))
+      .filter(Boolean);
+    return c.json({ round, results });
+  } catch (error: any) {
+    console.error("[round-results] error:", error);
+    return c.json({ error: "Internal server error", message: error?.message }, 500);
+  }
+});
 
 Deno.serve(app.fetch);
