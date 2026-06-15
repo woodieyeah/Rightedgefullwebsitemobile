@@ -7568,10 +7568,12 @@ const RIGHTEDGE_TUNING = {
   lineScale: 7.5,
   totalScale: 8,
   // Minimum POINTS the model must beat the market by (selectivity, not win%).
-  minLineEdgePts: 3.0,
+  minLineEdgePts: 2.5, // was 3.0 — too tight, starved the headline list
   minTotalEdgePts: 4.0,
   // H2H is a true win-probability market — gate on real win %.
-  minH2hWinPct: 58, // was 55
+  // 56% keeps us favourite-leaning (NRL favs win ~62%) without starving the
+  // safe H2H anchor that should lead Best Bets.
+  minH2hWinPct: 56, // was 58
   // Minimum value edge (model% minus implied%) for a play to count.
   minValueEdgePct: 0.5,
   // Odds bounds.
