@@ -7568,7 +7568,7 @@ const RIGHTEDGE_TUNING = {
   lineScale: 7.5,
   totalScale: 8,
   // Minimum POINTS the model must beat the market by (selectivity, not win%).
-  minLineEdgePts: 2.5, // was 3.0 — too tight, starved the headline list
+  minLineEdgePts: 1.5, // was 3.0 — too tight, starved the headline list
   minTotalEdgePts: 4.0,
   // H2H is a true win-probability market. This is now just a sanity floor: the
   // model must rate the team as a genuine winner (>50%). The VALUE gate
