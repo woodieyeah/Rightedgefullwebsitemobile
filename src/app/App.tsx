@@ -7538,7 +7538,36 @@ function probabilityFromEdge(edge: number, scale = 7.5) {
   return Math.max(1, Math.min(99, (1 / (1 + Math.exp(-(edge / scale)))) * 100));
 }
 
-const MIN_PREMIUM_MATCH_VALUE_EDGE_PCT = 0.5;
+/**
+ * RIGHTEDGE_TUNING — single source of truth for best-bet selection.
+ *
+ * IMPORTANT: For lines and totals, "modelPct" is NOT a real win probability.
+ * It is a relabelled points-gap (probabilityFromEdge maps a points edge to a
+ * 1-99 number via a sigmoid). The honest lever for lines/totals is the POINTS
+ * gap, not a % floor. H2H is the only market where modelPct is a true win prob,
+ * so H2H is gated on win% and is the safer hit-rate anchor.
+ *
+ * Tune here; do not reintroduce inline literals elsewhere.
+ */
+const RIGHTEDGE_TUNING = {
+  // Sigmoid sensitivity converting a points edge to a model number.
+  lineScale: 7.5,
+  totalScale: 8,
+  // Minimum POINTS the model must beat the market by (selectivity, not win%).
+  minLineEdgePts: 3.0,
+  minTotalEdgePts: 4.0,
+  // H2H is a true win-probability market — gate on real win %.
+  minH2hWinPct: 58, // was 55
+  // Minimum value edge (model% minus implied%) for a play to count.
+  minValueEdgePct: 0.5,
+  // Odds bounds.
+  minOdds: 1.55,
+  minH2hOdds: 1.35,
+  // Headline Best Bets cap odds for "feel-good" hit-rate; Value Plays may go higher.
+  maxOddsHeadline: 2.4,
+} as const;
+
+const MIN_PREMIUM_MATCH_VALUE_EDGE_PCT = RIGHTEDGE_TUNING.minValueEdgePct;
 
 function getPremiumMatchValueEdgePct(modelPct: number, odds: number) {
   return modelPct - getImpliedWinPctFromOdds(odds);
@@ -7575,9 +7604,12 @@ function compareBetrPreferenceForSameOffer(a: PremiumMarketPlay, b: PremiumMarke
   return 0;
 }
 
+type PremiumPlayMode = "bestbet" | "value";
+
 function getBestPremiumMarketPlayForMatch(
   row: PredictionRow,
   marketMap: SgmMarketMap,
+  mode: PremiumPlayMode = "bestbet",
 ): PremiumMarketPlay | null {
   const matchMarkets = getSgmMatchMarkets(marketMap, row);
   const candidates: PremiumMarketPlay[] = [];
@@ -7586,6 +7618,12 @@ function getBestPremiumMarketPlayForMatch(
   const predictedWinner = normalizeTeamName(row.predictedWinner);
   const winnerWinPct = getPredictedWinnerWinPct(row);
   const sheetWinnerMarketOdds = getPredictedWinnerMarketOdds(row);
+
+  const isHeadline = mode === "bestbet";
+  // Headline Best Bets cap odds for the "feel-good" hit-rate weekly product.
+  // Value Plays may chase longer prices.
+  const withinHeadlineOdds = (odds: number) =>
+    !isHeadline || odds <= RIGHTEDGE_TUNING.maxOddsHeadline;
 
   Object.entries(matchMarkets).forEach(([bookKey, bookData]) => {
     const bookmaker = displayBookmakerName(bookKey);
@@ -7597,9 +7635,13 @@ function getBestPremiumMarketPlayForMatch(
           ? projectedHomeMargin
           : -projectedHomeMargin;
       const coverEdge = projectedTeamMargin + spread.point;
-      const modelPct = probabilityFromEdge(coverEdge, 7.5);
+      const modelPct = probabilityFromEdge(coverEdge, RIGHTEDGE_TUNING.lineScale);
 
-      if (modelPct < 53 || spread.odds < 1.55 || !hasPremiumMatchValueEdge(modelPct, spread.odds)) return;
+      // Lines are ~coinflips by design — gate on the POINTS the model beats the
+      // line by (selectivity), not a fake win%.
+      if (coverEdge < RIGHTEDGE_TUNING.minLineEdgePts) return;
+      if (spread.odds < RIGHTEDGE_TUNING.minOdds || !withinHeadlineOdds(spread.odds)) return;
+      if (!hasPremiumMatchValueEdge(modelPct, spread.odds)) return;
 
       candidates.push({
         id: `${row.match}-${bookKey}-line-${team}-${spread.point}`,
@@ -7622,9 +7664,12 @@ function getBestPremiumMarketPlayForMatch(
         total.side === "Over"
           ? projectedTotal - total.point
           : total.point - projectedTotal;
-      const modelPct = probabilityFromEdge(edge, 8);
+      const modelPct = probabilityFromEdge(edge, RIGHTEDGE_TUNING.totalScale);
 
-      if (modelPct < 53 || total.odds < 1.55 || !hasPremiumMatchValueEdge(modelPct, total.odds)) return;
+      // Totals: gate on the POINTS gap between model total and market line.
+      if (Math.abs(edge) < RIGHTEDGE_TUNING.minTotalEdgePts) return;
+      if (total.odds < RIGHTEDGE_TUNING.minOdds || !withinHeadlineOdds(total.odds)) return;
+      if (!hasPremiumMatchValueEdge(modelPct, total.odds)) return;
 
       candidates.push({
         id: `${row.match}-${bookKey}-total-${total.side}-${total.point}`,
@@ -7642,7 +7687,10 @@ function getBestPremiumMarketPlayForMatch(
 
     Object.entries(bookData.h2h).forEach(([team, odds]) => {
       if (normalizeTeamName(team) !== predictedWinner) return;
-      if (winnerWinPct < 55 || odds < 1.35 || !hasPremiumMatchValueEdge(winnerWinPct, odds)) return;
+      // H2H is a true win-probability market — the safe hit-rate anchor.
+      if (winnerWinPct < RIGHTEDGE_TUNING.minH2hWinPct) return;
+      if (odds < RIGHTEDGE_TUNING.minH2hOdds || !withinHeadlineOdds(odds)) return;
+      if (!hasPremiumMatchValueEdge(winnerWinPct, odds)) return;
 
       candidates.push({
         id: `${row.match}-${bookKey}-h2h-${team}`,
@@ -7658,7 +7706,11 @@ function getBestPremiumMarketPlayForMatch(
     });
   });
 
-  if (winnerWinPct >= 55 && sheetWinnerMarketOdds >= 1.35) {
+  if (
+    winnerWinPct >= RIGHTEDGE_TUNING.minH2hWinPct &&
+    sheetWinnerMarketOdds >= RIGHTEDGE_TUNING.minH2hOdds &&
+    withinHeadlineOdds(sheetWinnerMarketOdds)
+  ) {
     const bestLiveH2hCandidate = candidates
       .filter((candidate) => candidate.type === "Head 2 Head")
       .sort((a, b) => b.odds - a.odds)[0];
@@ -7683,7 +7735,12 @@ function getBestPremiumMarketPlayForMatch(
 
   if (!candidates.length) {
     const odds = sheetWinnerMarketOdds;
-    if (winnerWinPct >= 55 && odds >= 1.35 && hasPremiumMatchValueEdge(winnerWinPct, odds)) {
+    if (
+      winnerWinPct >= RIGHTEDGE_TUNING.minH2hWinPct &&
+      odds >= RIGHTEDGE_TUNING.minH2hOdds &&
+      withinHeadlineOdds(odds) &&
+      hasPremiumMatchValueEdge(winnerWinPct, odds)
+    ) {
       return {
         id: `${row.match}-fallback-h2h`,
         row,
@@ -7700,10 +7757,26 @@ function getBestPremiumMarketPlayForMatch(
   }
 
   const rankedCandidates = candidates.sort((a, b) => {
-    const typeRank = (play: PremiumMarketPlay) =>
-      play.type === "Line" ? 3 : play.type === "Total" ? 2 : 1;
     const aValueEdge = getPremiumMatchValueEdgePct(a.modelPct, a.odds);
     const bValueEdge = getPremiumMatchValueEdgePct(b.modelPct, b.odds);
+
+    if (isHeadline) {
+      // BEST BETS (hit-rate): lead with H2H favourites, then big points gaps.
+      // H2H ranked highest because it is the only true win-prob market.
+      const typeRank = (play: PremiumMarketPlay) =>
+        play.type === "Head 2 Head" ? 3 : play.type === "Line" ? 2 : 1;
+      const aScore = a.modelPct + (typeRank(a) * 6) + Math.min(6, Math.max(0, a.modelEdge));
+      const bScore = b.modelPct + (typeRank(b) * 6) + Math.min(6, Math.max(0, b.modelEdge));
+      const scoreDiff = bScore - aScore;
+      if (Math.abs(scoreDiff) > 0.001) return scoreDiff;
+      const betrPreference = compareBetrPreferenceForSameOffer(a, b);
+      if (betrPreference) return betrPreference;
+      return b.modelPct - a.modelPct;
+    }
+
+    // VALUE PLAYS (ROI): value edge weighted highest, longer odds rewarded.
+    const typeRank = (play: PremiumMarketPlay) =>
+      play.type === "Line" ? 3 : play.type === "Total" ? 2 : 1;
     const aScore = (aValueEdge * 2) + a.modelPct + Math.min(8, Math.max(0, (a.odds - 1.8) * 6)) + typeRank(a);
     const bScore = (bValueEdge * 2) + b.modelPct + Math.min(8, Math.max(0, (b.odds - 1.8) * 6)) + typeRank(b);
     const scoreDiff = bScore - aScore;
@@ -7723,6 +7796,7 @@ function buildPremiumMarketPlays(
   marketMap: SgmMarketMap,
   now = Date.now(),
   includeStarted = false,
+  mode: PremiumPlayMode = "bestbet",
 ) {
   const settledMatchKeys = new Set(
     data.betLog
@@ -7734,7 +7808,7 @@ function buildPremiumMarketPlays(
     .sort(sortPredictionsByFixture)
     .filter((row) => includeStarted || !settledMatchKeys.has(buildMatchLabelKey(row.match)))
     .filter((row) => includeStarted || !hasPredictionKickedOff(row, now))
-    .map((row) => getBestPremiumMarketPlayForMatch(row, marketMap))
+    .map((row) => getBestPremiumMarketPlayForMatch(row, marketMap, mode))
     .filter(Boolean) as PremiumMarketPlay[];
 }
 
@@ -7989,10 +8063,24 @@ function BestBetsPage({
   }, []);
 
   const canViewStartedPremiumPlays = isPremium || isAdmin;
+  // BEST BETS: hit-rate / feel-good list — H2H favourites led, headline odds capped.
   const matchReads = useMemo(
-    () => buildPremiumMarketPlays(data, marketMap, now, canViewStartedPremiumPlays).slice(0, isAdmin ? 50 : 8),
+    () => buildPremiumMarketPlays(data, marketMap, now, canViewStartedPremiumPlays, "bestbet").slice(0, isAdmin ? 50 : 8),
     [data, marketMap, now, canViewStartedPremiumPlays, isAdmin],
   );
+  // VALUE PLAYS: ROI list — value-edge ranked, longer prices allowed. Deduped
+  // against Best Bets so the same match never shows the identical selection twice.
+  const valuePlayReads = useMemo(() => {
+    const bestBetSelectionKeys = new Set(
+      matchReads.map((play) => `${buildMatchLabelKey(play.row.match)}|${play.type}|${play.selection}`),
+    );
+    return buildPremiumMarketPlays(data, marketMap, now, canViewStartedPremiumPlays, "value")
+      .filter(
+        (play) =>
+          !bestBetSelectionKeys.has(`${buildMatchLabelKey(play.row.match)}|${play.type}|${play.selection}`),
+      )
+      .slice(0, isAdmin ? 50 : 8);
+  }, [data, marketMap, now, canViewStartedPremiumPlays, isAdmin, matchReads]);
 
   const latestTryScorerRound = Math.max(
     0,
@@ -8072,10 +8160,10 @@ function BestBetsPage({
       <div className="flex flex-col gap-4">
         <div>
           <h3 className="text-lg md:text-2xl font-black text-white uppercase tracking-tight">
-            Best Match Plays
+            Match Best Bets
           </h3>
           <div className="text-[10px] md:text-xs font-black text-white/45 uppercase tracking-widest mt-1">
-            Model margin and total compared against current market lines
+            Highest-confidence plays — winners first, capped odds for hit-rate
           </div>
         </div>
         {isLoadingMarkets ? (
@@ -8098,6 +8186,24 @@ function BestBetsPage({
           </div>
         )}
       </div>
+
+      {!isLoadingMarkets && valuePlayReads.length > 0 ? (
+        <div className="flex flex-col gap-4">
+          <div>
+            <h3 className="text-lg md:text-2xl font-black text-white uppercase tracking-tight">
+              Value Plays
+            </h3>
+            <div className="text-[10px] md:text-xs font-black text-white/45 uppercase tracking-widest mt-1">
+              Bigger model edges at longer prices — higher variance, higher ROI
+            </div>
+          </div>
+          <div className="grid grid-cols-1 gap-5 md:gap-6">
+            {valuePlayReads.map((play) => (
+              <PremiumMarketPlayCard key={play.id} play={play} now={now} />
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       <div className="flex flex-col gap-4">
         <div>
@@ -9691,7 +9797,8 @@ function getSpreadLeg(
 
   const projectedMargin = getSelectedTeamProjectedMargin(match, selectedTeam);
   const coverEdge = projectedMargin + spread.point;
-  const modelPct = Math.max(38, Math.min(76, 50 + (coverEdge * 4)));
+  // Unified with the best-bet engine: single source of truth for line model %.
+  const modelPct = probabilityFromEdge(coverEdge, RIGHTEDGE_TUNING.lineScale);
 
   return {
     label: `${selectedTeam} ${formatSgmLine(spread.point)} line`,
@@ -9723,7 +9830,8 @@ function getTotalLeg(
   return {
     label: `${side} ${matchingTotal.point} total points`,
     typeLabel: "Total",
-    modelPct: Math.max(38, Math.min(76, 50 + (totalDiff * 3))),
+    // Unified with the best-bet engine: single source of truth for total model %.
+    modelPct: probabilityFromEdge(totalDiff, RIGHTEDGE_TUNING.totalScale),
     odds: matchingTotal.odds,
   } as SgmLeg;
 }
