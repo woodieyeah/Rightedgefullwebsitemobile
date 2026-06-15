@@ -7622,6 +7622,52 @@ function compareBetrPreferenceForSameOffer(a: PremiumMarketPlay, b: PremiumMarke
 
 type PremiumPlayMode = "bestbet" | "value";
 
+// --- TEMP DIAGNOSTIC: gate-rejection tally -------------------------------
+// Lets us tune thresholds from real round data instead of guessing.
+// Open the browser console and run: window.__rightedgeGateReport()
+// Remove this block (and the rejectGate() calls) once thresholds are locked.
+type GateReason =
+  | "line:edgeFloor"
+  | "line:oddsBand"
+  | "line:valueGate"
+  | "total:edgeFloor"
+  | "total:oddsBand"
+  | "total:valueGate"
+  | "h2h:winFloor"
+  | "h2h:oddsBand"
+  | "h2h:valueGate";
+
+const RIGHTEDGE_GATE_TALLY: Record<string, number> = {};
+let RIGHTEDGE_MATCHES_SEEN = 0;
+let RIGHTEDGE_MATCHES_WITH_PLAY = 0;
+
+function rejectGate(reason: GateReason) {
+  RIGHTEDGE_GATE_TALLY[reason] = (RIGHTEDGE_GATE_TALLY[reason] || 0) + 1;
+}
+
+if (typeof window !== "undefined") {
+  (window as unknown as Record<string, unknown>).__rightedgeGateReport = () => {
+    const report = {
+      matchesSeen: RIGHTEDGE_MATCHES_SEEN,
+      matchesWithAPlay: RIGHTEDGE_MATCHES_WITH_PLAY,
+      matchesWithNoPlay: RIGHTEDGE_MATCHES_SEEN - RIGHTEDGE_MATCHES_WITH_PLAY,
+      rejectionsByGate: { ...RIGHTEDGE_GATE_TALLY },
+      tuning: { ...RIGHTEDGE_TUNING },
+    };
+    // eslint-disable-next-line no-console
+    console.table(report.rejectionsByGate);
+    // eslint-disable-next-line no-console
+    console.log("[RightEdge gate report]", report);
+    return report;
+  };
+  (window as unknown as Record<string, unknown>).__rightedgeGateReset = () => {
+    Object.keys(RIGHTEDGE_GATE_TALLY).forEach((k) => delete RIGHTEDGE_GATE_TALLY[k]);
+    RIGHTEDGE_MATCHES_SEEN = 0;
+    RIGHTEDGE_MATCHES_WITH_PLAY = 0;
+  };
+}
+// --- END TEMP DIAGNOSTIC -------------------------------------------------
+
 function getBestPremiumMarketPlayForMatch(
   row: PredictionRow,
   marketMap: SgmMarketMap,
@@ -7634,6 +7680,11 @@ function getBestPremiumMarketPlayForMatch(
   const predictedWinner = normalizeTeamName(row.predictedWinner);
   const winnerWinPct = getPredictedWinnerWinPct(row);
   const sheetWinnerMarketOdds = getPredictedWinnerMarketOdds(row);
+
+  // Only tally for the headline (bestbet) pass so counts aren't doubled by the
+  // value-mode pass that also runs each render.
+  const trackGates = mode === "bestbet";
+  if (trackGates) RIGHTEDGE_MATCHES_SEEN += 1;
 
   const isHeadline = mode === "bestbet";
   // Headline Best Bets cap odds for the "feel-good" hit-rate weekly product.
@@ -7655,9 +7706,9 @@ function getBestPremiumMarketPlayForMatch(
 
       // Lines are ~coinflips by design — gate on the POINTS the model beats the
       // line by (selectivity), not a fake win%.
-      if (coverEdge < RIGHTEDGE_TUNING.minLineEdgePts) return;
-      if (spread.odds < RIGHTEDGE_TUNING.minOdds || !withinHeadlineOdds(spread.odds)) return;
-      if (!hasPremiumMatchValueEdge(modelPct, spread.odds)) return;
+      if (coverEdge < RIGHTEDGE_TUNING.minLineEdgePts) { if (trackGates) rejectGate("line:edgeFloor"); return; }
+      if (spread.odds < RIGHTEDGE_TUNING.minOdds || !withinHeadlineOdds(spread.odds)) { if (trackGates) rejectGate("line:oddsBand"); return; }
+      if (!hasPremiumMatchValueEdge(modelPct, spread.odds)) { if (trackGates) rejectGate("line:valueGate"); return; }
 
       candidates.push({
         id: `${row.match}-${bookKey}-line-${team}-${spread.point}`,
@@ -7683,9 +7734,9 @@ function getBestPremiumMarketPlayForMatch(
       const modelPct = probabilityFromEdge(edge, RIGHTEDGE_TUNING.totalScale);
 
       // Totals: gate on the POINTS gap between model total and market line.
-      if (Math.abs(edge) < RIGHTEDGE_TUNING.minTotalEdgePts) return;
-      if (total.odds < RIGHTEDGE_TUNING.minOdds || !withinHeadlineOdds(total.odds)) return;
-      if (!hasPremiumMatchValueEdge(modelPct, total.odds)) return;
+      if (Math.abs(edge) < RIGHTEDGE_TUNING.minTotalEdgePts) { if (trackGates) rejectGate("total:edgeFloor"); return; }
+      if (total.odds < RIGHTEDGE_TUNING.minOdds || !withinHeadlineOdds(total.odds)) { if (trackGates) rejectGate("total:oddsBand"); return; }
+      if (!hasPremiumMatchValueEdge(modelPct, total.odds)) { if (trackGates) rejectGate("total:valueGate"); return; }
 
       candidates.push({
         id: `${row.match}-${bookKey}-total-${total.side}-${total.point}`,
@@ -7704,9 +7755,9 @@ function getBestPremiumMarketPlayForMatch(
     Object.entries(bookData.h2h).forEach(([team, odds]) => {
       if (normalizeTeamName(team) !== predictedWinner) return;
       // H2H is a true win-probability market — the safe hit-rate anchor.
-      if (winnerWinPct < RIGHTEDGE_TUNING.minH2hWinPct) return;
-      if (odds < RIGHTEDGE_TUNING.minH2hOdds || !withinHeadlineOdds(odds)) return;
-      if (!hasPremiumMatchValueEdge(winnerWinPct, odds)) return;
+      if (winnerWinPct < RIGHTEDGE_TUNING.minH2hWinPct) { if (trackGates) rejectGate("h2h:winFloor"); return; }
+      if (odds < RIGHTEDGE_TUNING.minH2hOdds || !withinHeadlineOdds(odds)) { if (trackGates) rejectGate("h2h:oddsBand"); return; }
+      if (!hasPremiumMatchValueEdge(winnerWinPct, odds)) { if (trackGates) rejectGate("h2h:valueGate"); return; }
 
       candidates.push({
         id: `${row.match}-${bookKey}-h2h-${team}`,
@@ -7757,6 +7808,7 @@ function getBestPremiumMarketPlayForMatch(
       withinHeadlineOdds(odds) &&
       hasPremiumMatchValueEdge(winnerWinPct, odds)
     ) {
+      if (trackGates) RIGHTEDGE_MATCHES_WITH_PLAY += 1;
       return {
         id: `${row.match}-fallback-h2h`,
         row,
@@ -7804,6 +7856,7 @@ function getBestPremiumMarketPlayForMatch(
     return b.odds - a.odds;
   });
 
+  if (trackGates) RIGHTEDGE_MATCHES_WITH_PLAY += 1;
   return rankedCandidates[0];
 }
 
@@ -7819,6 +7872,14 @@ function buildPremiumMarketPlays(
       .filter((b) => b.result === "W" || b.result === "L")
       .map((b) => buildMatchLabelKey(b.match)),
   );
+
+  // TEMP DIAGNOSTIC: reset the gate tally at the start of each headline pass so
+  // __rightedgeGateReport() reflects one clean render, not accumulated renders.
+  if (mode === "bestbet") {
+    Object.keys(RIGHTEDGE_GATE_TALLY).forEach((k) => delete RIGHTEDGE_GATE_TALLY[k]);
+    RIGHTEDGE_MATCHES_SEEN = 0;
+    RIGHTEDGE_MATCHES_WITH_PLAY = 0;
+  }
 
   return [...data.predictions]
     .sort(sortPredictionsByFixture)
