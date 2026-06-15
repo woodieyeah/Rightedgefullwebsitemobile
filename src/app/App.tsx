@@ -1765,6 +1765,11 @@ function getSettledBetForPrediction(data: DashboardData, row: PredictionRow) {
   const pairKey = getPredictionPairKey(row);
   return data.betLog
     .filter((bet) => getMatchPairKeyFromLabel(bet.match) === pairKey)
+    // Round guard: only surface a settled bet from the SAME round as this
+    // fixture. Two teams meet multiple times a season, and matching on the
+    // team-pair alone leaked a prior meeting's settled play onto an upcoming
+    // match card (e.g. a stale "SHARKS @ $2.05" on the Jun 21 Roosters v Sharks).
+    .filter((bet) => !row.roundNumber || !bet.round || bet.round === row.roundNumber)
     .filter((bet) => bet.result === "W" || bet.result === "L" || bet.result === "P")
     .sort((a, b) => Math.abs(b.profit || 0) - Math.abs(a.profit || 0))[0] || null;
 }
@@ -1795,7 +1800,7 @@ function getRoundProofArchiveForPrediction(row: PredictionRow, archive: RoundArc
   if (archive) return archive;
   const pairKey = getPredictionPairKey(row);
 
-  return (
+  const sameRoundMatch =
     ROUND_PROOF_ARCHIVES.find((candidate) =>
       candidate.round === row.roundNumber &&
       (
@@ -1803,7 +1808,16 @@ function getRoundProofArchiveForPrediction(row: PredictionRow, archive: RoundArc
         candidate.matchPlays.some((play) => getMatchPairKeyFromLabel(play.match) === pairKey) ||
         candidate.tryScorers.some((scorer) => getMatchPairKeyFromLabel(scorer.match) === pairKey)
       )
-    ) ||
+    ) || null;
+  if (sameRoundMatch) return sameRoundMatch;
+
+  // Cross-round, pair-only fallback is ONLY safe for matches that have already
+  // been played. For an upcoming fixture it would wrongly inherit proof from a
+  // prior meeting of the same two teams (the stale "SHARKS @ $2.05" bug), so we
+  // never fall back for upcoming games.
+  if (!isFixtureCompleted(row.fixture)) return null;
+
+  return (
     ROUND_PROOF_ARCHIVES.find((candidate) =>
       candidate.matchPlays.some((play) => getMatchPairKeyFromLabel(play.match) === pairKey) ||
       candidate.tryScorers.some((scorer) => getMatchPairKeyFromLabel(scorer.match) === pairKey)
