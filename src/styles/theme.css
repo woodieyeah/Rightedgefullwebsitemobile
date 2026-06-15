@@ -279,6 +279,15 @@
     opacity: 0.9;
   }
 
+  /* When the editorial (light) theme is active, the page backdrop behind the
+     themed container must match it — otherwise the dark #0A0A0F body/#root shows
+     through below the fold as a black void. Scoped via :has() so it only applies
+     when the editorial theme is mounted. */
+  body:has(.rightedge-admin-editorial-theme),
+  #root:has(.rightedge-admin-editorial-theme) {
+    background: #E7E7E4 !important;
+  }
+
   #root .rightedge-admin-editorial-theme {
     --background: #E7E7E4;
     --foreground: #0A0A0A;
