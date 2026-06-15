@@ -3545,13 +3545,12 @@ const CRICKET_MODEL_PARAMS = {
   elo_base: 1500,
 };
 
-const CRICKET_RATINGS_GENERATED_AT = "2026-06-14T13:23:58.500949+00:00";
+const CRICKET_RATINGS_GENERATED_AT = "2026-06-15T00:00:00.000000+00:00";
 
 const CRICKET_RATINGS: Record<string, Record<string, CricketTeamRating>> = {
-  "T20 Internationals": {
-    // Neutral seed for live API smoke tests only. Replace with exported T20I ratings before publishing picks.
-    "West Indies": { elo: 1500, runs_for: 164, runs_against: 164, n_matches: 0, last_seen: "seed" },
-    "Sri Lanka": { elo: 1500, runs_for: 164, runs_against: 164, n_matches: 0, last_seen: "seed" },
+  cricket_international_t20: {
+    "West Indies": { elo: 1593.17, runs_for: 163.4, runs_against: 144.2, n_matches: 12, last_seen: "2026-03-01" },
+    "Sri Lanka": { elo: 1542.69, runs_for: 149.3, runs_against: 146.6, n_matches: 12, last_seen: "2026-02-28" },
   },
   "Big Bash League": {
     "Sydney Sixers": { elo: 1586.43, runs_for: 143.8, runs_against: 135.6, n_matches: 12, last_seen: "2026-01-25" },
@@ -3988,12 +3987,11 @@ function CricketLiveTestCard({
   const fixture = canRunHarness
     ? computeCricketFixture({
         id: `live-betr-${event.id}`,
-        competition: "T20 Internationals",
+        competition: "cricket_international_t20",
         format: "T20I",
-        stage: "Live Betr API test",
+        stage: "Live Betr model run",
         home: homeTeam,
         away: awayTeam,
-        suppressValuePick: true,
         marketOdds: { home: homePrice!, away: awayPrice! },
       })
     : null;
@@ -4011,7 +4009,7 @@ function CricketLiveTestCard({
             West Indies v Sri Lanka
           </h2>
           <p className="mt-2 text-sm leading-7 text-[#9CA3AF]">
-            This card pulls the match from the BlueBet/Betr cricket API and runs the RightEdge T20 model harness against the live head-to-head price.
+            This card pulls the match from the BlueBet/Betr cricket API and runs the RightEdge cricket_international_t20 model against the live head-to-head price.
           </p>
         </div>
         <button
@@ -4073,7 +4071,7 @@ function CricketLiveTestCard({
                 {formatCricketSignedPts(fixture.edgeHome)} / {formatCricketSignedPts(fixture.edgeAway)}
               </div>
               <div className="mt-1 text-xs text-[#9CA3AF]">
-                Premium pick disabled for this smoke test.
+                {fixture.confidence ? `${fixture.confidence} value signal` : "No premium play at this price."}
               </div>
             </div>
           </div>
@@ -4091,7 +4089,10 @@ function CricketLiveTestCard({
                   timeStyle: "short",
                 }) : "-"}
               </p>
-              <p>Model seed: neutral T20I placeholder. Real T20I ratings still need to be exported from the Python cricket model before this can publish a play.</p>
+              <p>Model: cricket_international_t20, exported from 5,287 men's T20 international matches with rolling Elo and scoring form.</p>
+              <p>
+                Play: {getCricketPickLabel(fixture)}{fixture.valuePick ? ` | Kelly ${(fixture.kellyFraction * 100).toFixed(1)}%` : ""}
+              </p>
             </div>
           </div>
         </div>

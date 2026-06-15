@@ -2503,16 +2503,18 @@ async function fetchBlueBetCricketOddsRaw() {
   );
 
   return eventPayloads
-    .map((payload) =>
-      buildBlueBetEventOdds(payload, {
-        sportKey: "cricket",
-        sportTitle: "Cricket",
+    .map((payload) => {
+      const categoryName = String(payload?.MasterEvent?.CategoryName || "").toLowerCase();
+      const isInternationalT20 = categoryName.includes("t20 international");
+      return buildBlueBetEventOdds(payload, {
+        sportKey: isInternationalT20 ? "cricket_international_t20" : "cricket",
+        sportTitle: isInternationalT20 ? "International T20" : "Cricket",
         normalizeTeam: normalizeBlueBetGenericTeamName,
         includeSpreads: false,
         includeTotals: false,
         includeTryScorer: false,
-      }),
-    )
+      });
+    })
     .filter((event: any) => event && event.bookmakers?.length);
 }
 
