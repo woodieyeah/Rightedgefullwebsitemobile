@@ -17,7 +17,7 @@ const AUTH_SESSION_COOKIE = "rightedge_session";
 const AUTH_SESSION_MAX_AGE_SECONDS = 7_776_000;
 const DEFAULT_STRIPE_PREMIUM_WEEKLY_PRICE_ID = "price_1TE76qHbbDQt0kPBF1BrLgdQ";
 const DEFAULT_STRIPE_PREMIUM_MONTHLY_PRICE_ID = "price_1TeeatHbbDQt0kPBBQ3xzV1d";
-const STRIPE_PREMIUM_EXPECTED_PRODUCT_ID = "prod_UCW96IffvVLL3c";
+const STRIPE_PREMIUM_EXPECTED_PRODUCT_ID = "prod_UhpquzY3WK2YXs";
 const STRIPE_PREMIUM_WEEKLY_AMOUNT_CENTS = 1400;
 const STRIPE_CHECKOUT_VERSION = "2026-06-05-current-premium-product";
 const STRIPE_RETENTION_COUPON_KV_KEY = "stripe_retention_coupon_id";
@@ -109,6 +109,23 @@ function getDefaultPremiumStripePriceId(plan: PremiumCheckoutPlan = "weekly") {
     : DEFAULT_STRIPE_PREMIUM_WEEKLY_PRICE_ID;
 }
 
+async function getPremiumProductDefaultPriceId(stripe: Stripe) {
+  const product = await stripe.products.retrieve(STRIPE_PREMIUM_EXPECTED_PRODUCT_ID, {
+    expand: ["default_price"],
+  });
+
+  if (product.deleted || product.active === false) {
+    throw new Error(`Premium product ${STRIPE_PREMIUM_EXPECTED_PRODUCT_ID} is not active.`);
+  }
+
+  const defaultPrice = product.default_price;
+  if (!defaultPrice) {
+    throw new Error(`Premium product ${STRIPE_PREMIUM_EXPECTED_PRODUCT_ID} has no default price.`);
+  }
+
+  return typeof defaultPrice === "string" ? defaultPrice : defaultPrice.id;
+}
+
 function getStripePriceProductId(price: any) {
   const product = price?.product;
   return typeof product === "string" ? product : product?.id || "";
@@ -146,9 +163,21 @@ async function resolvePremiumStripePriceId(stripe: Stripe, plan: PremiumCheckout
   }
 
   const fallbackPrice = await stripe.prices.retrieve(fallbackPriceId);
-  validatePrice(fallbackPrice, fallbackPriceId);
+  try {
+    validatePrice(fallbackPrice, fallbackPriceId);
+    return fallbackPriceId;
+  } catch (err: any) {
+    console.warn(`[Stripe] Could not validate fallback ${plan} price ${fallbackPriceId}:`, err?.message || err);
+  }
 
-  return fallbackPriceId;
+  if (plan === "weekly") {
+    const productDefaultPriceId = await getPremiumProductDefaultPriceId(stripe);
+    const productDefaultPrice = await stripe.prices.retrieve(productDefaultPriceId);
+    validatePrice(productDefaultPrice, productDefaultPriceId);
+    return productDefaultPriceId;
+  }
+
+  throw new Error(`No valid ${plan} premium Stripe price is configured.`);
 }
 
 function normalizeStripeSubscriptionStatus(status: unknown) {
@@ -3278,7 +3307,6 @@ app.post("/create-checkout-session", async (c) => {
 
     const stripe = new Stripe(stripeKey, { apiVersion: "2023-10-16" });
     const { activeSubscription, customerId } = await findActiveStripeSubscription(stripe, email);
-    const premiumPriceId = await resolvePremiumStripePriceId(stripe, plan);
 
     if (activeSubscription) {
       const url = await createInstantAccessUrl(email, returnUrl, returnHash, customerId, activeSubscription);
@@ -3289,6 +3317,8 @@ app.post("/create-checkout-session", async (c) => {
         subscriptionId: activeSubscription.id,
       });
     }
+
+    const premiumPriceId = await resolvePremiumStripePriceId(stripe, plan);
 
     await kv.set(`checkout_lead:${email}`, JSON.stringify({
       email,
