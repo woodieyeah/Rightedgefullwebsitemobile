@@ -7732,9 +7732,29 @@ function PredictionsPage({
           const proofTryScorerHits = getRoundProofTryScorerHitsForPrediction(row, selectedArchive);
           const proofFinalScore = proofMatchPlays.find((play) => play.finalScore)?.finalScore || "";
           const proofFinalScorePair = proofFinalScore ? parseScorePair(proofFinalScore) : null;
-          const displayHomeScore = proofFinalScorePair ? proofFinalScorePair.homeScore : projectedHomeScore;
-          const displayAwayScore = proofFinalScorePair ? proofFinalScorePair.awayScore : projectedAwayScore;
-          const matchCompleted = Boolean(selectedArchive) || isFixtureCompleted(row.fixture, now) || hasSettledRoundProofForPrediction(row, selectedArchive);
+          // An admin-entered result (final score or HIT/MISS/PUSH) settles the card
+          // immediately, even before the fixture's scheduled completion — so dummy
+          // results entered in the Results tab render the settled view right away.
+          const hasSavedSettlement = Boolean(
+            savedResult &&
+              ((savedResult.finalHome != null && savedResult.finalAway != null) ||
+                savedResult.playResult),
+          );
+          const savedFinalScorePair =
+            savedResult && savedResult.finalHome != null && savedResult.finalAway != null
+              ? { homeScore: savedResult.finalHome, awayScore: savedResult.finalAway }
+              : null;
+          const displayHomeScore = proofFinalScorePair
+            ? proofFinalScorePair.homeScore
+            : savedFinalScorePair
+              ? savedFinalScorePair.homeScore
+              : projectedHomeScore;
+          const displayAwayScore = proofFinalScorePair
+            ? proofFinalScorePair.awayScore
+            : savedFinalScorePair
+              ? savedFinalScorePair.awayScore
+              : projectedAwayScore;
+          const matchCompleted = Boolean(selectedArchive) || isFixtureCompleted(row.fixture, now) || hasSettledRoundProofForPrediction(row, selectedArchive) || hasSavedSettlement;
           const fixtureStatus = matchCompleted
             ? {
                 label: "Completed",
@@ -7815,14 +7835,9 @@ function PredictionsPage({
                       tryScorerSignals={tryScorerSignals}
                       proofMatchPlays={proofMatchPlays}
                       proofTryScorerHits={proofTryScorerHits}
-                      isAdmin={isAdmin}
-                      round={frozen.round}
-                      matchKey={matchPairKey}
                       matchLabel={`${row.homeTeam} v ${row.awayTeam}`}
-                      kickedOff={rowKickedOff}
                       savedResult={savedResult}
                       frozenTryScorers={frozenScorerList}
-                      onResultSaved={frozen.applyResult}
                     />
                   )}
                 </div>
@@ -7932,14 +7947,9 @@ function PredictionsPage({
                         tryScorerSignals={tryScorerSignals}
                         proofMatchPlays={proofMatchPlays}
                         proofTryScorerHits={proofTryScorerHits}
-                        isAdmin={isAdmin}
-                        round={frozen.round}
-                        matchKey={matchPairKey}
                         matchLabel={`${row.homeTeam} v ${row.awayTeam}`}
-                        kickedOff={rowKickedOff}
                         savedResult={savedResult}
                         frozenTryScorers={frozenScorerList}
-                        onResultSaved={frozen.applyResult}
                       />
                     )}
                     {!matchCompleted && !isPremium && (
@@ -7995,14 +8005,9 @@ function MatchPremiumSignalStrip({
   tryScorerSignals,
   proofMatchPlays = [],
   proofTryScorerHits = [],
-  isAdmin = false,
-  round,
-  matchKey,
   matchLabel,
-  kickedOff = false,
   savedResult,
   frozenTryScorers,
-  onResultSaved,
 }: {
   matchCompleted: boolean;
   isPremium: boolean;
@@ -8011,30 +8016,30 @@ function MatchPremiumSignalStrip({
   tryScorerSignals: { row: TryScorerRow; signal: ReturnType<typeof getTryScorerSignal> }[];
   proofMatchPlays?: RoundProofMatchPlay[];
   proofTryScorerHits?: RoundProofTryScorer[];
-  isAdmin?: boolean;
-  round?: number;
-  matchKey?: string;
   matchLabel?: string;
-  kickedOff?: boolean;
   savedResult?: SavedRoundResult | null;
   frozenTryScorers?: FrozenTryScorer[];
-  onResultSaved?: (result: SavedRoundResult) => void;
 }) {
-  // Admin entry form (available any time) + public settled overlay.
-  const adminForm =
-    isAdmin && round != null && matchKey ? (
-      <AdminResultEntryForm
-        round={round}
-        matchKey={matchKey}
-        matchLabel={matchLabel || matchKey}
-        hasPlay={Boolean(play)}
-        playSelection={play?.selection}
-        tryScorers={frozenTryScorers || []}
-        savedResult={savedResult}
-        onSaved={(r) => onResultSaved?.(r)}
-        compact
-      />
-    ) : null;
+  // Settled try-scorer hits entered by an admin in the Results tab are synthesized
+  // into the same proof shape so they render exactly like a hardcoded archive's
+  // try-scorer hits, when no hardcoded proof exists for this match.
+  const savedTryScorerProofHits: RoundProofTryScorer[] =
+    !proofTryScorerHits.length && savedResult?.tryScorerHits && frozenTryScorers?.length
+      ? frozenTryScorers
+          .filter((ts) => savedResult.tryScorerHits[normalizeTryScorerPlayerKey(ts.player)])
+          .map((ts) => ({
+            match: matchLabel || ts.team,
+            player: ts.player,
+            team: ts.team,
+            odds: ts.odds,
+            bookmaker: ts.bookmaker,
+            result: "Hit" as const,
+            note: "",
+          }))
+      : [];
+  const tryScorerProofHits = proofTryScorerHits.length
+    ? proofTryScorerHits
+    : savedTryScorerProofHits;
   const savedFinalScoreLine =
     savedResult && savedResult.finalHome != null && savedResult.finalAway != null ? (
       <div className="mt-2 text-[10px] font-black uppercase tracking-widest text-white/55">
@@ -8102,7 +8107,7 @@ function MatchPremiumSignalStrip({
         ? savedResultMatchPlay
         : fallbackMatchPlay;
 
-    if (!matchPlays.length && !proofTryScorerHits.length && !adminForm) return null;
+    if (!matchPlays.length && !tryScorerProofHits.length) return null;
 
     return (
       <div className="mt-3 flex flex-col gap-2">
@@ -8144,7 +8149,7 @@ function MatchPremiumSignalStrip({
           </div>
         ))}
 
-        {proofTryScorerHits.length > 0 && (
+        {tryScorerProofHits.length > 0 && (
           <div className="border border-[#1E1E2E] bg-[#111116] px-3 py-2.5">
             <div className="mb-2 flex items-center gap-2">
               <span className="text-[8px] font-black uppercase tracking-widest text-[#6B7280]">
@@ -8152,7 +8157,7 @@ function MatchPremiumSignalStrip({
               </span>
             </div>
             <div className="flex flex-wrap gap-2">
-              {proofTryScorerHits.map((scorer) => (
+              {tryScorerProofHits.map((scorer) => (
                 <span
                   key={`${scorer.match}-${scorer.player}`}
                   className="inline-flex max-w-full items-center gap-1.5 border border-[#00E676]/30 bg-[#00E676]/10 px-2 py-1 text-[10px] font-black uppercase tracking-wide text-[#00E676]"
@@ -8164,7 +8169,6 @@ function MatchPremiumSignalStrip({
             </div>
           </div>
         )}
-        {adminForm}
       </div>
     );
   }
@@ -8209,7 +8213,6 @@ function MatchPremiumSignalStrip({
           <PremiumResultBadge result={savedPlayProof} />
         </div>
       )}
-      {adminForm ? <div className="p-1">{adminForm}</div> : null}
     </div>
   );
 }
@@ -8686,11 +8689,11 @@ function AdminResultEntryForm({
         </div>
       )}
 
-      {tryScorers.length > 0 && (
-        <div className="mt-3">
-          <div className="mb-1.5 text-[8px] font-black uppercase tracking-widest text-white/45">
-            Try scorers — tick if scored
-          </div>
+      <div className="mt-3">
+        <div className="mb-1.5 text-[8px] font-black uppercase tracking-widest text-white/45">
+          Try scorers — tick if scored
+        </div>
+        {tryScorers.length > 0 ? (
           <div className="flex flex-col gap-1.5">
             {tryScorers.map((ts) => {
               const key = normalizeTryScorerPlayerKey(ts.player);
@@ -8711,8 +8714,12 @@ function AdminResultEntryForm({
               );
             })}
           </div>
-        </div>
-      )}
+        ) : (
+          <div className="border border-[#1E1E2E] bg-[#111116] px-3 py-2 text-[10px] font-bold leading-relaxed text-white/45">
+            Try-scorer players will appear here once this round's try-scorer model is published.
+          </div>
+        )}
+      </div>
 
       <button
         type="button"
@@ -8739,28 +8746,17 @@ function FrozenFinalScoreLine({ result }: { result: SavedRoundResult }) {
 function PremiumMarketPlayCard({
   play,
   now,
-  isAdmin = false,
-  round,
-  matchKey,
   savedResult,
-  frozenTryScorers,
-  onSaved,
 }: {
   play: PremiumMarketPlay;
   now: number;
-  isAdmin?: boolean;
-  round?: number;
-  matchKey?: string;
   savedResult?: SavedRoundResult | null;
-  frozenTryScorers?: FrozenTryScorer[];
-  onSaved?: (result: SavedRoundResult) => void;
 }) {
   const { row } = play;
   const fixtureStatus = getFixtureStatusBadge(row.fixture, now);
   // Prefer an admin-entered result for this match; fall back to hardcoded proof.
   const savedProofResult = playResultToProof(savedResult?.playResult ?? null);
   const proofResult = savedProofResult ?? getRoundProofForPremiumPlay(play)?.result;
-  const kickedOff = hasPredictionKickedOff(row, now);
   const edgeLabel = formatPremiumMatchEdge(play.modelPct, play.odds);
   const predictedScore =
     row.predictedHomeScore || row.predictedAwayScore
@@ -8872,20 +8868,6 @@ function PremiumMarketPlayCard({
         {detail}
       </div>
       {savedResult ? <FrozenFinalScoreLine result={savedResult} /> : null}
-      {isAdmin && round != null && matchKey ? (
-        <div className="mt-3 md:mt-4">
-          <AdminResultEntryForm
-            round={round}
-            matchKey={matchKey}
-            matchLabel={`${row.homeTeam} v ${row.awayTeam}`}
-            hasPlay
-            playSelection={play.selection}
-            tryScorers={frozenTryScorers || []}
-            savedResult={savedResult}
-            onSaved={(r) => onSaved?.(r)}
-          />
-        </div>
-      ) : null}
     </GlassCard>
   );
 }
@@ -9259,26 +9241,11 @@ function BestBetsPage({
     })
     .slice(0, isAdmin ? 50 : 8);
 
-  // Per-card freeze/result context (admin form + settled overlay).
+  // Per-card settled overlay context (results entry now lives in the Results tab).
   const cardPropsForPlay = (play: PremiumMarketPlay) => {
     const matchKey = getPredictionPairKey(play.row);
-    const snapshot = frozen.snapshotByKey.get(matchKey);
-    const frozenTryScorers =
-      snapshot?.payload.tryScorers ??
-      getTryScorerSignalsForPrediction(data, play.row, 5).map(({ row: ts }) => ({
-        player: ts.player,
-        team: ts.team,
-        position: ts.position,
-        odds: ts.bestOdds,
-        bookmaker: ts.bookmaker,
-      }));
     return {
-      isAdmin,
-      round: frozen.round,
-      matchKey,
       savedResult: frozen.resultByKey.get(matchKey) || null,
-      frozenTryScorers,
-      onSaved: frozen.applyResult,
     };
   };
 
