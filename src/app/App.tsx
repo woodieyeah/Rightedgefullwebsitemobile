@@ -4964,6 +4964,7 @@ function mapTeamToOddsApi(team: string): string {
 const fetchOddsPromises = new Map<string, Promise<any>>();
 const ODDS_CACHE_KEY = "rightedge_odds_cache_v5_no_betfair";
 const ODDS_CACHE_DURATION = 12 * 60 * 60 * 1000; // Protect the 500/month Starter Odds API quota
+const MATCH_ODDS_CACHE_DURATION = 2 * 60 * 60 * 1000; // Match live-odds (Pinnacle/BetR) refresh window
 const BETR_ODDS_REFRESH_MS = 60 * 1000;
 
 async function fetchLiveOddsCached(bookmaker?: "betr" | "pinnacle") {
@@ -4976,7 +4977,7 @@ async function fetchLiveOddsCached(bookmaker?: "betr" | "pinnacle") {
       const cachedStr = localStorage.getItem(cacheKey);
       if (cachedStr) {
         const cached = JSON.parse(cachedStr);
-        if (Date.now() - cached.timestamp < ODDS_CACHE_DURATION) {
+        if (Date.now() - cached.timestamp < MATCH_ODDS_CACHE_DURATION) {
           return cached.data;
         }
       }

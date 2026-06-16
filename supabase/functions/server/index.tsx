@@ -6,7 +6,7 @@ import Stripe from "npm:stripe";
 import { createClient } from "jsr:@supabase/supabase-js@2.49.8";
 import * as kv from "./kv_store.tsx";
 const app = new Hono().basePath('/make-server-3b84b96c');
-const MATCH_ODDS_CACHE_MS = 12 * 60 * 60 * 1000;
+const MATCH_ODDS_CACHE_MS = 2 * 60 * 60 * 1000;
 const NRL_EVENTS_CACHE_MS = 6 * 60 * 60 * 1000;
 const TRY_SCORER_ODDS_CACHE_MS = 24 * 60 * 60 * 1000;
 const PREMATCH_ODDS_LOCK_PREFIX = "prematch_odds_lock";
