@@ -9881,26 +9881,21 @@ function OriginPage({
       return b.prop.probability - a.prop.probability;
     });
 
-  // Same Game Multi (Origin Game 2). Each leg pulls live BetR odds where the
-  // affiliate feed exposes that market; legs the feed can't price (e.g. the
-  // combined-player-tries market) fall back to the screenshot defaults so the
-  // multi always renders. The combined price is the product of the legs.
+  // Same Game Multi (Origin Game 2). Hardcoded/static to match the published
+  // SGM exactly — the legs and the combined price are fixed, not pulled live or
+  // computed from the legs.
   const originSgmLegs = [
     {
       id: "qld-line",
       selection: "Queensland Maroons +2.5",
       market: "Match Result",
-      odds:
-        findSpreadOffer(originBetrMarkets, originRowBase.awayTeam, 2.5)?.odds ||
-        1.75,
+      odds: 1.75,
     },
     {
       id: "nawaqanitawase-ats",
       selection: "Mark Nawaqanitawase",
       market: "Anytime Tryscorer",
-      odds:
-        originTryScorerOddsByPlayer[normalizeOriginPlayerName("Mark Nawaqanitawase")]
-          ?.bestOdds || 1.95,
+      odds: 1.95,
     },
     {
       id: "combined-tries",
@@ -9910,10 +9905,7 @@ function OriginPage({
       odds: 1.8,
     },
   ];
-  const originSgmCombinedOdds = originSgmLegs.reduce(
-    (product, leg) => product * leg.odds,
-    1,
-  );
+  const originSgmCombinedOdds = 5.0;
 
   if (!hasPaidAccess() && !isAdmin) {
     return (
