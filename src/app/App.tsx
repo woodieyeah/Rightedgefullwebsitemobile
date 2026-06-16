@@ -4964,6 +4964,7 @@ function mapTeamToOddsApi(team: string): string {
 const fetchOddsPromises = new Map<string, Promise<any>>();
 const ODDS_CACHE_KEY = "rightedge_odds_cache_v5_no_betfair";
 const ODDS_CACHE_DURATION = 12 * 60 * 60 * 1000; // Protect the 500/month Starter Odds API quota
+const MATCH_ODDS_CACHE_DURATION = 2 * 60 * 60 * 1000; // Match live-odds (Pinnacle/BetR) refresh window
 const BETR_ODDS_REFRESH_MS = 60 * 1000;
 
 async function fetchLiveOddsCached(bookmaker?: "betr" | "pinnacle", sport?: "origin") {
@@ -4977,7 +4978,7 @@ async function fetchLiveOddsCached(bookmaker?: "betr" | "pinnacle", sport?: "ori
       const cachedStr = localStorage.getItem(cacheKey);
       if (cachedStr) {
         const cached = JSON.parse(cachedStr);
-        if (Date.now() - cached.timestamp < ODDS_CACHE_DURATION) {
+        if (Date.now() - cached.timestamp < MATCH_ODDS_CACHE_DURATION) {
           return cached.data;
         }
       }
@@ -5056,9 +5057,9 @@ async function fetchBestMatchOddsByBookmaker(bookmaker: "pinnacle") {
   return response.json();
 }
 
-async function fetchBestTryScorerOddsCached(bookmaker?: "betr") {
+async function fetchBestTryScorerOddsCached(bookmaker?: "betr", scope?: "origin") {
   const cacheKey = bookmaker
-    ? `rightedge_best_try_scorer_odds_cache_v1_${bookmaker}`
+    ? `rightedge_best_try_scorer_odds_cache_v1_${bookmaker}${scope ? `_${scope}` : ""}`
     : "rightedge_best_try_scorer_odds_cache_v1";
   const shouldUsePersistentCache = bookmaker !== "betr";
 
@@ -5082,6 +5083,7 @@ async function fetchBestTryScorerOddsCached(bookmaker?: "betr") {
 
   const params = new URLSearchParams({ _: String(Date.now()) });
   if (bookmaker) params.set("bookmaker", bookmaker);
+  if (scope) params.set("scope", scope);
 
   const fetchPromise = fetch(`/api/best-try-scorer-odds?${params.toString()}`, {
     cache: shouldUsePersistentCache ? "default" : "no-store",
@@ -8282,7 +8284,7 @@ const RIGHTEDGE_TUNING = {
   lineScale: 7.5,
   totalScale: 8,
   // Minimum POINTS the model must beat the market by (selectivity, not win%).
-  minLineEdgePts: 1.5, // was 3.0 — too tight, starved the headline list
+  minLineEdgePts: 2.5, // premium plays minimum line threshold
   minTotalEdgePts: 4.0,
   // H2H is a true win-probability market. This is now just a sanity floor: the
   // model must rate the team as a genuine winner (>50%). The VALUE gate
@@ -9679,9 +9681,9 @@ function OriginPage({
     const fetchOriginOdds = async () => {
       try {
         const [betrResult, pinnacleResult, tryScorerResult] = await Promise.allSettled([
-          fetchLiveOddsCached("betr", "origin"),
-          fetchLiveOddsCached("pinnacle", "origin"),
-          fetchBestTryScorerOddsCached("betr"),
+          fetchLiveOddsCached("betr"),
+          fetchLiveOddsCached("pinnacle"),
+          fetchBestTryScorerOddsCached("betr", "origin"),
         ]);
 
         if (!mounted) return;
@@ -9883,6 +9885,32 @@ function OriginPage({
       if (Math.abs(edgeDiff) > 0.001) return edgeDiff;
       return b.prop.probability - a.prop.probability;
     });
+
+  // Same Game Multi (Origin Game 2). Hardcoded/static to match the published
+  // SGM exactly — the legs and the combined price are fixed, not pulled live or
+  // computed from the legs.
+  const originSgmLegs = [
+    {
+      id: "qld-line",
+      selection: "Queensland Maroons +2.5",
+      market: "Match Result",
+      odds: 1.75,
+    },
+    {
+      id: "nawaqanitawase-ats",
+      selection: "Mark Nawaqanitawase",
+      market: "Anytime Tryscorer",
+      odds: 1.95,
+    },
+    {
+      id: "combined-tries",
+      selection:
+        "Mark Nawaqanitawase, Selwyn Cobbo & Jojo Fifita To Combine For 2+ Tries",
+      market: "Combined Player Tries",
+      odds: 1.8,
+    },
+  ];
+  const originSgmCombinedOdds = 5.0;
 
   if (!hasPaidAccess() && !isAdmin) {
     return (
@@ -10160,65 +10188,56 @@ function OriginPage({
             .filter((group) => group.scorers.length > 0);
           return (
             <div className="flex flex-col gap-4">
-              {heroScorer ? (
-                <GlassCard className="overflow-hidden border-l-4 border-l-[#00E676] p-0">
-                  <div className="flex items-center gap-3 bg-[#00E676] px-4 py-2.5 md:px-5">
-                    <div className="text-[10px] font-black uppercase tracking-[0.18em] text-white">
-                      Value scorer of the game
+              <GlassCard className="overflow-hidden border-l-4 border-l-[#00E676] p-0">
+                <div className="flex items-center justify-between gap-3 bg-[#0A0A0F] px-4 py-3 md:px-6">
+                  <div className="text-[10px] font-black uppercase tracking-[0.18em] text-white">
+                    Same Game Multi
+                  </div>
+                  <div className="text-[10px] font-black uppercase tracking-[0.18em] text-white">
+                    {originSgmLegs.length} Legs @ {originSgmCombinedOdds.toFixed(2)}
+                  </div>
+                </div>
+                <div className="flex flex-col gap-4 p-4 md:p-5">
+                  <div className="flex flex-col gap-2">
+                    {originSgmLegs.map((leg) => (
+                      <div
+                        key={`origin-sgm-leg-${leg.id}`}
+                        className="flex items-center justify-between gap-3 border border-[#1E1E2E] bg-[#111116] px-3 py-2.5 md:px-4"
+                      >
+                        <div className="min-w-0">
+                          <div className="text-sm font-black text-white md:text-base">
+                            {leg.selection}
+                          </div>
+                          <div className="mt-1 text-[9px] font-black uppercase tracking-[0.18em] text-white/45">
+                            {leg.market}
+                          </div>
+                        </div>
+                        <div className="shrink-0 text-base font-black text-white md:text-lg">
+                          {leg.odds.toFixed(2)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex items-center justify-between gap-3 border border-[#00E676]/40 bg-[#16161D] px-3 py-2.5 md:px-4">
+                    <div className="text-[10px] font-black uppercase tracking-[0.18em] text-white/45">
+                      Combined
+                    </div>
+                    <div className="text-xl font-black text-[#00E676] md:text-2xl">
+                      {originSgmCombinedOdds.toFixed(2)}
                     </div>
                   </div>
-                  <div className="flex flex-col gap-4 p-4 md:flex-row md:items-center md:justify-between md:p-5">
-                    <div className="min-w-0">
-                      <div className="truncate text-xl font-black uppercase tracking-tight text-white md:text-2xl">
-                        {heroScorer.prop.player}
-                      </div>
-                      <div className="mt-1 text-[9px] font-black uppercase tracking-[0.18em] text-white/45">
-                        {heroScorer.state.name} · Anytime try scorer
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2.5 md:gap-3">
-                      <div className="min-w-[78px] border border-[#1E1E2E] bg-[#1E232B] px-3 py-2 text-center">
-                        <div className="text-[7px] font-black uppercase tracking-[0.18em] text-white/45">
-                          Model %
-                        </div>
-                        <div className="mt-0.5 text-base font-black text-white md:text-lg">
-                          {formatPercent(heroScorer.prop.probability, 1)}
-                        </div>
-                      </div>
-                      <div className="min-w-[78px] border border-[#1E1E2E] bg-[#1E232B] px-3 py-2 text-center">
-                        <div className="text-[7px] font-black uppercase tracking-[0.18em] text-white/45">
-                          Edge
-                        </div>
-                        <div className="mt-0.5 text-base font-black text-[#00E676] md:text-lg">
-                          +{formatPercent(heroScorer.read.edge, 1)}
-                        </div>
-                      </div>
-                      {heroScorer.liveOdds ? (
-                        <AffiliateMarketButton
-                          payload="rightedge_origin_try_scorer"
-                          bookmaker={heroScorer.liveOdds.bookmaker || "Betr"}
-                          odds={heroScorer.liveOdds.bestOdds}
-                          label={`Back $${heroScorer.liveOdds.bestOdds.toFixed(2)}`}
-                          className="justify-center whitespace-nowrap px-4 py-2.5 text-[11px] [&_span]:!min-w-0 [&_span]:!whitespace-nowrap"
-                        />
-                      ) : (
-                        <div className="border border-[#1E1E2E] bg-[#1E232B] px-4 py-2.5 text-center text-[10px] font-black uppercase tracking-widest text-white/45">
-                          Odds pending
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </GlassCard>
-              ) : (
-                <GlassCard className="p-4 md:p-5 border-l-4 border-l-[#6B7280]">
-                  <div className="text-[10px] font-black uppercase tracking-[0.18em] text-white/45 mb-2">
-                    No value scorer
-                  </div>
-                  <div className="text-base md:text-xl font-black uppercase tracking-tight text-white">
-                    No anytime scorer is priced as value right now.
-                  </div>
-                </GlassCard>
-              )}
+                  <AffiliateMarketButton
+                    payload="rightedge_origin_sgm"
+                    bookmaker="Betr"
+                    odds={originSgmCombinedOdds}
+                    label={`Back it on Betr · $${originSgmCombinedOdds.toFixed(2)}`}
+                    className="w-full justify-center py-3.5 text-sm"
+                  />
+                  <p className="text-[10px] leading-relaxed text-[#6B7280]">
+                    Back it on BetR and receive a deposit match in bonus bets.
+                  </p>
+                </div>
+              </GlassCard>
 
               {contextByTeam.length > 0 && (
                 <div className="flex flex-col gap-4">
@@ -11766,6 +11785,25 @@ function AppDashboard({
   });
   const [selectedArchiveRound, setSelectedArchiveRound] = useState<number | null>(null);
   const [showRetentionOffer, setShowRetentionOffer] = useState(false);
+  // Sidebar "Manage Subscription" reveal panel (tucks Cancel Premium out of sight).
+  const [manageOpenSidebar, setManageOpenSidebar] = useState(false);
+  const [manageOpenHeader, setManageOpenHeader] = useState(false);
+  const manageSidebarRef = useRef<HTMLDivElement | null>(null);
+  const manageHeaderRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!manageOpenSidebar && !manageOpenHeader) return;
+    const onDocClick = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (manageSidebarRef.current && !manageSidebarRef.current.contains(t)) {
+        setManageOpenSidebar(false);
+      }
+      if (manageHeaderRef.current && !manageHeaderRef.current.contains(t)) {
+        setManageOpenHeader(false);
+      }
+    };
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, [manageOpenSidebar, manageOpenHeader]);
   // Bumped after KV-derived (rolled-over) archives register so the archive
   // dropdown + selected-archive lookup re-read the module-level registry.
   const [archiveVersion, setArchiveVersion] = useState(0);
@@ -11995,18 +12033,40 @@ function AppDashboard({
             </div>
             <div className="mt-4 text-sm text-white/70 leading-relaxed font-bold">
             </div>
-            <button 
-              onClick={handleManageSubscription}
-              className="mt-6 w-full flex items-center justify-center gap-2 re-secondary-cta border py-3 text-xs font-medium uppercase tracking-widest transition hover:opacity-80"
-            >
-              Manage Subscription
-            </button>
-            <button
-              onClick={handleCancelPremiumClick}
-              className="mt-3 w-full flex items-center justify-center gap-2 border border-[#1E1E2E] py-3 text-[10px] font-medium uppercase tracking-widest text-[#9CA3AF] transition hover:border-[#C74343]/50 hover:text-[#C74343]"
-            >
-              Cancel Premium
-            </button>
+            <div ref={manageSidebarRef} className="relative mt-6">
+              <button
+                onClick={() => setManageOpenSidebar((v) => !v)}
+                aria-expanded={manageOpenSidebar}
+                className="w-full flex items-center justify-center gap-2 re-secondary-cta border py-3 text-xs font-medium uppercase tracking-widest transition hover:opacity-80"
+              >
+                Manage Subscription
+                <ChevronDown
+                  className={`w-3.5 h-3.5 transition-transform ${manageOpenSidebar ? "rotate-180" : ""}`}
+                />
+              </button>
+              {manageOpenSidebar && (
+                <div className="mt-2 w-full bg-[#16161D] border border-[#1E1E2E] flex flex-col">
+                  <button
+                    onClick={() => {
+                      setManageOpenSidebar(false);
+                      handleManageSubscription();
+                    }}
+                    className="w-full text-left px-4 py-3 text-[10px] font-medium uppercase tracking-widest text-[#9CA3AF] hover:text-white transition-colors"
+                  >
+                    Manage Billing
+                  </button>
+                  <button
+                    onClick={() => {
+                      setManageOpenSidebar(false);
+                      handleCancelPremiumClick();
+                    }}
+                    className="w-full text-left px-4 py-3 text-[10px] font-medium uppercase tracking-widest text-[#6B7280] border-t border-[#1E1E2E] hover:text-[#9CA3AF] transition-colors"
+                  >
+                    Cancel Premium
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </GlassCard>
 
@@ -12019,19 +12079,39 @@ function AppDashboard({
               >
                 <ChevronLeft className="w-4 h-4" /> Back to Home
               </button>
-              <div className="flex flex-col items-end gap-1.5">
+              <div ref={manageHeaderRef} className="relative flex flex-col items-end">
                 <button
-                  onClick={handleManageSubscription}
-                  className="text-[#6B7280] text-[10px] font-medium uppercase tracking-widest hover:text-white transition-colors"
+                  onClick={() => setManageOpenHeader((v) => !v)}
+                  aria-expanded={manageOpenHeader}
+                  className="flex items-center gap-1 text-[#6B7280] text-[10px] font-medium uppercase tracking-widest hover:text-white transition-colors"
                 >
                   Manage Subscription
+                  <ChevronDown
+                    className={`w-3 h-3 transition-transform ${manageOpenHeader ? "rotate-180" : ""}`}
+                  />
                 </button>
-                <button
-                  onClick={handleCancelPremiumClick}
-                  className="text-[#8D2323] text-[10px] font-medium uppercase tracking-widest hover:text-[#C74343] transition-colors"
-                >
-                  Cancel Premium
-                </button>
+                {manageOpenHeader && (
+                  <div className="absolute right-0 top-full mt-2 z-20 min-w-[160px] bg-[#16161D] border border-[#1E1E2E] flex flex-col">
+                    <button
+                      onClick={() => {
+                        setManageOpenHeader(false);
+                        handleManageSubscription();
+                      }}
+                      className="w-full text-right px-4 py-2.5 text-[10px] font-medium uppercase tracking-widest text-[#9CA3AF] hover:text-white transition-colors"
+                    >
+                      Manage Billing
+                    </button>
+                    <button
+                      onClick={() => {
+                        setManageOpenHeader(false);
+                        handleCancelPremiumClick();
+                      }}
+                      className="w-full text-right px-4 py-2.5 text-[10px] font-medium uppercase tracking-widest text-[#6B7280] border-t border-[#1E1E2E] hover:text-[#9CA3AF] transition-colors"
+                    >
+                      Cancel Premium
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </div>
