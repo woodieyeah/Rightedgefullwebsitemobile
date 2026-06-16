@@ -2575,17 +2575,22 @@ async function fetchBlueBetCricketOddsRaw() {
     .filter((event: any) => event && event.bookmakers?.length);
 }
 
-async function fetchLiveOddsRaw(force = false, region = "au", bookmaker = "") {
+const NRL_SPORT_KEY = "rugbyleague_nrl";
+const ORIGIN_SPORT_KEY = "rugbyleague_nrl_state_of_origin";
+
+async function fetchLiveOddsRaw(force = false, region = "au", bookmaker = "", sportKey = NRL_SPORT_KEY) {
   const apiKey = Deno.env.get("ODDS_API_KEY");
   if (!apiKey) {
     throw new Error("Missing ODDS_API_KEY environment variable. Add your The Odds API key.");
   }
 
+  const normalizedSportKey = sportKey === ORIGIN_SPORT_KEY ? ORIGIN_SPORT_KEY : NRL_SPORT_KEY;
+  const sportSuffix = normalizedSportKey === ORIGIN_SPORT_KEY ? "_origin" : "";
   const normalizedRegion = String(region || "au").toLowerCase().replace(/[^a-z]/g, "") || "au";
   const normalizedBookmaker = normalizeBookmakerFilter(bookmaker);
-  const cacheSuffix = normalizedBookmaker
+  const cacheSuffix = `${sportSuffix}${normalizedBookmaker
     ? `_bookmaker_${normalizedBookmaker}`
-    : (normalizedRegion === "au" ? "" : `_${normalizedRegion}`);
+    : (normalizedRegion === "au" ? "" : `_${normalizedRegion}`)}`;
   const cacheKey = `live_odds_cache${cacheSuffix}`;
   const cacheTimeKey = `live_odds_cache_time${cacheSuffix}`;
   const cachedOdds = await kv.get(cacheKey);
@@ -2616,7 +2621,7 @@ async function fetchLiveOddsRaw(force = false, region = "au", bookmaker = "") {
     oddsApiParams.set("regions", normalizedRegion);
   }
 
-  const response = await fetch(`https://api.the-odds-api.com/v4/sports/rugbyleague_nrl/odds/?${oddsApiParams.toString()}`);
+  const response = await fetch(`https://api.the-odds-api.com/v4/sports/${normalizedSportKey}/odds/?${oddsApiParams.toString()}`);
 
   if (!response.ok) {
     const text = await response.text();
@@ -2931,12 +2936,15 @@ app.get("/live-odds", async (c) => {
   try {
     const force = allowOddsForceRefresh(c);
     const bookmaker = c.req.query("bookmaker") || "";
-    if (normalizeBookmakerFilter(bookmaker) === "betr") {
+    const sportKey = String(c.req.query("sport") || "").toLowerCase() === "origin"
+      ? ORIGIN_SPORT_KEY
+      : NRL_SPORT_KEY;
+    if (sportKey === NRL_SPORT_KEY && normalizeBookmakerFilter(bookmaker) === "betr") {
       c.header("Cache-Control", "no-store, no-cache, max-age=0, must-revalidate");
       return c.json(await fetchBlueBetNrlOddsRaw());
     }
 
-    const data = await fetchLiveOddsRaw(force);
+    const data = await fetchLiveOddsRaw(force, "au", "", sportKey);
     return c.json(filterMatchOddsBookmakers(data, bookmaker));
   } catch (err: any) {
     console.error("Server error fetching live odds:", err);

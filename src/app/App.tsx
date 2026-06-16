@@ -4966,8 +4966,9 @@ const ODDS_CACHE_KEY = "rightedge_odds_cache_v5_no_betfair";
 const ODDS_CACHE_DURATION = 12 * 60 * 60 * 1000; // Protect the 500/month Starter Odds API quota
 const BETR_ODDS_REFRESH_MS = 60 * 1000;
 
-async function fetchLiveOddsCached(bookmaker?: "betr" | "pinnacle") {
-  const cacheKey = bookmaker ? `${ODDS_CACHE_KEY}_${bookmaker}` : ODDS_CACHE_KEY;
+async function fetchLiveOddsCached(bookmaker?: "betr" | "pinnacle", sport?: "origin") {
+  const sportSuffix = sport === "origin" ? "_origin" : "";
+  const cacheKey = `${bookmaker ? `${ODDS_CACHE_KEY}_${bookmaker}` : ODDS_CACHE_KEY}${sportSuffix}`;
   const usePersistentCache = bookmaker !== "betr";
 
   // 1. Check local storage cache
@@ -4991,9 +4992,11 @@ async function fetchLiveOddsCached(bookmaker?: "betr" | "pinnacle") {
   }
 
   // 3. Fetch fresh data
-  const query = bookmaker
-    ? `?bookmaker=${encodeURIComponent(bookmaker)}&_=${Date.now()}`
-    : "";
+  const queryParams = new URLSearchParams();
+  if (bookmaker) queryParams.set("bookmaker", bookmaker);
+  if (sport === "origin") queryParams.set("sport", "origin");
+  queryParams.set("_", String(Date.now()));
+  const query = `?${queryParams.toString()}`;
   const fetchOddsPromise = fetch(
     `/api/live-odds${query}`,
     {
@@ -9676,8 +9679,8 @@ function OriginPage({
     const fetchOriginOdds = async () => {
       try {
         const [betrResult, pinnacleResult, tryScorerResult] = await Promise.allSettled([
-          fetchLiveOddsCached("betr"),
-          fetchLiveOddsCached("pinnacle"),
+          fetchLiveOddsCached("betr", "origin"),
+          fetchLiveOddsCached("pinnacle", "origin"),
           fetchBestTryScorerOddsCached("betr"),
         ]);
 
@@ -10818,7 +10821,16 @@ function getH2hOddsForBookmaker(
 }
 
 function getSgmMatchMarkets(marketMap: SgmMarketMap, match: PredictionRow) {
-  return marketMap[buildMatchLabelKey(match.match)] || {};
+  const parts = String(match.match || "").split(/\s+v\s+/i);
+  const directKey = buildMatchLabelKey(match.match);
+  if (marketMap[directKey]) return marketMap[directKey];
+  // The Odds API can label home/away in the opposite order from our fixture
+  // (notably State of Origin). Fall back to the reversed pairing.
+  if (parts.length === 2) {
+    const reversedKey = buildMatchKey(parts[1], parts[0]);
+    if (marketMap[reversedKey]) return marketMap[reversedKey];
+  }
+  return {};
 }
 
 function getBookmakerMarketsForPrediction(
