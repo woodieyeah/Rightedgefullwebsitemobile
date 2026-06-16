@@ -5053,9 +5053,9 @@ async function fetchBestMatchOddsByBookmaker(bookmaker: "pinnacle") {
   return response.json();
 }
 
-async function fetchBestTryScorerOddsCached(bookmaker?: "betr") {
+async function fetchBestTryScorerOddsCached(bookmaker?: "betr", scope?: "origin") {
   const cacheKey = bookmaker
-    ? `rightedge_best_try_scorer_odds_cache_v1_${bookmaker}`
+    ? `rightedge_best_try_scorer_odds_cache_v1_${bookmaker}${scope ? `_${scope}` : ""}`
     : "rightedge_best_try_scorer_odds_cache_v1";
   const shouldUsePersistentCache = bookmaker !== "betr";
 
@@ -5079,6 +5079,7 @@ async function fetchBestTryScorerOddsCached(bookmaker?: "betr") {
 
   const params = new URLSearchParams({ _: String(Date.now()) });
   if (bookmaker) params.set("bookmaker", bookmaker);
+  if (scope) params.set("scope", scope);
 
   const fetchPromise = fetch(`/api/best-try-scorer-odds?${params.toString()}`, {
     cache: shouldUsePersistentCache ? "default" : "no-store",
@@ -9678,7 +9679,7 @@ function OriginPage({
         const [betrResult, pinnacleResult, tryScorerResult] = await Promise.allSettled([
           fetchLiveOddsCached("betr"),
           fetchLiveOddsCached("pinnacle"),
-          fetchBestTryScorerOddsCached("betr"),
+          fetchBestTryScorerOddsCached("betr", "origin"),
         ]);
 
         if (!mounted) return;

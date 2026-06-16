@@ -9,6 +9,7 @@ const app = new Hono().basePath('/make-server-3b84b96c');
 const MATCH_ODDS_CACHE_MS = 12 * 60 * 60 * 1000;
 const NRL_EVENTS_CACHE_MS = 6 * 60 * 60 * 1000;
 const TRY_SCORER_ODDS_CACHE_MS = 24 * 60 * 60 * 1000;
+const ORIGIN_TRY_SCORER_ODDS_CACHE_MS = 5 * 60 * 1000;
 const PREMATCH_ODDS_LOCK_PREFIX = "prematch_odds_lock";
 const BLUEBET_API_BASE_URL = "https://affiliate-api.bluebet.com.au";
 const BLUEBET_AFFILIATE_USER_AGENT =
@@ -2905,6 +2906,28 @@ async function refreshBestTryScorerOdds(force = false) {
   return payload;
 }
 
+// Origin-only try-scorer odds use a short (~5 min) cache with a dedicated key so
+// State of Origin prices stay near-live. The weekly premium try-scorer path is
+// untouched (no-store/live for betr, 24h TRY_SCORER_ODDS_CACHE_MS for the Odds API path).
+async function getOriginBestTryScorerOdds(force = false) {
+  const cacheKey = "best_try_scorer_odds_origin_cache";
+  const cacheTimeKey = "best_try_scorer_odds_origin_cache_time";
+  const now = Date.now();
+
+  if (!force) {
+    const cached = await kv.get(cacheKey);
+    const cacheTime = await kv.get(cacheTimeKey);
+    if (cached && cacheTime && (now - Number(cacheTime)) < ORIGIN_TRY_SCORER_ODDS_CACHE_MS) {
+      return typeof cached === "string" ? JSON.parse(cached) : cached;
+    }
+  }
+
+  const odds = buildBestTryScorerOdds(await fetchBlueBetNrlOddsRaw());
+  await kv.set(cacheKey, JSON.stringify(odds));
+  await kv.set(cacheTimeKey, now.toString());
+  return odds;
+}
+
 function allowOddsForceRefresh(c: any) {
   if (c.req.query("force") !== "true") return false;
 
@@ -3022,6 +3045,7 @@ app.get("/best-try-scorer-odds", async (c) => {
     const format = c.req.query("format") || "json";
     const bookmaker = c.req.query("bookmaker") || "";
     const normalizedBookmaker = normalizeBookmakerFilter(bookmaker);
+    const isOriginScope = c.req.query("scope") === "origin";
     const payload =
       normalizedBookmaker === "betr"
         ? {
@@ -3029,7 +3053,9 @@ app.get("/best-try-scorer-odds", async (c) => {
             sport: "rugbyleague_nrl",
             market: "player_try_scorer_anytime",
             eventCount: 0,
-            odds: buildBestTryScorerOdds(await fetchBlueBetNrlOddsRaw()),
+            odds: isOriginScope
+              ? await getOriginBestTryScorerOdds(force)
+              : buildBestTryScorerOdds(await fetchBlueBetNrlOddsRaw()),
           }
         : await refreshBestTryScorerOdds(force);
 
