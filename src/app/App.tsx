@@ -982,10 +982,11 @@ const appPages = [
   },
 ];
 
-function getAppPages(isAdmin: boolean, canViewOrigin: boolean) {
-  const visiblePages = canViewOrigin
-    ? appPages
-    : appPages.filter((page) => page.id !== "origin");
+function getAppPages(isAdmin: boolean, _canViewOrigin: boolean) {
+  // Origin always appears in the nav. Free users see it locked (premium flag on
+  // SidebarItem) and clicking it routes through the upgrade prompt, identical to
+  // the other premium nav items (Premium Plays / Try Scorers).
+  const visiblePages = appPages;
 
   if (isAdmin) {
     return [
@@ -8222,21 +8223,11 @@ function UpcomingPremiumUnlockCta({
 }: {
   onRequestAccess: (targetHash?: string) => void;
 }) {
-  // Glow is applied via inline style (not a Tailwind shadow class) because
-  // theme.css force-strips any `[class*="shadow-"]` to box-shadow:none !important.
-  const glowResting =
-    "0 0 0 1px rgba(0,230,118,0.35), 0 0 16px 2px rgba(0,230,118,0.22)";
-  const glowHover =
-    "0 0 0 1px rgba(0,230,118,0.5), 0 0 22px 3px rgba(0,230,118,0.3)";
-  const [hovered, setHovered] = useState(false);
   return (
     <button
       type="button"
       onClick={() => onRequestAccess("best-bets")}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={{ boxShadow: hovered ? glowHover : glowResting }}
-      className="mt-3 w-full border border-[#1E1E2E] border-l-2 border-l-[#00E676] bg-[#16161D] text-left transition hover:bg-[#1A1D24]"
+      className="mt-3 w-full border border-[#1E1E2E] border-l-2 border-l-[#00E676] bg-[#111116] text-left transition hover:bg-[#16161D]"
     >
       <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-3 py-3">
         <div className="min-w-0">
@@ -11828,8 +11819,7 @@ function AppDashboard({
 
   const handlePageChange = (newPage: string) => {
     if (newPage === "origin" && !canViewOrigin) {
-      setPage("matches");
-      window.location.hash = "matches";
+      onRequestAccess("origin");
       return;
     }
     setPage(newPage);
