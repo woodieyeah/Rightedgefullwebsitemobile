@@ -10185,11 +10185,11 @@ function OriginPage({
           return (
             <div className="flex flex-col gap-4">
               <GlassCard className="overflow-hidden border-l-4 border-l-[#00E676] p-0">
-                <div className="flex items-center justify-between gap-3 bg-[#00E676] px-4 py-2.5 md:px-5">
+                <div className="flex items-center justify-between gap-3 bg-[#0A0A0F] px-4 py-3 md:px-6">
                   <div className="text-[10px] font-black uppercase tracking-[0.18em] text-white">
                     Same Game Multi
                   </div>
-                  <div className="text-[11px] md:text-sm font-black uppercase tracking-[0.12em] text-white">
+                  <div className="text-[10px] font-black uppercase tracking-[0.18em] text-white">
                     {originSgmLegs.length} Legs @ {originSgmCombinedOdds.toFixed(2)}
                   </div>
                 </div>
