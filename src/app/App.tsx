@@ -11754,6 +11754,25 @@ function AppDashboard({
   });
   const [selectedArchiveRound, setSelectedArchiveRound] = useState<number | null>(null);
   const [showRetentionOffer, setShowRetentionOffer] = useState(false);
+  // Sidebar "Manage Subscription" reveal panel (tucks Cancel Premium out of sight).
+  const [manageOpenSidebar, setManageOpenSidebar] = useState(false);
+  const [manageOpenHeader, setManageOpenHeader] = useState(false);
+  const manageSidebarRef = useRef<HTMLDivElement | null>(null);
+  const manageHeaderRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!manageOpenSidebar && !manageOpenHeader) return;
+    const onDocClick = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (manageSidebarRef.current && !manageSidebarRef.current.contains(t)) {
+        setManageOpenSidebar(false);
+      }
+      if (manageHeaderRef.current && !manageHeaderRef.current.contains(t)) {
+        setManageOpenHeader(false);
+      }
+    };
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, [manageOpenSidebar, manageOpenHeader]);
   // Bumped after KV-derived (rolled-over) archives register so the archive
   // dropdown + selected-archive lookup re-read the module-level registry.
   const [archiveVersion, setArchiveVersion] = useState(0);
@@ -11983,18 +12002,40 @@ function AppDashboard({
             </div>
             <div className="mt-4 text-sm text-white/70 leading-relaxed font-bold">
             </div>
-            <button 
-              onClick={handleManageSubscription}
-              className="mt-6 w-full flex items-center justify-center gap-2 re-secondary-cta border py-3 text-xs font-medium uppercase tracking-widest transition hover:opacity-80"
-            >
-              Manage Subscription
-            </button>
-            <button
-              onClick={handleCancelPremiumClick}
-              className="mt-3 w-full flex items-center justify-center gap-2 border border-[#1E1E2E] py-3 text-[10px] font-medium uppercase tracking-widest text-[#9CA3AF] transition hover:border-[#C74343]/50 hover:text-[#C74343]"
-            >
-              Cancel Premium
-            </button>
+            <div ref={manageSidebarRef} className="relative mt-6">
+              <button
+                onClick={() => setManageOpenSidebar((v) => !v)}
+                aria-expanded={manageOpenSidebar}
+                className="w-full flex items-center justify-center gap-2 re-secondary-cta border py-3 text-xs font-medium uppercase tracking-widest transition hover:opacity-80"
+              >
+                Manage Subscription
+                <ChevronDown
+                  className={`w-3.5 h-3.5 transition-transform ${manageOpenSidebar ? "rotate-180" : ""}`}
+                />
+              </button>
+              {manageOpenSidebar && (
+                <div className="mt-2 w-full bg-[#16161D] border border-[#1E1E2E] flex flex-col">
+                  <button
+                    onClick={() => {
+                      setManageOpenSidebar(false);
+                      handleManageSubscription();
+                    }}
+                    className="w-full text-left px-4 py-3 text-[10px] font-medium uppercase tracking-widest text-[#9CA3AF] hover:text-white transition-colors"
+                  >
+                    Manage Billing
+                  </button>
+                  <button
+                    onClick={() => {
+                      setManageOpenSidebar(false);
+                      handleCancelPremiumClick();
+                    }}
+                    className="w-full text-left px-4 py-3 text-[10px] font-medium uppercase tracking-widest text-[#6B7280] border-t border-[#1E1E2E] hover:text-[#9CA3AF] transition-colors"
+                  >
+                    Cancel Premium
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </GlassCard>
 
@@ -12007,19 +12048,39 @@ function AppDashboard({
               >
                 <ChevronLeft className="w-4 h-4" /> Back to Home
               </button>
-              <div className="flex flex-col items-end gap-1.5">
+              <div ref={manageHeaderRef} className="relative flex flex-col items-end">
                 <button
-                  onClick={handleManageSubscription}
-                  className="text-[#6B7280] text-[10px] font-medium uppercase tracking-widest hover:text-white transition-colors"
+                  onClick={() => setManageOpenHeader((v) => !v)}
+                  aria-expanded={manageOpenHeader}
+                  className="flex items-center gap-1 text-[#6B7280] text-[10px] font-medium uppercase tracking-widest hover:text-white transition-colors"
                 >
                   Manage Subscription
+                  <ChevronDown
+                    className={`w-3 h-3 transition-transform ${manageOpenHeader ? "rotate-180" : ""}`}
+                  />
                 </button>
-                <button
-                  onClick={handleCancelPremiumClick}
-                  className="text-[#8D2323] text-[10px] font-medium uppercase tracking-widest hover:text-[#C74343] transition-colors"
-                >
-                  Cancel Premium
-                </button>
+                {manageOpenHeader && (
+                  <div className="absolute right-0 top-full mt-2 z-20 min-w-[160px] bg-[#16161D] border border-[#1E1E2E] flex flex-col">
+                    <button
+                      onClick={() => {
+                        setManageOpenHeader(false);
+                        handleManageSubscription();
+                      }}
+                      className="w-full text-right px-4 py-2.5 text-[10px] font-medium uppercase tracking-widest text-[#9CA3AF] hover:text-white transition-colors"
+                    >
+                      Manage Billing
+                    </button>
+                    <button
+                      onClick={() => {
+                        setManageOpenHeader(false);
+                        handleCancelPremiumClick();
+                      }}
+                      className="w-full text-right px-4 py-2.5 text-[10px] font-medium uppercase tracking-widest text-[#6B7280] border-t border-[#1E1E2E] hover:text-[#9CA3AF] transition-colors"
+                    >
+                      Cancel Premium
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </div>
