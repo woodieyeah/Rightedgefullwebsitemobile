@@ -4964,6 +4964,7 @@ function mapTeamToOddsApi(team: string): string {
 const fetchOddsPromises = new Map<string, Promise<any>>();
 const ODDS_CACHE_KEY = "rightedge_odds_cache_v5_no_betfair";
 const ODDS_CACHE_DURATION = 12 * 60 * 60 * 1000; // Protect the 500/month Starter Odds API quota
+const MATCH_ODDS_CACHE_DURATION = 2 * 60 * 60 * 1000; // Match live-odds (Pinnacle/BetR) refresh window
 const BETR_ODDS_REFRESH_MS = 60 * 1000;
 
 async function fetchLiveOddsCached(bookmaker?: "betr" | "pinnacle") {
@@ -4976,7 +4977,7 @@ async function fetchLiveOddsCached(bookmaker?: "betr" | "pinnacle") {
       const cachedStr = localStorage.getItem(cacheKey);
       if (cachedStr) {
         const cached = JSON.parse(cachedStr);
-        if (Date.now() - cached.timestamp < ODDS_CACHE_DURATION) {
+        if (Date.now() - cached.timestamp < MATCH_ODDS_CACHE_DURATION) {
           return cached.data;
         }
       }
@@ -9882,6 +9883,32 @@ function OriginPage({
       return b.prop.probability - a.prop.probability;
     });
 
+  // Same Game Multi (Origin Game 2). Hardcoded/static to match the published
+  // SGM exactly — the legs and the combined price are fixed, not pulled live or
+  // computed from the legs.
+  const originSgmLegs = [
+    {
+      id: "qld-line",
+      selection: "Queensland Maroons +2.5",
+      market: "Match Result",
+      odds: 1.75,
+    },
+    {
+      id: "nawaqanitawase-ats",
+      selection: "Mark Nawaqanitawase",
+      market: "Anytime Tryscorer",
+      odds: 1.95,
+    },
+    {
+      id: "combined-tries",
+      selection:
+        "Mark Nawaqanitawase, Selwyn Cobbo & Jojo Fifita To Combine For 2+ Tries",
+      market: "Combined Player Tries",
+      odds: 1.8,
+    },
+  ];
+  const originSgmCombinedOdds = 5.0;
+
   if (!hasPaidAccess() && !isAdmin) {
     return (
       <div className="flex flex-col gap-6 md:gap-8">
@@ -10158,65 +10185,56 @@ function OriginPage({
             .filter((group) => group.scorers.length > 0);
           return (
             <div className="flex flex-col gap-4">
-              {heroScorer ? (
-                <GlassCard className="overflow-hidden border-l-4 border-l-[#00E676] p-0">
-                  <div className="flex items-center gap-3 bg-[#00E676] px-4 py-2.5 md:px-5">
-                    <div className="text-[10px] font-black uppercase tracking-[0.18em] text-white">
-                      Value scorer of the game
+              <GlassCard className="overflow-hidden border-l-4 border-l-[#00E676] p-0">
+                <div className="flex items-center justify-between gap-3 bg-[#0A0A0F] px-4 py-3 md:px-6">
+                  <div className="text-[10px] font-black uppercase tracking-[0.18em] text-white">
+                    Same Game Multi
+                  </div>
+                  <div className="text-[10px] font-black uppercase tracking-[0.18em] text-white">
+                    {originSgmLegs.length} Legs @ {originSgmCombinedOdds.toFixed(2)}
+                  </div>
+                </div>
+                <div className="flex flex-col gap-4 p-4 md:p-5">
+                  <div className="flex flex-col gap-2">
+                    {originSgmLegs.map((leg) => (
+                      <div
+                        key={`origin-sgm-leg-${leg.id}`}
+                        className="flex items-center justify-between gap-3 border border-[#1E1E2E] bg-[#111116] px-3 py-2.5 md:px-4"
+                      >
+                        <div className="min-w-0">
+                          <div className="text-sm font-black text-white md:text-base">
+                            {leg.selection}
+                          </div>
+                          <div className="mt-1 text-[9px] font-black uppercase tracking-[0.18em] text-white/45">
+                            {leg.market}
+                          </div>
+                        </div>
+                        <div className="shrink-0 text-base font-black text-white md:text-lg">
+                          {leg.odds.toFixed(2)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex items-center justify-between gap-3 border border-[#00E676]/40 bg-[#16161D] px-3 py-2.5 md:px-4">
+                    <div className="text-[10px] font-black uppercase tracking-[0.18em] text-white/45">
+                      Combined
+                    </div>
+                    <div className="text-xl font-black text-[#00E676] md:text-2xl">
+                      {originSgmCombinedOdds.toFixed(2)}
                     </div>
                   </div>
-                  <div className="flex flex-col gap-4 p-4 md:flex-row md:items-center md:justify-between md:p-5">
-                    <div className="min-w-0">
-                      <div className="truncate text-xl font-black uppercase tracking-tight text-white md:text-2xl">
-                        {heroScorer.prop.player}
-                      </div>
-                      <div className="mt-1 text-[9px] font-black uppercase tracking-[0.18em] text-white/45">
-                        {heroScorer.state.name} · Anytime try scorer
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2.5 md:gap-3">
-                      <div className="min-w-[78px] border border-[#1E1E2E] bg-[#1E232B] px-3 py-2 text-center">
-                        <div className="text-[7px] font-black uppercase tracking-[0.18em] text-white/45">
-                          Model %
-                        </div>
-                        <div className="mt-0.5 text-base font-black text-white md:text-lg">
-                          {formatPercent(heroScorer.prop.probability, 1)}
-                        </div>
-                      </div>
-                      <div className="min-w-[78px] border border-[#1E1E2E] bg-[#1E232B] px-3 py-2 text-center">
-                        <div className="text-[7px] font-black uppercase tracking-[0.18em] text-white/45">
-                          Edge
-                        </div>
-                        <div className="mt-0.5 text-base font-black text-[#00E676] md:text-lg">
-                          +{formatPercent(heroScorer.read.edge, 1)}
-                        </div>
-                      </div>
-                      {heroScorer.liveOdds ? (
-                        <AffiliateMarketButton
-                          payload="rightedge_origin_try_scorer"
-                          bookmaker={heroScorer.liveOdds.bookmaker || "Betr"}
-                          odds={heroScorer.liveOdds.bestOdds}
-                          label={`Back $${heroScorer.liveOdds.bestOdds.toFixed(2)}`}
-                          className="justify-center whitespace-nowrap px-4 py-2.5 text-[11px] [&_span]:!min-w-0 [&_span]:!whitespace-nowrap"
-                        />
-                      ) : (
-                        <div className="border border-[#1E1E2E] bg-[#1E232B] px-4 py-2.5 text-center text-[10px] font-black uppercase tracking-widest text-white/45">
-                          Odds pending
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </GlassCard>
-              ) : (
-                <GlassCard className="p-4 md:p-5 border-l-4 border-l-[#6B7280]">
-                  <div className="text-[10px] font-black uppercase tracking-[0.18em] text-white/45 mb-2">
-                    No value scorer
-                  </div>
-                  <div className="text-base md:text-xl font-black uppercase tracking-tight text-white">
-                    No anytime scorer is priced as value right now.
-                  </div>
-                </GlassCard>
-              )}
+                  <AffiliateMarketButton
+                    payload="rightedge_origin_sgm"
+                    bookmaker="Betr"
+                    odds={originSgmCombinedOdds}
+                    label={`Back it on Betr · $${originSgmCombinedOdds.toFixed(2)}`}
+                    className="w-full justify-center py-3.5 text-sm"
+                  />
+                  <p className="text-[10px] leading-relaxed text-[#6B7280]">
+                    Back it on BetR and receive a deposit match in bonus bets.
+                  </p>
+                </div>
+              </GlassCard>
 
               {contextByTeam.length > 0 && (
                 <div className="flex flex-col gap-4">
