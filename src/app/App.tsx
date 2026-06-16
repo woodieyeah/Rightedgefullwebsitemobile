@@ -9681,8 +9681,8 @@ function OriginPage({
     const fetchOriginOdds = async () => {
       try {
         const [betrResult, pinnacleResult, tryScorerResult] = await Promise.allSettled([
-          fetchLiveOddsCached("betr"),
-          fetchLiveOddsCached("pinnacle"),
+          fetchLiveOddsCached("betr", "origin"),
+          fetchLiveOddsCached("pinnacle", "origin"),
           fetchBestTryScorerOddsCached("betr", "origin"),
         ]);
 
