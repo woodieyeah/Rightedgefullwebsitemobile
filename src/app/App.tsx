@@ -8226,13 +8226,13 @@ function UpcomingPremiumUnlockCta({
     <button
       type="button"
       onClick={() => onRequestAccess("best-bets")}
-      className="mt-3 w-full border border-[#00E676]/45 border-l-2 border-l-[#00E676] bg-[#00E676]/[0.08] p-1 text-left transition hover:border-[#00E676]/70 hover:bg-[#00E676]/[0.14]"
+      className="mt-3 w-full border border-[#1E1E2E] border-l-2 border-l-[#00E676] bg-[#16161D] text-left transition hover:bg-[#1A1D24]"
     >
       <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-3 py-3">
         <div className="min-w-0">
           <div className="mb-1 flex items-center gap-2">
             <Lock className="h-3.5 w-3.5 shrink-0 text-[#00E676]" />
-            <span className="text-[8px] font-black uppercase tracking-widest text-[#6B7280]">
+            <span className="text-[8px] font-black uppercase tracking-widest text-white">
               Premium best plays
             </span>
           </div>
@@ -8240,7 +8240,7 @@ function UpcomingPremiumUnlockCta({
             Match play + try scorers locked
           </div>
         </div>
-        <span className="inline-flex min-h-[34px] shrink-0 items-center justify-center gap-1.5 border border-[#00E676] bg-[#00E676] px-4 text-[9px] font-black uppercase tracking-widest text-white">
+        <span className="inline-flex min-h-[34px] shrink-0 items-center justify-center gap-1.5 bg-[#00E676] px-4 text-[9px] font-black uppercase tracking-widest text-white">
           Unlock
           <ArrowRight className="h-3.5 w-3.5 stroke-[3px]" />
         </span>
