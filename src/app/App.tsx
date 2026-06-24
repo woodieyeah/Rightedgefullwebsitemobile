@@ -962,12 +962,14 @@ const appPages = [
     mobileLabel: "Matches",
     icon: <Target className="w-5 h-5" />,
   },
+  /*
   {
     id: "origin",
     label: "State of Origin",
     mobileLabel: "Origin",
     icon: <Shield className="w-5 h-5" />,
   },
+  */
   {
     id: "best-bets",
     label: "Premium Plays",
