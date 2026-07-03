@@ -2522,16 +2522,42 @@ async function fetchBlueBetNrlOddsRaw() {
   const hierarchy = await fetchBlueBetJson(
     "/MasterCategory?EventTypeId=102&WithLevelledMarkets=true&Format=json",
   );
-  const nrlMasterCategory = asBlueBetArray(hierarchy?.MasterCategories).find((category: any) =>
-    String(category?.MasterCategory || category?.MasterCategoryName || "").toLowerCase() === "nrl"
-  );
-  const targetCategories = asBlueBetArray(nrlMasterCategory?.Categories).filter((category: any) => {
-    const categoryName = String(category?.CategoryName || "").toLowerCase();
-    return categoryName === "nrl matches" || categoryName.includes("state of origin");
-  });
-  const masterEvents = targetCategories
+
+  const targetCategories = asBlueBetArray(hierarchy?.MasterCategories)
+    .flatMap((masterCategory: any) =>
+      asBlueBetArray(masterCategory?.Categories).map((category: any) => ({
+        ...category,
+        MasterCategoryName:
+          category?.MasterCategoryName ||
+          masterCategory?.MasterCategoryName ||
+          masterCategory?.MasterCategory ||
+          "",
+      })),
+    )
+    .filter((category: any) => {
+      const categoryName = String(category?.CategoryName || category?.Category || "").toLowerCase();
+      const masterCategoryName = String(category?.MasterCategoryName || "").toLowerCase();
+
+      return (
+        masterCategoryName === "nrl" &&
+        (
+          categoryName === "nrl" ||
+          categoryName === "nrl matches" ||
+          categoryName.includes("state of origin")
+        )
+      );
+    });
+
+  const masterEventsById = new Map<string, any>();
+  targetCategories
     .flatMap((category: any) => asBlueBetArray(category?.MasterEvents))
-    .filter((event: any) => String(event?.MasterEventName || "").match(/\s+v\s+/i));
+    .filter((event: any) => String(event?.MasterEventName || "").match(/\s+v\s+/i))
+    .forEach((event: any) => {
+      const eventId = String(event?.MasterEventId || event?.MasterEventName || "");
+      if (eventId) masterEventsById.set(eventId, event);
+    });
+
+  const masterEvents = [...masterEventsById.values()];
 
   const eventPayloads = await Promise.all(
     masterEvents.map((event: any) =>
@@ -3016,10 +3042,12 @@ app.get("/best-match-odds", async (c) => {
           sport: "rugbyleague_nrl",
           market: "h2h",
           odds: buildBestMatchOdds(
-            filterMatchOddsBookmakers(
-              await fetchLiveOddsRaw(force, "au", normalizedBookmaker),
-              normalizedBookmaker,
-            ),
+            normalizedBookmaker === "betr"
+              ? await fetchBlueBetNrlOddsRaw()
+              : filterMatchOddsBookmakers(
+                  await fetchLiveOddsRaw(force, "au", normalizedBookmaker),
+                  normalizedBookmaker,
+                ),
           ),
         }
       : await refreshBestMatchOdds(force);
