@@ -8622,6 +8622,30 @@ function findOfficialPlayLiveMarket(
   return matches.sort((a, b) => b.odds - a.odds)[0] || null;
 }
 
+function getLockedCompletedPremiumMarketPlayForMatch(row: PredictionRow): PremiumMarketPlay | null {
+  const roundNumber = Number(row.roundNumber);
+  const matchText = `${row.match} ${row.homeTeam} ${row.awayTeam}`.toLowerCase();
+  const isPanthersRabbitohs =
+    roundNumber === 18 &&
+    /panthers|penrith/.test(matchText) &&
+    /rabbitohs|souths|south sydney/.test(matchText);
+
+  if (!isPanthersRabbitohs) return null;
+
+  return {
+    id: `${row.match}-locked-round-18-over-43-5`,
+    row,
+    type: "Total",
+    selection: "Over 43.5",
+    bookmaker: "Sportsbet",
+    odds: 1.91,
+    modelPct: 66.5,
+    modelEdge: 14.2,
+    marketPoint: 43.5,
+    projectedValue: row.predictedHomeScore + row.predictedAwayScore,
+  };
+}
+
 function getOfficialPendingPremiumMarketPlayForMatch(
   row: PredictionRow,
   betLog: BetLogRow[],
@@ -8711,11 +8735,22 @@ function buildPremiumMarketPlays(
 
   return [...data.predictions]
     .sort(sortPredictionsByFixture)
-    .filter((row) => includeStarted || !settledMatchKeys.has(buildMatchLabelKey(row.match)))
-    .filter((row) => includeStarted || !hasPredictionKickedOff(row, now))
+    .filter(
+      (row) =>
+        getLockedCompletedPremiumMarketPlayForMatch(row) ||
+        includeStarted ||
+        !settledMatchKeys.has(buildMatchLabelKey(row.match)),
+    )
+    .filter(
+      (row) =>
+        getLockedCompletedPremiumMarketPlayForMatch(row) ||
+        includeStarted ||
+        !hasPredictionKickedOff(row, now),
+    )
     .map((row) => {
       const livePlay = getBestPremiumMarketPlayForMatch(row, marketMap, mode);
       return (
+        getLockedCompletedPremiumMarketPlayForMatch(row) ||
         getOfficialPendingPremiumMarketPlayForMatch(
           row,
           data.betLog,
