@@ -9347,8 +9347,27 @@ function BestBetsPage({
     for (const snapshot of frozen.snapshots) {
       if (archivedMatchKeys.has(snapshot.matchKey)) continue;
       const row = predictionByPairKey.get(snapshot.matchKey) || null;
+      const lockedPlay = row ? getLockedCompletedPremiumMarketPlayForMatch(row) : null;
+      if (lockedPlay) {
+        byKey.set(snapshot.matchKey, lockedPlay);
+        continue;
+      }
       if (row && !hasPredictionKickedOff(row, now)) continue;
       byKey.set(snapshot.matchKey, reconstructFrozenPlay(snapshot, row));
+    }
+    // Frozen snapshots arrive after the initial live render. Re-apply locked
+    // completed plays last so an old kickoff snapshot cannot replace them.
+    for (const play of live) {
+      const lockedPlay = getLockedCompletedPremiumMarketPlayForMatch(play.row);
+      if (!lockedPlay) continue;
+      const key = getPredictionPairKey(play.row);
+      if (archivedMatchKeys.has(key)) continue;
+      for (const [existingKey, existingPlay] of byKey.entries()) {
+        if (buildMatchLabelKey(existingPlay.row.match) === buildMatchLabelKey(play.row.match)) {
+          byKey.delete(existingKey);
+        }
+      }
+      byKey.set(key, lockedPlay);
     }
     return [...byKey.values()]
       .sort((a, b) => getFixtureSortValue(a.row) - getFixtureSortValue(b.row))
@@ -9452,8 +9471,10 @@ function BestBetsPage({
   // Per-card settled overlay context (results entry now lives in the Results tab).
   const cardPropsForPlay = (play: PremiumMarketPlay) => {
     const matchKey = getPredictionPairKey(play.row);
+    const savedResult = frozen.resultByKey.get(matchKey) || null;
+    const lockedPlay = getLockedCompletedPremiumMarketPlayForMatch(play.row);
     return {
-      savedResult: frozen.resultByKey.get(matchKey) || null,
+      savedResult: lockedPlay && savedResult ? { ...savedResult, playResult: "W" as const } : savedResult,
     };
   };
 
