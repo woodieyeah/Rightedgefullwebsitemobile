@@ -2752,13 +2752,17 @@ function parseBetLog(rows: RawRow[]): BetLogRow[] {
         }
       }
 
+      const rawSelection = getValue(row, ["Team Bet", "Selection"]);
+      const selectionHasMarketPoint =
+        /\b(over|under)\b/i.test(rawSelection) || /[+-]\d+(?:\.\d+)?/.test(rawSelection);
+
       return {
         timestamp: getValue(row, ["Timestamp"]),
         round: toNumber(getValue(row, ["Round"])),
         match: finalMatch,
-        selection: normalizeTeamName(
-          getValue(row, ["Team Bet", "Selection"]),
-        ),
+        selection: selectionHasMarketPoint
+          ? rawSelection.trim()
+          : normalizeTeamName(rawSelection),
         side: getValue(row, ["Side (Home/Away)", "Side"]),
         marketOdds: toNumber(
           getValue(row, [
@@ -8541,6 +8545,157 @@ function getBestPremiumMarketPlayForMatch(
   return rankedCandidates[0];
 }
 
+
+function parseOfficialPlayPoint(selection: string, type: PremiumMarketPlay["type"]) {
+  const pattern =
+    type === "Total"
+      ? /\b(?:over|under)\s*([0-9]+(?:\.[0-9]+)?)/i
+      : /([+-]\d+(?:\.\d+)?)/;
+  const match = selection.match(pattern);
+  return match ? Number(match[1]) : undefined;
+}
+
+function inferOfficialPlayType(selection: string, side: string): PremiumMarketPlay["type"] {
+  const raw = `${selection} ${side}`.toLowerCase();
+  if (/\b(over|under)\b/.test(raw)) return "Total";
+  if (/[+-]\d+(?:\.\d+)?/.test(raw) || raw.includes("line")) return "Line";
+  return "Head 2 Head";
+}
+
+function selectionsReferToSameMarket(a: string, b: string) {
+  const normalize = (value: string) =>
+    value
+      .toLowerCase()
+      .replace(/\bhead[- ]?to[- ]?head\b/g, "h2h")
+      .replace(/\s+/g, " ")
+      .trim();
+  const left = normalize(a);
+  const right = normalize(b);
+  return left === right || left.includes(right) || right.includes(left);
+}
+
+function findOfficialPlayLiveMarket(
+  row: PredictionRow,
+  marketMap: SgmMarketMap,
+  type: PremiumMarketPlay["type"],
+  selection: string,
+  marketPoint?: number,
+) {
+  const matchMarkets = getSgmMatchMarkets(marketMap, row);
+  const selectionTeam = normalizeTeamName(selection);
+  const totalSide = selection.toLowerCase().includes("under") ? "Under" : "Over";
+  const matches: Array<{ bookmaker: string; odds: number }> = [];
+
+  Object.entries(matchMarkets).forEach(([bookKey, bookData]) => {
+    if (type === "Total" && Number.isFinite(marketPoint)) {
+      bookData.totals.forEach((total) => {
+        if (
+          total.side === totalSide &&
+          Math.abs(total.point - Number(marketPoint)) < 0.01 &&
+          total.odds > 1
+        ) {
+          matches.push({ bookmaker: displayBookmakerName(bookKey), odds: total.odds });
+        }
+      });
+    }
+
+    if (type === "Line" && selectionTeam && Number.isFinite(marketPoint)) {
+      bookData.spreads.forEach((spread) => {
+        if (
+          normalizeTeamName(spread.team) === selectionTeam &&
+          Math.abs(spread.point - Number(marketPoint)) < 0.01 &&
+          spread.odds > 1
+        ) {
+          matches.push({ bookmaker: displayBookmakerName(bookKey), odds: spread.odds });
+        }
+      });
+    }
+
+    if (type === "Head 2 Head" && selectionTeam) {
+      const odds = bookData.h2h[selectionTeam];
+      if (odds > 1) {
+        matches.push({ bookmaker: displayBookmakerName(bookKey), odds });
+      }
+    }
+  });
+
+  return matches.sort((a, b) => b.odds - a.odds)[0] || null;
+}
+
+function getOfficialPendingPremiumMarketPlayForMatch(
+  row: PredictionRow,
+  betLog: BetLogRow[],
+  marketMap: SgmMarketMap,
+  fallbackPlay: PremiumMarketPlay | null,
+): PremiumMarketPlay | null {
+  const rowMatchKey = buildMatchLabelKey(row.match);
+  const rowRound = row.roundNumber;
+  const officialBet = betLog
+    .filter((bet) => bet.result === "P")
+    .filter((bet) => buildMatchLabelKey(bet.match) === rowMatchKey)
+    .filter((bet) => !rowRound || !bet.round || bet.round === rowRound)
+    .filter((bet) => bet.selection)
+    .sort((a, b) => {
+      const aScore = Math.max(0, a.overlay || 0) + (a.stake || 0) * 0.01;
+      const bScore = Math.max(0, b.overlay || 0) + (b.stake || 0) * 0.01;
+      return bScore - aScore;
+    })[0];
+
+  if (!officialBet) return null;
+
+  const type = inferOfficialPlayType(officialBet.selection, officialBet.side);
+  const selection =
+    type === "Head 2 Head" && !/head[- ]?to[- ]?head/i.test(officialBet.selection)
+      ? `${officialBet.selection} head-to-head`
+      : officialBet.selection;
+  const marketPoint = parseOfficialPlayPoint(selection, type);
+  const liveMarket = findOfficialPlayLiveMarket(row, marketMap, type, selection, marketPoint);
+  const alignedFallback =
+    fallbackPlay && selectionsReferToSameMarket(fallbackPlay.selection, selection)
+      ? fallbackPlay
+      : null;
+  const projectedTotal = row.predictedHomeScore + row.predictedAwayScore;
+  const projectedHomeMargin = row.predictedHomeScore - row.predictedAwayScore;
+  const selectedTeam = normalizeTeamName(selection);
+  const projectedTeamMargin =
+    selectedTeam === normalizeTeamName(row.awayTeam)
+      ? -projectedHomeMargin
+      : projectedHomeMargin;
+  const odds =
+    liveMarket?.odds ||
+    officialBet.oddsTaken ||
+    officialBet.marketOdds ||
+    alignedFallback?.odds ||
+    getPredictedWinnerMarketOdds(row);
+  const modelPct =
+    officialBet.modelWinPct ||
+    (officialBet.modelOdds ? getImpliedWinPctFromOdds(officialBet.modelOdds) : 0) ||
+    alignedFallback?.modelPct ||
+    getPredictedWinnerWinPct(row);
+  const modelEdge =
+    officialBet.overlay ||
+    alignedFallback?.modelEdge ||
+    (odds ? modelPct - getImpliedWinPctFromOdds(odds) : 0);
+
+  return {
+    id: `${row.match}-official-${type}-${selection}`,
+    row,
+    type,
+    selection,
+    bookmaker: liveMarket?.bookmaker || alignedFallback?.bookmaker || "Best available",
+    odds,
+    modelPct,
+    modelEdge,
+    marketPoint,
+    projectedValue:
+      type === "Total"
+        ? projectedTotal
+        : type === "Line"
+          ? projectedTeamMargin
+          : Math.abs(projectedHomeMargin),
+  };
+}
+
 function buildPremiumMarketPlays(
   data: DashboardData,
   marketMap: SgmMarketMap,
@@ -8558,7 +8713,17 @@ function buildPremiumMarketPlays(
     .sort(sortPredictionsByFixture)
     .filter((row) => includeStarted || !settledMatchKeys.has(buildMatchLabelKey(row.match)))
     .filter((row) => includeStarted || !hasPredictionKickedOff(row, now))
-    .map((row) => getBestPremiumMarketPlayForMatch(row, marketMap, mode))
+    .map((row) => {
+      const livePlay = getBestPremiumMarketPlayForMatch(row, marketMap, mode);
+      return (
+        getOfficialPendingPremiumMarketPlayForMatch(
+          row,
+          data.betLog,
+          marketMap,
+          livePlay,
+        ) || livePlay
+      );
+    })
     .filter(Boolean) as PremiumMarketPlay[];
 }
 
