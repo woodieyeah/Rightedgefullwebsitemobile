@@ -3082,20 +3082,37 @@ app.get("/best-try-scorer-odds", async (c) => {
     const bookmaker = c.req.query("bookmaker") || "";
     const normalizedBookmaker = normalizeBookmakerFilter(bookmaker);
     const isOriginScope = c.req.query("scope") === "origin";
-    const payload =
-      normalizedBookmaker === "betr"
-        ? {
-            updatedAt: new Date().toISOString(),
-            sport: "rugbyleague_nrl",
-            market: "player_try_scorer_anytime",
-            eventCount: 0,
-            odds: isOriginScope
-              ? await getOriginBestTryScorerOdds(force)
-              : buildBestTryScorerOdds(await fetchBlueBetNrlOddsRaw()),
-          }
-        : await refreshBestTryScorerOdds(force);
+    let usedBetrOdds = false;
+    let payload: any;
 
     if (normalizedBookmaker === "betr") {
+      usedBetrOdds = true;
+      payload = {
+        updatedAt: new Date().toISOString(),
+        sport: "rugbyleague_nrl",
+        market: "player_try_scorer_anytime",
+        eventCount: 0,
+        odds: isOriginScope
+          ? await getOriginBestTryScorerOdds(force)
+          : buildBestTryScorerOdds(await fetchBlueBetNrlOddsRaw()),
+      };
+    } else {
+      payload = await refreshBestTryScorerOdds(force);
+
+      if (format === "sheets" && !normalizedBookmaker && !payload.odds?.length) {
+        usedBetrOdds = true;
+        payload = {
+          updatedAt: new Date().toISOString(),
+          sport: "rugbyleague_nrl",
+          market: "player_try_scorer_anytime",
+          eventCount: 0,
+          fallbackSource: "bluebet_affiliate_api",
+          odds: buildBestTryScorerOdds(await fetchBlueBetNrlOddsRaw()),
+        };
+      }
+    }
+
+    if (usedBetrOdds) {
       c.header("Cache-Control", "no-store, no-cache, max-age=0, must-revalidate");
       payload.eventCount = new Set(payload.odds.map((row: any) => row.matchKey)).size;
     }
