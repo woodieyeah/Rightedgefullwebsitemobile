@@ -3085,7 +3085,7 @@ app.get("/best-try-scorer-odds", async (c) => {
     let usedBetrOdds = false;
     let payload: any;
 
-    if (normalizedBookmaker === "betr") {
+    if (normalizedBookmaker === "betr" || isOriginScope) {
       usedBetrOdds = true;
       payload = {
         updatedAt: new Date().toISOString(),
@@ -3098,18 +3098,6 @@ app.get("/best-try-scorer-odds", async (c) => {
       };
     } else {
       payload = await refreshBestTryScorerOdds(force);
-
-      if (format === "sheets" && !normalizedBookmaker && !payload.odds?.length) {
-        usedBetrOdds = true;
-        payload = {
-          updatedAt: new Date().toISOString(),
-          sport: "rugbyleague_nrl",
-          market: "player_try_scorer_anytime",
-          eventCount: 0,
-          fallbackSource: "bluebet_affiliate_api",
-          odds: buildBestTryScorerOdds(await fetchBlueBetNrlOddsRaw()),
-        };
-      }
     }
 
     if (usedBetrOdds) {
