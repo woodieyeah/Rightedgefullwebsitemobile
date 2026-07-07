@@ -2988,7 +2988,7 @@ app.get("/live-odds", async (c) => {
     const sportKey = String(c.req.query("sport") || "").toLowerCase() === "origin"
       ? ORIGIN_SPORT_KEY
       : NRL_SPORT_KEY;
-    if (sportKey === NRL_SPORT_KEY && normalizeBookmakerFilter(bookmaker) === "betr") {
+    if (normalizeBookmakerFilter(bookmaker) === "betr") {
       c.header("Cache-Control", "no-store, no-cache, max-age=0, must-revalidate");
       return c.json(await fetchBlueBetNrlOddsRaw());
     }
