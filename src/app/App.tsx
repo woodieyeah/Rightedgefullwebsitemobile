@@ -9804,6 +9804,17 @@ function getOriginMarketReadFromPct(
   return { label, modelPct, edge };
 }
 
+function getOriginTeamShortName(teamName: string) {
+  const normalized = normalizeTeamName(teamName);
+  if (normalized === "Queensland Maroons" || /^qld$/i.test(String(teamName || "").trim())) return "QLD";
+  if (normalized === "NSW Blues" || /^nsw$/i.test(String(teamName || "").trim())) return "NSW";
+  return teamName;
+}
+
+function formatOriginMarketLinePoint(point: number) {
+  return `${formatSgmLine(Math.abs(point))} Points`;
+}
+
 function OriginPage({
   onRequestAccess,
   isAdmin = false,
@@ -9931,8 +9942,8 @@ function OriginPage({
     marketHomeOdds: originBetrHomeOdds,
     marketAwayOdds: originBetrAwayOdds,
   };
-  const originHomeShort = normalizeTeamName(originRow.homeTeam).includes("queensland") ? "QLD" : "NSW";
-  const originAwayShort = normalizeTeamName(originRow.awayTeam).includes("queensland") ? "QLD" : "NSW";
+  const originHomeShort = getOriginTeamShortName(originRow.homeTeam);
+  const originAwayShort = getOriginTeamShortName(originRow.awayTeam);
   const originFixtureShortLabel = `${originHomeShort} v ${originAwayShort}`;
   const originScoreLabel = `${originHomeShort} ${originRow.predictedHomeScore}-${originRow.predictedAwayScore}`;
   const states = [
@@ -10038,6 +10049,11 @@ function OriginPage({
     originPremiumPlay,
   ].filter(Boolean) as PremiumMarketPlay[];
   const originPremiumPlays = originAllPremiumPlays;
+  const originModelMarginTeam =
+    originRow.predictedHomeScore >= originRow.predictedAwayScore
+      ? originHomeShort
+      : originAwayShort;
+  const originMarketLineLabel = formatOriginMarketLinePoint(originMarketLine.point);
   const originTryScorerSignals = states.flatMap((state) =>
     state.props.map((prop) => {
       const liveOdds = originTryScorerOddsByPlayer[normalizeOriginPlayerName(prop.player)];
@@ -10206,7 +10222,7 @@ function OriginPage({
                 Market line
               </div>
               <div className="text-base md:text-2xl font-semibold text-white">
-                {originHomeShort} {formatSgmLine(originMarketLine.point)}
+                {originMarketLineLabel}
               </div>
             </div>
             <div className="border border-[#1E1E2E] bg-[#16161D] p-3 md:p-4">
@@ -10236,9 +10252,7 @@ function OriginPage({
           originRow.predictedHomeScore - originRow.predictedAwayScore,
         );
         const marginLabel =
-          originRow.predictedHomeScore >= originRow.predictedAwayScore
-            ? `${originHomeShort} by ${margin}`
-            : `${originAwayShort} by ${margin}`;
+          `${originModelMarginTeam} by ${margin}`;
         if (!lead) {
           return (
             <GlassCard className="p-4 md:p-6 border-l-4 border-l-[#6B7280]">
@@ -10305,7 +10319,7 @@ function OriginPage({
                     Market line
                   </div>
                   <div className="text-base md:text-2xl font-black text-white">
-                    {originHomeShort} {formatSgmLine(originMarketLine.point)}
+                    {originMarketLineLabel}
                   </div>
                 </div>
                 <div className="border border-[#1E1E2E] bg-[#16161D] p-3 md:p-4">
