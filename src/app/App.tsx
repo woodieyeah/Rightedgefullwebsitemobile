@@ -962,14 +962,12 @@ const appPages = [
     mobileLabel: "Matches",
     icon: <Target className="w-5 h-5" />,
   },
-  /*
   {
     id: "origin",
     label: "State of Origin",
     mobileLabel: "Origin",
     icon: <Shield className="w-5 h-5" />,
   },
-  */
   {
     id: "best-bets",
     label: "Premium Plays",
@@ -5659,7 +5657,7 @@ function OriginRapidPreview({
             <div className="text-[10px] font-medium uppercase tracking-[0.14em] text-[#9CA3AF]">
               Line signal
             </div>
-            <div className="mt-2 text-2xl font-semibold text-white">QLD -7.5</div>
+            <div className="mt-2 text-2xl font-semibold text-white">QLD -4.5</div>
           </div>
           <div className="border border-[#1E1E2E] bg-[#16161D] p-4">
             <div className="text-[10px] font-medium uppercase tracking-[0.14em] text-[#9CA3AF]">
@@ -9693,6 +9691,25 @@ const ORIGIN_MARKET_SNAPSHOT = {
   },
 };
 
+const ORIGIN_BETR_MARKET_FALLBACK = {
+  updatedLabel: "Betr screenshot",
+  h2h: {
+    home: 1.58,
+    away: 2.45,
+  },
+  line: {
+    homePoint: -4.5,
+    homeOdds: 1.9,
+    awayPoint: 4.5,
+    awayOdds: 1.9,
+  },
+  total: {
+    point: 60.5,
+    overOdds: 1.11,
+    underOdds: 1.11,
+  },
+};
+
 function normalizeOriginPlayerName(name: string) {
   return String(name || "")
     .normalize("NFD")
@@ -9720,110 +9737,42 @@ function getOriginSnapshotMarkets(row: PredictionRow): SgmMarketBookmakerData {
   };
 }
 
+function getOriginBetrFallbackMarkets(row: PredictionRow): SgmMarketBookmakerData {
+  return {
+    h2h: {
+      [normalizeTeamName(row.homeTeam)]: ORIGIN_BETR_MARKET_FALLBACK.h2h.home,
+      [normalizeTeamName(row.awayTeam)]: ORIGIN_BETR_MARKET_FALLBACK.h2h.away,
+    },
+    spreads: [
+      { team: row.homeTeam, point: ORIGIN_BETR_MARKET_FALLBACK.line.homePoint, odds: ORIGIN_BETR_MARKET_FALLBACK.line.homeOdds },
+      { team: row.awayTeam, point: ORIGIN_BETR_MARKET_FALLBACK.line.awayPoint, odds: ORIGIN_BETR_MARKET_FALLBACK.line.awayOdds },
+    ],
+    totals: [
+      { side: "Over", point: ORIGIN_BETR_MARKET_FALLBACK.total.point, odds: ORIGIN_BETR_MARKET_FALLBACK.total.overOdds },
+      { side: "Under", point: ORIGIN_BETR_MARKET_FALLBACK.total.point, odds: ORIGIN_BETR_MARKET_FALLBACK.total.underOdds },
+    ],
+  };
+}
+
+function buildOriginSingleBookMarketMap(row: PredictionRow, markets: SgmMarketBookmakerData): SgmMarketMap {
+  return {
+    [buildMatchKey(row.homeTeam, row.awayTeam)]: {
+      betr: markets,
+    },
+  };
+}
+
 function buildOriginPremiumMarketPlay(
   row: PredictionRow,
   betrMarkets: SgmMarketBookmakerData | null | undefined,
-  pinnacleMarkets: SgmMarketBookmakerData | null | undefined,
+  _pinnacleMarkets: SgmMarketBookmakerData | null | undefined,
 ): PremiumMarketPlay | null {
-  const baselineMarkets = pinnacleMarkets || getOriginSnapshotMarkets(row);
-  const displayMarkets = betrMarkets || null;
-  const candidates: PremiumMarketPlay[] = [];
-  const projectedTotal = row.predictedHomeScore + row.predictedAwayScore;
-  const projectedHomeMargin = row.predictedHomeScore - row.predictedAwayScore;
-
-  const addCandidate = ({
-    id,
-    type,
-    selection,
-    modelOdds,
-    marketOdds,
-    marketPoint,
-    projectedValue,
-  }: {
-    id: string;
-    type: PremiumMarketPlay["type"];
-    selection: string;
-    modelOdds: number;
-    marketOdds: number;
-    marketPoint?: number;
-    projectedValue?: number;
-  }) => {
-    if (!modelOdds || !marketOdds || modelOdds <= 1 || marketOdds <= 1) return;
-    const modelPct = getImpliedWinPctFromOdds(modelOdds);
-    const valueEdge = getPremiumMatchValueEdgePct(modelPct, marketOdds);
-    if (valueEdge < MIN_PREMIUM_MATCH_VALUE_EDGE_PCT) return;
-
-    candidates.push({
-      id,
-      row,
-      type,
-      selection,
-      bookmaker: "Betr",
-      odds: marketOdds,
-      modelPct,
-      modelEdge: valueEdge,
-      marketPoint,
-      projectedValue,
-    });
-  };
-
-  const homeKey = normalizeTeamName(row.homeTeam);
-  const awayKey = normalizeTeamName(row.awayTeam);
-  addCandidate({
-    id: "origin-game-3-h2h-home",
-    type: "Head 2 Head",
-    selection: `${row.homeTeam} head-to-head`,
-    modelOdds: baselineMarkets.h2h[homeKey],
-    marketOdds: displayMarkets?.h2h[homeKey] || 0,
-    projectedValue: Math.abs(projectedHomeMargin),
-  });
-  addCandidate({
-    id: "origin-game-3-h2h-away",
-    type: "Head 2 Head",
-    selection: `${row.awayTeam} head-to-head`,
-    modelOdds: baselineMarkets.h2h[awayKey],
-    marketOdds: displayMarkets?.h2h[awayKey] || 0,
-    projectedValue: Math.abs(projectedHomeMargin),
-  });
-
-  baselineMarkets.spreads.forEach((baselineSpread) => {
-    const betrSpread = findSpreadOffer(displayMarkets, baselineSpread.team, baselineSpread.point);
-    if (!betrSpread) return;
-    const isHome = normalizeTeamName(baselineSpread.team) === homeKey;
-    addCandidate({
-      id: `origin-game-3-line-${isHome ? "home" : "away"}-${baselineSpread.point}`,
-      type: "Line",
-      selection: `${baselineSpread.team} ${formatSgmLine(baselineSpread.point)}`,
-      modelOdds: baselineSpread.odds,
-      marketOdds: betrSpread.odds,
-      marketPoint: baselineSpread.point,
-      projectedValue: isHome ? projectedHomeMargin : -projectedHomeMargin,
-    });
-  });
-
-  baselineMarkets.totals.forEach((baselineTotal) => {
-    const betrTotal = findTotalOffer(displayMarkets, baselineTotal.side, baselineTotal.point);
-    if (!betrTotal) return;
-    addCandidate({
-      id: `origin-game-3-total-${baselineTotal.side}-${baselineTotal.point}`,
-      type: "Total",
-      selection: `${baselineTotal.side} ${baselineTotal.point}`,
-      modelOdds: baselineTotal.odds,
-      marketOdds: betrTotal.odds,
-      marketPoint: baselineTotal.point,
-      projectedValue: projectedTotal,
-    });
-  });
-
-  return candidates.sort((a, b) => {
-    const edgeDiff = getPremiumMatchValueEdgePct(b.modelPct, b.odds) - getPremiumMatchValueEdgePct(a.modelPct, a.odds);
-    if (Math.abs(edgeDiff) > 0.001) return edgeDiff;
-    const typeRank = (play: PremiumMarketPlay) =>
-      play.type === "Line" ? 3 : play.type === "Total" ? 2 : 1;
-    const typeDiff = typeRank(b) - typeRank(a);
-    if (typeDiff) return typeDiff;
-    return b.modelPct - a.modelPct;
-  })[0] || null;
+  if (!betrMarkets) return null;
+  return getBestPremiumMarketPlayForMatch(
+    row,
+    buildOriginSingleBookMarketMap(row, betrMarkets),
+    "bestbet",
+  );
 }
 
 function getOriginTryScorerRead(probability: number, odds?: number) {
@@ -9842,6 +9791,15 @@ function getOriginMarketRead(
   marketOdds?: number,
 ) {
   const modelPct = modelOdds && modelOdds > 1 ? getImpliedWinPctFromOdds(modelOdds) : 0;
+  const edge = marketOdds && marketOdds > 1 ? getPremiumMatchValueEdgePct(modelPct, marketOdds) : 0;
+  return { label, modelPct, edge };
+}
+
+function getOriginMarketReadFromPct(
+  label: string,
+  modelPct: number,
+  marketOdds?: number,
+) {
   const edge = marketOdds && marketOdds > 1 ? getPremiumMatchValueEdgePct(modelPct, marketOdds) : 0;
   return { label, modelPct, edge };
 }
@@ -9955,18 +9913,21 @@ function OriginPage({
     };
   }, [originRowBase.awayTeam, originRowBase.homeTeam, originRowBase.match]);
 
-  const originBetrMarkets = getBookmakerMarketsForPrediction(originBetrMarketMap, originRowBase, "betr");
+  const originBetrFallbackMarkets = getOriginBetrFallbackMarkets(originRowBase);
+  const originBetrMarkets =
+    getBookmakerMarketsForPrediction(originBetrMarketMap, originRowBase, "betr") ||
+    originBetrFallbackMarkets;
   const originPinnacleMarkets = getBookmakerMarketsForPrediction(originPinnacleMarketMap, originRowBase, "pinnacle");
   const originBetrHomeOdds =
     originBetrMarkets?.h2h[normalizeTeamName(originRowBase.homeTeam)] ||
-    ORIGIN_MARKET_SNAPSHOT.h2h.home;
+    ORIGIN_BETR_MARKET_FALLBACK.h2h.home;
   const originBetrAwayOdds =
     originBetrMarkets?.h2h[normalizeTeamName(originRowBase.awayTeam)] ||
-    ORIGIN_MARKET_SNAPSHOT.h2h.away;
+    ORIGIN_BETR_MARKET_FALLBACK.h2h.away;
   const originRow: PredictionRow = {
     ...originRowBase,
-    modelHomeOdds: originPinnacleMarkets?.h2h[normalizeTeamName(originRowBase.homeTeam)] || ORIGIN_MARKET_SNAPSHOT.h2h.home,
-    modelAwayOdds: originPinnacleMarkets?.h2h[normalizeTeamName(originRowBase.awayTeam)] || ORIGIN_MARKET_SNAPSHOT.h2h.away,
+    modelHomeOdds: ORIGIN_MARKET_SNAPSHOT.h2h.home,
+    modelAwayOdds: ORIGIN_MARKET_SNAPSHOT.h2h.away,
     marketHomeOdds: originBetrHomeOdds,
     marketAwayOdds: originBetrAwayOdds,
   };
@@ -10000,49 +9961,55 @@ function OriginPage({
       props: ORIGIN_RAPID_PROPS.nsw,
     },
   ] as const;
-  const originPinnacleBaselineMarkets = originPinnacleMarkets || getOriginSnapshotMarkets(originRow);
+  const originPinnacleBaselineMarkets = getOriginSnapshotMarkets(originRow);
   const originHomeLine =
-    findSpreadOffer(originPinnacleBaselineMarkets, originRow.homeTeam, ORIGIN_MARKET_SNAPSHOT.line.homePoint) ||
-    { point: ORIGIN_MARKET_SNAPSHOT.line.homePoint, odds: ORIGIN_MARKET_SNAPSHOT.line.homeOdds, team: originRow.homeTeam };
+    findSpreadOffer(originBetrMarkets, originRow.homeTeam, ORIGIN_BETR_MARKET_FALLBACK.line.homePoint) ||
+    originBetrMarkets.spreads.find((spread) => normalizeTeamName(spread.team) === normalizeTeamName(originRow.homeTeam)) ||
+    { point: ORIGIN_BETR_MARKET_FALLBACK.line.homePoint, odds: ORIGIN_BETR_MARKET_FALLBACK.line.homeOdds, team: originRow.homeTeam };
   const originAwayLine =
-    findSpreadOffer(originPinnacleBaselineMarkets, originRow.awayTeam, ORIGIN_MARKET_SNAPSHOT.line.awayPoint) ||
-    { point: ORIGIN_MARKET_SNAPSHOT.line.awayPoint, odds: ORIGIN_MARKET_SNAPSHOT.line.awayOdds, team: originRow.awayTeam };
+    findSpreadOffer(originBetrMarkets, originRow.awayTeam, ORIGIN_BETR_MARKET_FALLBACK.line.awayPoint) ||
+    originBetrMarkets.spreads.find((spread) => normalizeTeamName(spread.team) === normalizeTeamName(originRow.awayTeam)) ||
+    { point: ORIGIN_BETR_MARKET_FALLBACK.line.awayPoint, odds: ORIGIN_BETR_MARKET_FALLBACK.line.awayOdds, team: originRow.awayTeam };
   const originFeaturedLine =
     normalizeTeamName(originRow.predictedWinner) === normalizeTeamName(originRow.homeTeam)
       ? originHomeLine
       : originAwayLine;
   const originMarketLine = originFeaturedLine;
   const originMarketTotal =
-    findTotalOffer(originPinnacleBaselineMarkets, "Over", ORIGIN_MARKET_SNAPSHOT.total.point) ||
-    { side: "Over" as const, point: ORIGIN_MARKET_SNAPSHOT.total.point, odds: ORIGIN_MARKET_SNAPSHOT.total.overOdds };
+    findTotalOffer(originBetrMarkets, "Over", ORIGIN_BETR_MARKET_FALLBACK.total.point) ||
+    originBetrMarkets.totals.find((total) => total.side === "Over") ||
+    { side: "Over" as const, point: ORIGIN_BETR_MARKET_FALLBACK.total.point, odds: ORIGIN_BETR_MARKET_FALLBACK.total.overOdds };
   const originOverTotal =
-    findTotalOffer(originPinnacleBaselineMarkets, "Over", ORIGIN_MARKET_SNAPSHOT.total.point) ||
-    { side: "Over" as const, point: ORIGIN_MARKET_SNAPSHOT.total.point, odds: ORIGIN_MARKET_SNAPSHOT.total.overOdds };
+    findTotalOffer(originBetrMarkets, "Over", originMarketTotal.point) ||
+    { side: "Over" as const, point: originMarketTotal.point, odds: originMarketTotal.odds };
   const originUnderTotal =
-    findTotalOffer(originPinnacleBaselineMarkets, "Under", ORIGIN_MARKET_SNAPSHOT.total.point) ||
-    { side: "Under" as const, point: ORIGIN_MARKET_SNAPSHOT.total.point, odds: ORIGIN_MARKET_SNAPSHOT.total.underOdds };
+    findTotalOffer(originBetrMarkets, "Under", originMarketTotal.point) ||
+    { side: "Under" as const, point: originMarketTotal.point, odds: ORIGIN_BETR_MARKET_FALLBACK.total.underOdds };
+  const originProjectedHomeMargin = originRow.predictedHomeScore - originRow.predictedAwayScore;
+  const originProjectedAwayMargin = -originProjectedHomeMargin;
+  const originProjectedTotal = originRow.predictedHomeScore + originRow.predictedAwayScore;
   const originMarketReadGroups = [
     {
       id: "h2h" as const,
       title: "H2H",
       reads: [
-        getOriginMarketRead(originHomeShort, originRow.modelHomeOdds, originBetrMarkets?.h2h[normalizeTeamName(originRow.homeTeam)] || originRow.marketHomeOdds),
-        getOriginMarketRead(originAwayShort, originRow.modelAwayOdds, originBetrMarkets?.h2h[normalizeTeamName(originRow.awayTeam)] || originRow.marketAwayOdds),
+        getOriginMarketRead(originHomeShort, originRow.modelHomeOdds, originBetrMarkets.h2h[normalizeTeamName(originRow.homeTeam)] || originRow.marketHomeOdds),
+        getOriginMarketRead(originAwayShort, originRow.modelAwayOdds, originBetrMarkets.h2h[normalizeTeamName(originRow.awayTeam)] || originRow.marketAwayOdds),
       ],
     },
     {
       id: "line" as const,
       title: "Line",
       reads: [
-        getOriginMarketRead(
+        getOriginMarketReadFromPct(
           `${originHomeShort} ${formatSgmLine(originHomeLine.point)}`,
+          probabilityFromEdge(originProjectedHomeMargin + originHomeLine.point, RIGHTEDGE_TUNING.lineScale),
           originHomeLine.odds,
-          findSpreadOffer(originBetrMarkets, originRow.homeTeam, originHomeLine.point)?.odds,
         ),
-        getOriginMarketRead(
+        getOriginMarketReadFromPct(
           `${originAwayShort} ${formatSgmLine(originAwayLine.point)}`,
+          probabilityFromEdge(originProjectedAwayMargin + originAwayLine.point, RIGHTEDGE_TUNING.lineScale),
           originAwayLine.odds,
-          findSpreadOffer(originBetrMarkets, originRow.awayTeam, originAwayLine.point)?.odds,
         ),
       ],
     },
@@ -10050,8 +10017,16 @@ function OriginPage({
       id: "total" as const,
       title: `Total ${originMarketTotal.point}`,
       reads: [
-        getOriginMarketRead("Over", originOverTotal.odds, findTotalOffer(originBetrMarkets, "Over", originOverTotal.point)?.odds),
-        getOriginMarketRead("Under", originUnderTotal.odds, findTotalOffer(originBetrMarkets, "Under", originUnderTotal.point)?.odds),
+        getOriginMarketReadFromPct(
+          "Over",
+          probabilityFromEdge(originProjectedTotal - originOverTotal.point, RIGHTEDGE_TUNING.totalScale),
+          originOverTotal.odds,
+        ),
+        getOriginMarketReadFromPct(
+          "Under",
+          probabilityFromEdge(originUnderTotal.point - originProjectedTotal, RIGHTEDGE_TUNING.totalScale),
+          originUnderTotal.odds,
+        ),
       ],
     },
   ];
@@ -10059,42 +10034,10 @@ function OriginPage({
     originMarketReadGroups.find((group) => group.id === activeOriginMarketRead) ||
     originMarketReadGroups[0];
   const originPremiumPlay = buildOriginPremiumMarketPlay(originRow, originBetrMarkets, originPinnacleBaselineMarkets);
-  const originFeaturedLineOdds = findSpreadOffer(originBetrMarkets, originFeaturedLine.team, originFeaturedLine.point)?.odds;
-  const originFeaturedLineModelPct = getImpliedWinPctFromOdds(originFeaturedLine.odds);
-  const originFeaturedLineProjectedValue =
-    normalizeTeamName(originFeaturedLine.team) === normalizeTeamName(originRow.homeTeam)
-      ? originRow.predictedHomeScore - originRow.predictedAwayScore
-      : originRow.predictedAwayScore - originRow.predictedHomeScore;
-  const originQueenslandLineEdge = originFeaturedLineOdds
-    ? getPremiumMatchValueEdgePct(originFeaturedLineModelPct, originFeaturedLineOdds)
-    : 0;
-  const originQueenslandLinePlay: PremiumMarketPlay | null =
-    originFeaturedLineOdds && originQueenslandLineEdge > 0
-      ? {
-          id: `origin-game-3-line-featured-${originFeaturedLine.point}`,
-          row: originRow,
-          type: "Line",
-          selection: `${originFeaturedLine.team} ${formatSgmLine(originFeaturedLine.point)}`,
-          bookmaker: "Betr",
-          odds: originFeaturedLineOdds,
-          modelPct: originFeaturedLineModelPct,
-          modelEdge: originQueenslandLineEdge,
-          marketPoint: originFeaturedLine.point,
-          projectedValue: originFeaturedLineProjectedValue,
-        }
-      : null;
   const originAllPremiumPlays = [
     originPremiumPlay,
-    originQueenslandLinePlay && originPremiumPlay?.id !== originQueenslandLinePlay.id
-      ? originQueenslandLinePlay
-      : null,
   ].filter(Boolean) as PremiumMarketPlay[];
-  // Lead with the margin (Line) play as the headline — that's where the model
-  // adds value over the market. H2H and other markets fall in behind it.
-  const originPremiumPlays = [
-    ...originAllPremiumPlays.filter((play) => play.type === "Line"),
-    ...originAllPremiumPlays.filter((play) => play.type !== "Line"),
-  ];
+  const originPremiumPlays = originAllPremiumPlays;
   const originTryScorerSignals = states.flatMap((state) =>
     state.props.map((prop) => {
       const liveOdds = originTryScorerOddsByPlayer[normalizeOriginPlayerName(prop.player)];
@@ -10120,23 +10063,22 @@ function OriginPage({
   // computed from the legs.
   const originSgmLegs = [
     {
-      id: "qld-line",
-      selection: "Queensland Maroons -7.5",
+      id: "nsw-line",
+      selection: "New South Wales Blues +12.5",
       market: "Match Result",
-      odds: 1.75,
+      odds: 1.35,
     },
     {
-      id: "nawaqanitawase-ats",
+      id: "nawaqanitawase-1-2-3",
       selection: "Mark Nawaqanitawase",
-      market: "Anytime Tryscorer",
-      odds: 1.95,
+      market: "1st, 2nd or 3rd Tryscorer",
+      odds: 3.6,
     },
     {
-      id: "combined-tries",
-      selection:
-        "Mark Nawaqanitawase, Selwyn Cobbo & Jojo Fifita To Combine For 2+ Tries",
-      market: "Combined Player Tries",
-      odds: 1.8,
+      id: "under-60-5",
+      selection: "Under 60.5",
+      market: "Total Points Over/Under",
+      odds: 1.11,
     },
   ];
   const originSgmCombinedOdds = 5.0;
@@ -10256,7 +10198,7 @@ function OriginPage({
                 Model margin
               </div>
               <div className="text-base md:text-2xl font-semibold text-white">
-                2 pts
+                {Math.abs(originRow.predictedHomeScore - originRow.predictedAwayScore)} pts
               </div>
             </div>
             <div className="border border-[#1E1E2E] bg-[#16161D] p-3 md:p-4">
@@ -10295,8 +10237,8 @@ function OriginPage({
         );
         const marginLabel =
           originRow.predictedHomeScore >= originRow.predictedAwayScore
-            ? `NSW by ${margin}`
-            : `QLD by ${margin}`;
+            ? `${originHomeShort} by ${margin}`
+            : `${originAwayShort} by ${margin}`;
         if (!lead) {
           return (
             <GlassCard className="p-4 md:p-6 border-l-4 border-l-[#6B7280]">
@@ -10397,13 +10339,10 @@ function OriginPage({
 
       <div className="flex flex-col gap-4">
         {(() => {
-          // Hero = the single highest positive-edge scorer (value play).
-          const heroScorer = positiveOriginTryScorerSignals[0] || null;
-          const heroPlayerKey = heroScorer ? normalizeOriginPlayerName(heroScorer.prop.player) : "";
-          // Context list = every OTHER scorer, grouped BY TEAM. We show model
-          // probability only here (no edge) — shown for context, not called as plays.
-          const contextScorers = originTryScorerSignals
-            .filter((s) => normalizeOriginPlayerName(s.prop.player) !== heroPlayerKey);
+          // Show every scorer from the supplied Game 3 model list. Value is
+          // called in the market cards, while this section keeps the full prop
+          // context visible for both teams.
+          const contextScorers = originTryScorerSignals;
           const contextByTeam = states
             .map((state) => ({
               state,
