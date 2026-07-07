@@ -2373,6 +2373,23 @@ function normalizeBlueBetTryScorerPlayerName(outcomeName: string) {
     .trim();
 }
 
+function mergeBlueBetEventPayloads(...payloads: any[]) {
+  const primary = payloads.find((payload) => payload?.MasterEvent) || {};
+  const eventsById = new Map<string, any>();
+
+  for (const payload of payloads) {
+    for (const event of asBlueBetArray(payload?.Events)) {
+      const eventId = String(event?.EventId || `${event?.EventName || ""}:${event?.GroupTypeCode || ""}`);
+      if (eventId) eventsById.set(eventId, event);
+    }
+  }
+
+  return {
+    ...primary,
+    Events: [...eventsById.values()],
+  };
+}
+
 function buildBlueBetEventOdds(payload: any, options: {
   sportKey?: string;
   sportTitle?: string;
@@ -2401,14 +2418,16 @@ function buildBlueBetEventOdds(payload: any, options: {
     const eventClass = String(event?.EventClass || "");
     const eventText = `${eventName} ${eventClass}`.toLowerCase();
     const isTotalsEvent = includeTotals && eventText.includes("total points over/under");
+    const isAnytimeTryScorerEvent =
+      eventText.includes("anytime tryscorer") ||
+      eventText.includes("anytime try scorer") ||
+      eventText.includes("any time try scorer") ||
+      eventText.includes("any time tryscorer");
     const isTryScorerEvent =
-      includeTryScorer && (
-      eventText.includes("try scorer") ||
-      eventText.includes("tryscorer") ||
-      eventText.includes("anytime try") ||
-      eventText.includes("any time try") ||
-      eventText.includes("score a try")
-      );
+      includeTryScorer &&
+      isAnytimeTryScorerEvent &&
+      !eventText.includes("first") &&
+      !eventText.includes("last");
 
     for (const outcome of asBlueBetArray(event?.Outcomes)) {
       const price = Number(outcome?.Price);
@@ -2518,7 +2537,8 @@ function buildBlueBetEventOdds(payload: any, options: {
   };
 }
 
-async function fetchBlueBetNrlOddsRaw() {
+async function fetchBlueBetNrlOddsRaw(options: { includeOrigin?: boolean } = {}) {
+  const includeOrigin = options.includeOrigin !== false;
   const hierarchy = await fetchBlueBetJson(
     "/MasterCategory?EventTypeId=102&WithLevelledMarkets=true&Format=json",
   );
@@ -2543,7 +2563,7 @@ async function fetchBlueBetNrlOddsRaw() {
         (
           categoryName === "nrl" ||
           categoryName === "nrl matches" ||
-          categoryName.includes("state of origin")
+          (includeOrigin && categoryName.includes("state of origin"))
         )
       );
     });
@@ -2560,9 +2580,22 @@ async function fetchBlueBetNrlOddsRaw() {
   const masterEvents = [...masterEventsById.values()];
 
   const eventPayloads = await Promise.all(
-    masterEvents.map((event: any) =>
-      fetchBlueBetJson(`/MasterEvent?MasterEventId=${encodeURIComponent(event.MasterEventId)}&format=json`),
-    ),
+    masterEvents.map(async (event: any) => {
+      const masterEventId = encodeURIComponent(event.MasterEventId);
+      const basePayload = await fetchBlueBetJson(`/MasterEvent?MasterEventId=${masterEventId}&format=json`);
+      const hasTryScorerGroup = asBlueBetArray(basePayload?.GroupLinks).some((group: any) => {
+        const groupCode = String(group?.GroupTypeCode || "").toUpperCase();
+        const groupName = String(group?.GroupName || "").toLowerCase();
+        return groupCode === "G20" || groupName.includes("tryscorer");
+      });
+
+      if (!hasTryScorerGroup) return basePayload;
+
+      const tryScorerPayload = await fetchBlueBetJson(
+        `/MasterEvent?MasterEventId=${masterEventId}&GroupTypeCode=G20&format=json`,
+      );
+      return mergeBlueBetEventPayloads(basePayload, tryScorerPayload);
+    }),
   );
 
   return eventPayloads
@@ -3098,6 +3131,24 @@ app.get("/best-try-scorer-odds", async (c) => {
       };
     } else {
       payload = await refreshBestTryScorerOdds(force);
+
+      if (!payload.odds?.length) {
+        const blueBetNrlOdds = buildBestTryScorerOdds(
+          await fetchBlueBetNrlOddsRaw({ includeOrigin: false }),
+        );
+
+        if (blueBetNrlOdds.length) {
+          usedBetrOdds = true;
+          payload = {
+            updatedAt: new Date().toISOString(),
+            sport: "rugbyleague_nrl",
+            market: "player_try_scorer_anytime",
+            eventCount: new Set(blueBetNrlOdds.map((row: any) => row.matchKey)).size,
+            fallbackSource: "bluebet_affiliate_api_nrl",
+            odds: blueBetNrlOdds,
+          };
+        }
+      }
     }
 
     if (usedBetrOdds) {
