@@ -3951,6 +3951,12 @@ type PremiumBestBetAlertContext = {
 };
 
 const PREMIUM_BEST_BET_ALERT_LOCK_KEY = "premium_best_bets_alert:last";
+const HIDDEN_PREMIUM_BEST_BET_PLAYS = [
+  {
+    round: 19,
+    matchKey: buildOddsMatchKey("Wests Tigers", "New Zealand Warriors"),
+  },
+];
 
 function cleanBestBetSelection(value: string) {
   return normalizeNrlTeamName(
@@ -4039,6 +4045,10 @@ async function loadPremiumBestBetAlertContext(): Promise<PremiumBestBetAlertCont
     ? parsedPredictions.filter((row) => row.round === targetRound)
     : parsedPredictions;
   const plays = (roundPlays.length ? roundPlays : parsedPredictions)
+    .filter((row) => !HIDDEN_PREMIUM_BEST_BET_PLAYS.some((hidden) =>
+      row.round === hidden.round &&
+      buildOddsMatchKey(row.homeTeam, row.awayTeam) === hidden.matchKey
+    ))
     .sort((a, b) =>
       (b.stake - a.stake) ||
       (b.edgePct - a.edgePct) ||
