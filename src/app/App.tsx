@@ -1794,6 +1794,21 @@ function getPredictionPairKey(row: PredictionRow) {
   return buildTeamPairKey(row.homeTeam, row.awayTeam);
 }
 
+const HIDDEN_PREMIUM_BEST_BET_PLAYS = [
+  {
+    roundNumber: 19,
+    pairKey: buildTeamPairKey("Wests Tigers", "New Zealand Warriors"),
+  },
+];
+
+function isHiddenPremiumBestBetRow(row?: PredictionRow | null) {
+  if (!row) return false;
+  const pairKey = getPredictionPairKey(row);
+  return HIDDEN_PREMIUM_BEST_BET_PLAYS.some(
+    (hidden) => row.roundNumber === hidden.roundNumber && pairKey === hidden.pairKey,
+  );
+}
+
 function getSettledBetForPrediction(data: DashboardData, row: PredictionRow) {
   const pairKey = getPredictionPairKey(row);
   return data.betLog
@@ -8729,6 +8744,7 @@ function buildPremiumMarketPlays(
 
   return [...data.predictions]
     .sort(sortPredictionsByFixture)
+    .filter((row) => !isHiddenPremiumBestBetRow(row))
     .filter(
       (row) =>
         getLockedCompletedPremiumMarketPlayForMatch(row) ||
@@ -9335,12 +9351,14 @@ function BestBetsPage({
     for (const play of live) {
       const key = getPredictionPairKey(play.row);
       if (archivedMatchKeys.has(key)) continue;
+      if (isHiddenPremiumBestBetRow(play.row)) continue;
       byKey.set(key, play);
     }
     // Overlay frozen plays for kicked-off matches (replaces empty-odds live play).
     for (const snapshot of frozen.snapshots) {
       if (archivedMatchKeys.has(snapshot.matchKey)) continue;
       const row = predictionByPairKey.get(snapshot.matchKey) || null;
+      if (isHiddenPremiumBestBetRow(row)) continue;
       const lockedPlay = row ? getLockedCompletedPremiumMarketPlayForMatch(row) : null;
       if (lockedPlay) {
         byKey.set(snapshot.matchKey, lockedPlay);
@@ -9356,6 +9374,7 @@ function BestBetsPage({
       if (!lockedPlay) continue;
       const key = getPredictionPairKey(play.row);
       if (archivedMatchKeys.has(key)) continue;
+      if (isHiddenPremiumBestBetRow(play.row)) continue;
       for (const [existingKey, existingPlay] of byKey.entries()) {
         if (buildMatchLabelKey(existingPlay.row.match) === buildMatchLabelKey(play.row.match)) {
           byKey.delete(existingKey);
