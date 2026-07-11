@@ -963,12 +963,6 @@ const appPages = [
     icon: <Target className="w-5 h-5" />,
   },
   {
-    id: "origin",
-    label: "State of Origin",
-    mobileLabel: "Origin",
-    icon: <Shield className="w-5 h-5" />,
-  },
-  {
     id: "best-bets",
     label: "Premium Plays",
     mobileLabel: "Plays",
@@ -982,10 +976,7 @@ const appPages = [
   },
 ];
 
-function getAppPages(isAdmin: boolean, _canViewOrigin: boolean) {
-  // Origin always appears in the nav. Free users see it locked (premium flag on
-  // SidebarItem) and clicking it routes through the upgrade prompt, identical to
-  // the other premium nav items (Premium Plays / Try Scorers).
+function getAppPages(isAdmin: boolean) {
   const visiblePages = appPages;
 
   if (isAdmin) {
@@ -3383,7 +3374,7 @@ function PaymentGateModal({
   useEffect(() => {
     if (!open) return;
     const currentPremiumHash = window.location.hash.replace("#", "");
-    const section = ["matches", "origin", "best-bets", "try-scorers"].includes(currentPremiumHash)
+    const section = ["matches", "best-bets", "try-scorers"].includes(currentPremiumHash)
       ? currentPremiumHash
       : "best-bets";
     (window as any).trackAnalyticsEvent?.("premium_paywall_view", {
@@ -3439,7 +3430,7 @@ function PaymentGateModal({
 
       setStep("processing");
       const currentPremiumHash = window.location.hash.replace("#", "");
-      let returnHash = ["matches", "origin", "best-bets", "try-scorers"].includes(currentPremiumHash)
+      let returnHash = ["matches", "best-bets", "try-scorers"].includes(currentPremiumHash)
         ? currentPremiumHash
         : "best-bets";
       const returnUrl = `${window.location.origin}${window.location.pathname}`;
@@ -5554,164 +5545,6 @@ function HeroStickyCta({ onGoApp }: { onGoApp: (source: string) => void }) {
         <ArrowRight className="h-4 w-4" />
       </button>
     </div>
-  );
-}
-
-function OriginRapidPreview({
-  onGoApp,
-}: {
-  onGoApp: (source: string) => void;
-}) {
-  const teams = [
-    {
-      name: "Queensland Maroons",
-      short: "QLD",
-      score: 26,
-      winPct: 66,
-      odds: 1.515,
-      primary: "#7A1737",
-      secondary: "#F6D6A8",
-      isWinner: true,
-    },
-    {
-      name: "NSW Blues",
-      short: "NSW",
-      score: 18,
-      winPct: 44,
-      odds: 2.273,
-      primary: "#0057B8",
-      secondary: "#FFFFFF",
-      isWinner: false,
-    },
-  ];
-
-  return (
-    <HomeCard className="mb-6 p-5 sm:p-6 md:p-8">
-      <div className="flex flex-col gap-6">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <div className="mb-2 inline-flex border border-[#1E1E2E] bg-[#16161D] px-3 py-1.5 text-[10px] font-medium uppercase tracking-[0.14em] text-[#9CA3AF]">
-              Origin Rapid Preview
-            </div>
-            <h2 className="text-2xl font-semibold tracking-tight text-white sm:text-3xl">
-              Queensland Maroons v NSW Blues
-            </h2>
-            <p className="mt-2 text-sm leading-relaxed text-[#9CA3AF]">
-              Market-calibrated projection for the Game 3 decider. Built for a fast Origin read, separate from the standard NRL round model.
-            </p>
-          </div>
-          <div className="text-left sm:text-right">
-            <div className="text-[10px] font-medium uppercase tracking-[0.14em] text-[#6B7280]">
-              Suncorp Stadium
-            </div>
-            <div className="mt-1 text-sm font-medium text-white">
-              Wed Jul 8 · 8:05 PM AEST
-            </div>
-          </div>
-        </div>
-
-        <div className="overflow-hidden border border-[#1E1E2E] bg-[#0A0A0F]/40">
-          {teams.map((team, index) => (
-            <div
-              key={team.name}
-              className="relative grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 border-t border-[#1E1E2E] px-4 py-4 first:border-t-0 sm:gap-5 sm:px-6"
-            >
-              <span
-                aria-hidden="true"
-                className="absolute left-0 top-4 h-[calc(100%-32px)] w-0.5"
-                style={{ backgroundColor: team.primary }}
-              />
-              <div className="flex min-w-0 items-center gap-3 sm:gap-4">
-                <div
-                  className="flex h-10 w-10 shrink-0 items-center justify-center border text-[11px] font-semibold uppercase tracking-[0.08em] sm:h-12 sm:w-12"
-                  style={{
-                    backgroundColor: team.primary,
-                    borderColor: team.secondary,
-                    color: team.secondary,
-                  }}
-                >
-                  {team.short}
-                </div>
-                <div className="min-w-0">
-                  <div className={`truncate text-xl font-semibold tracking-tight sm:text-2xl ${team.isWinner ? "text-white" : "text-[#9CA3AF]"}`}>
-                    {team.name}
-                  </div>
-                  <div className="mt-1 text-[10px] font-medium uppercase tracking-[0.14em] text-[#6B7280]">
-                    {index === 0 ? "Home" : "Away"} · H2H ${team.odds.toFixed(2)}
-                  </div>
-                </div>
-              </div>
-              <div className="border border-[#1E1E2E] bg-[#16161D] px-3 py-2 text-center sm:min-w-[78px]">
-                <div className="text-[8px] font-medium uppercase tracking-[0.14em] text-[#6B7280]">
-                  Score
-                </div>
-                <div className={`text-2xl font-semibold leading-none sm:text-3xl ${team.isWinner ? "text-white" : "text-[#9CA3AF]"}`}>
-                  {team.score}
-                </div>
-              </div>
-              <div className="border border-[#1E1E2E] bg-[#16161D] px-3 py-2 text-center sm:min-w-[78px]">
-                <div className="text-[8px] font-medium uppercase tracking-[0.14em] text-[#6B7280]">
-                  Win %
-                </div>
-                <div className={`text-lg font-semibold leading-none sm:text-xl ${team.isWinner ? "text-[#00E676]" : "text-[#9CA3AF]"}`}>
-                  {formatPercent(team.winPct, 0)}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <div className="grid gap-3 md:grid-cols-3">
-          <div className="border border-[#1E1E2E] bg-[#16161D] p-4">
-            <div className="text-[10px] font-medium uppercase tracking-[0.14em] text-[#9CA3AF]">
-              Projected score
-            </div>
-            <div className="mt-2 text-2xl font-semibold text-white">26-18</div>
-          </div>
-          <div className="border border-[#1E1E2E] bg-[#16161D] p-4">
-            <div className="text-[10px] font-medium uppercase tracking-[0.14em] text-[#9CA3AF]">
-              Line signal
-            </div>
-            <div className="mt-2 text-2xl font-semibold text-white">QLD -4.5</div>
-          </div>
-          <div className="border border-[#1E1E2E] bg-[#16161D] p-4">
-            <div className="text-[10px] font-medium uppercase tracking-[0.14em] text-[#9CA3AF]">
-              Read
-            </div>
-            <div className="mt-2 text-sm font-medium leading-relaxed text-[#9CA3AF]">
-              Queensland edge on win probability, with live Betr pricing checked on the premium Origin card.
-            </div>
-          </div>
-        </div>
-
-        <div className="border border-[#1E1E2E] bg-[#0A0A0F] p-4 sm:p-5">
-          <p className="text-sm leading-relaxed text-[#9CA3AF]">
-            Queensland owns the model lean at Suncorp. The premium Origin card checks the live Betr line, total and try-scorer markets against this Game 3 projection before calling a play.
-          </p>
-          <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center">
-            <button
-              type="button"
-              onClick={() => { window.location.hash = "origin"; }}
-              className="inline-flex items-center justify-center gap-2 border border-white bg-white px-5 py-3 text-sm font-medium text-[#0A0A0F] transition hover:opacity-85"
-            >
-              Unlock Premium Origin Signals
-              <Lock className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => onGoApp("origin_rapid_preview_free_predictions")}
-              className="inline-flex items-center justify-center gap-2 border border-[#1E1E2E] bg-transparent px-5 py-3 text-sm font-medium text-white transition hover:bg-white/5"
-            >
-              View Free Round Predictions
-              <ArrowRight className="h-4 w-4" />
-            </button>
-          </div>
-          <div className="mt-4 text-[10px] font-medium uppercase tracking-[0.12em] text-[#6B7280]">
-            18+ only · Gamble responsibly · 1800 858 858 · gamblinghelponline.org.au
-          </div>
-        </div>
-      </div>
-    </HomeCard>
   );
 }
 
@@ -11955,8 +11788,6 @@ function AppDashboard({
   isPremium: boolean;
 }) {
   const [isAdmin, setIsAdmin] = useState(() => isUserAdmin());
-  const canViewOrigin = canViewOriginPage();
-
   useEffect(() => {
     const handleAdminAuth = () => {
       setIsAdmin(isUserAdmin());
@@ -11970,7 +11801,7 @@ function AppDashboard({
   const [page, setPage] = useState(() => {
     const hash = window.location.hash.replace("#", "");
     if (
-      ["matches", "origin", "best-bets", "try-scorers", "performance", "admin", "admin-results"].includes(
+      ["matches", "best-bets", "try-scorers", "performance", "admin", "admin-results"].includes(
         hash,
       )
     ) {
@@ -12028,10 +11859,14 @@ function AppDashboard({
   useEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash.replace("#", "");
+      if (hash === "origin") {
+        setPage("matches");
+        window.history.replaceState({}, document.title, `${window.location.pathname}#matches`);
+        return;
+      }
       if (
         [
           "matches",
-          "origin",
           "best-bets",
           "try-scorers",
           "performance",
@@ -12051,10 +11886,6 @@ function AppDashboard({
   }, []);
 
   const handlePageChange = (newPage: string) => {
-    if (newPage === "origin" && !canViewOrigin) {
-      onRequestAccess("origin");
-      return;
-    }
     setPage(newPage);
     window.location.hash = newPage;
     window.scrollTo(0, 0);
@@ -12062,7 +11893,7 @@ function AppDashboard({
     document.body.scrollTop = 0;
   };
 
-  const mobilePages = useMemo(() => getAppPages(isAdmin, canViewOrigin), [canViewOrigin, isAdmin]);
+  const mobilePages = useMemo(() => getAppPages(isAdmin), [isAdmin]);
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -12124,11 +11955,6 @@ function AppDashboard({
         return {
           subtitle: "Matches",
         };
-      case "origin":
-        return {
-          title: "Premium",
-          subtitle: "State of Origin",
-        };
       case "best-bets":
         return {
           title: "Premium",
@@ -12177,13 +12003,13 @@ function AppDashboard({
           </div>
 
           <div className="space-y-3">
-            {getAppPages(isAdmin, canViewOrigin).map((item) => (
+            {getAppPages(isAdmin).map((item) => (
               <SidebarItem
                 key={item.id}
                 active={page === item.id}
                 icon={item.icon}
                 label={item.label}
-                premium={item.id === "origin" || item.id === "best-bets" || item.id === "try-scorers"}
+                premium={item.id === "best-bets" || item.id === "try-scorers"}
                 onClick={() => {
                   handlePageChange(item.id);
                   window.scrollTo({
@@ -12384,12 +12210,6 @@ function AppDashboard({
                   isPremium={isPremium || isAdmin}
                   isAdmin={isAdmin}
                   selectedArchive={selectedRoundArchive}
-                />
-              )}
-              {page === "origin" && (
-                <OriginPage
-                  onRequestAccess={onRequestAccess}
-                  isAdmin={isAdmin}
                 />
               )}
               {page === "try-scorers" && (
@@ -12929,7 +12749,7 @@ export default function App() {
     const analyticsName = rawHash.replace(/-/g, "_");
     (window as any).trackAnalyticsEvent?.(`${analyticsName}_view`, {
       section: rawHash,
-      app_section: ["matches", "origin", "best-bets", "try-scorers", "performance", "admin", "admin-results"].includes(rawHash),
+      app_section: ["matches", "best-bets", "try-scorers", "performance", "admin", "admin-results"].includes(rawHash),
     });
   };
 
@@ -12955,7 +12775,7 @@ export default function App() {
   };
 
   const requestPremiumAccess = (source: string = 'unknown') => {
-    let targetHash = ["matches", "origin", "best-bets", "try-scorers"].includes(source)
+    let targetHash = ["matches", "best-bets", "try-scorers"].includes(source)
       ? source
       : "best-bets";
     setSitePage("app");
@@ -12988,9 +12808,14 @@ export default function App() {
 
   const checkHash = () => {
     const hash = window.location.hash.replace("#", "");
-    const appHashes = ["matches", "origin", "best-bets", "try-scorers", "performance", "admin", "admin-results"];
-    const premiumHashes = ["origin", "best-bets", "try-scorers"];
+    const appHashes = ["matches", "best-bets", "try-scorers", "performance", "admin", "admin-results"];
+    const premiumHashes = ["best-bets", "try-scorers"];
     const publicHashes = ["results", "methodology", "ad-studio", "articles", "article-round-5-2026", "article-methodology", "cricket"];
+
+    if (hash === "origin") {
+      window.location.hash = "matches";
+      return;
+    }
 
     if (hash === "sgm-builder") {
       window.location.hash = "best-bets";
@@ -13067,7 +12892,7 @@ export default function App() {
 
       const sessionId = searchParams.get("session_id");
       const fallbackReturnHash = searchParams.get("return_hash") || window.location.hash.replace("#", "") || "best-bets";
-      let returnHash = ["matches", "origin", "best-bets", "try-scorers"].includes(fallbackReturnHash)
+      let returnHash = ["matches", "best-bets", "try-scorers"].includes(fallbackReturnHash)
         ? fallbackReturnHash
         : "best-bets";
 
@@ -13108,7 +12933,7 @@ export default function App() {
 
           setShowEmailGate(false);
 
-          let confirmedReturnHash = ["matches", "origin", "best-bets", "try-scorers"].includes(data.returnHash)
+          let confirmedReturnHash = ["matches", "best-bets", "try-scorers"].includes(data.returnHash)
             ? data.returnHash
             : returnHash;
 
@@ -13392,7 +13217,7 @@ export default function App() {
             setShowPaymentGate(false);
             setSitePage("app");
             const currentPremiumHash = window.location.hash.replace("#", "");
-            let returnHash = ["matches", "origin", "best-bets", "try-scorers"].includes(currentPremiumHash)
+            let returnHash = ["matches", "best-bets", "try-scorers"].includes(currentPremiumHash)
               ? currentPremiumHash
               : "best-bets";
             window.location.hash = returnHash;
