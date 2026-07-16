@@ -6008,14 +6008,16 @@ function FreeBetrMarketsPanel({
                             {outcome.subLabel}
                           </div>
                         </div>
-                        <div className="mt-1 flex shrink-0 flex-col items-end border border-[#1E1E2E] bg-[#16161D] px-2 py-1 text-right">
-                          <span className="text-[7px] font-medium uppercase tracking-widest text-[#9CA3AF]">
-                            Model
-                          </span>
-                          <span className="text-base font-semibold leading-none text-[#00E676] tabular-nums">
-                            {Number.isFinite(outcome.modelPct) ? formatPercent(outcome.modelPct || 0, 0) : "—"}
-                          </span>
-                        </div>
+                        {isPremium && (
+                          <div className="mt-1 flex shrink-0 flex-col items-end border border-[#1E1E2E] bg-[#16161D] px-2 py-1 text-right">
+                            <span className="text-[7px] font-medium uppercase tracking-widest text-[#9CA3AF]">
+                              Model
+                            </span>
+                            <span className="text-base font-semibold leading-none text-[#00E676] tabular-nums">
+                              {Number.isFinite(outcome.modelPct) ? formatPercent(outcome.modelPct || 0, 0) : "—"}
+                            </span>
+                          </div>
+                        )}
                       </div>
                     </div>
                     <div className="re-betr-button mx-4 mb-4 flex items-center justify-between gap-3 border border-[#093AD3] bg-[#093AD3] px-3 py-2 text-white transition group-hover:opacity-90">
