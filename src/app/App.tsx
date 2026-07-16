@@ -5530,6 +5530,85 @@ function HomeCard({
   );
 }
 
+function Round20OfferBanner({ onUnlock }: { onUnlock: () => void }) {
+  return (
+    <section className="overflow-hidden border border-[#00E676]/40 bg-[linear-gradient(105deg,rgba(0,230,118,0.12),rgba(17,17,22,0.98)_48%,rgba(17,17,22,1))] p-4 sm:p-5 md:p-6">
+      <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+        <div className="min-w-0 max-w-[720px]">
+          <div className="mb-2 text-[9px] font-medium uppercase tracking-[0.22em] text-[#00E676] sm:text-[10px]">
+            Limited-time round offer
+          </div>
+          <h2 className="text-xl font-semibold leading-tight tracking-tight text-white sm:text-2xl md:text-3xl">
+            This round only: Premium for $3 with code ROUND20
+          </h2>
+          <p className="mt-2 text-sm leading-relaxed text-[#9CA3AF] sm:text-base">
+            Unlock Core Play, Best H2H, Value, High Variance and Try Scorer Best Bets.
+          </p>
+        </div>
+        <div className="w-full shrink-0 lg:w-[300px]">
+          <button
+            type="button"
+            onClick={onUnlock}
+            className="re-primary-cta inline-flex min-h-[48px] w-full items-center justify-center gap-2 border px-5 py-3 text-sm font-medium uppercase tracking-wider transition hover:opacity-90"
+          >
+            Unlock this round for $3
+            <ArrowRight className="h-4 w-4 shrink-0" />
+          </button>
+          <p className="mt-2 text-[10px] leading-relaxed text-[#6B7280] sm:text-[11px]">
+            Enter promo code ROUND20 at checkout. Renews at $14/week unless cancelled before next billing date.
+          </p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function LandingRound20Offer({ onUnlock }: { onUnlock: () => void }) {
+  return (
+    <section className="mt-5 border border-[#1E1E2E] bg-[#111116] p-5 sm:mt-6 sm:p-6 md:p-8">
+      <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+        <div className="max-w-[720px]">
+          <h2 className="text-2xl font-semibold tracking-tight text-white sm:text-3xl">
+            This round: full RightEdge Premium for $3
+          </h2>
+          <p className="mt-3 text-sm leading-relaxed text-[#9CA3AF] sm:text-base">
+            See exactly what the model is backing. Use promo code ROUND20 at checkout – renews at $14/week unless cancelled before next billing date.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onUnlock}
+          className="re-primary-cta inline-flex min-h-[48px] w-full shrink-0 items-center justify-center gap-2 border px-5 py-3 text-center text-sm font-medium uppercase tracking-wider transition hover:opacity-90 md:w-auto"
+        >
+          Unlock this round for $3 (code ROUND20)
+          <ArrowRight className="h-4 w-4 shrink-0" />
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function FreeMatchesRound20Upsell({ onUnlock }: { onUnlock: () => void }) {
+  return (
+    <section className="border border-[#1E1E2E] border-l-4 border-l-[#00E676] bg-[#111116] p-4 sm:p-5 md:p-6">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <p className="max-w-[820px] text-sm font-medium leading-relaxed text-white/80 sm:text-base">
+          <span className="font-semibold text-white">Special for this round – </span>
+          You’re seeing the projected scores for free. To see the actual bets (Core Play, Best Head-to-Head, Best Value, High Variance and Try Scorer Best Bets), unlock Premium this round for $3 with code ROUND20 at checkout.
+        </p>
+        <button
+          type="button"
+          onClick={onUnlock}
+          className="re-primary-cta inline-flex min-h-[46px] w-full shrink-0 items-center justify-center gap-2 border px-5 py-3 text-sm font-medium uppercase tracking-wider transition hover:opacity-90 lg:w-auto"
+        >
+          Unlock this round for $3
+          <ArrowRight className="h-4 w-4 shrink-0" />
+        </button>
+      </div>
+    </section>
+  );
+}
+
 function PublicHero() {
   return (
     <section className="relative mt-8 overflow-hidden pt-12 pb-3 sm:mt-10 sm:pt-16 sm:pb-4 md:mt-12 md:pt-20 md:pb-5">
@@ -6814,10 +6893,12 @@ function HomePage({
   data,
   onGoApp,
   onRequestPremium,
+  showRoundOffer,
 }: {
   data: DashboardData | null;
   onGoApp: (source: string) => void;
   onRequestPremium: (source: string) => void;
+  showRoundOffer: boolean;
 }) {
   const featured = getFeaturedPrediction(
     data?.predictions || [],
@@ -6825,8 +6906,18 @@ function HomePage({
 
   return (
     <div className="flex flex-col">
+      {showRoundOffer && (
+        <Round20OfferBanner
+          onUnlock={() => onRequestPremium("round20_landing_banner")}
+        />
+      )}
       <TryScorerTicker data={data} />
       <PublicHero />
+      {showRoundOffer && (
+        <LandingRound20Offer
+          onUnlock={() => onRequestPremium("round20_landing_hero")}
+        />
+      )}
       <HeroStickyCta onGoApp={onGoApp} />
       <div id="featured-match-section">
         <FeaturedMatchPreview
@@ -7539,6 +7630,12 @@ function PredictionsPage({
             </div>
           </div>
         </GlassCard>
+      )}
+
+      {!isPremium && !selectedArchive && (
+        <FreeMatchesRound20Upsell
+          onUnlock={() => onRequestAccess("best-bets")}
+        />
       )}
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 md:gap-8">
@@ -9591,7 +9688,7 @@ function BestBetsPage({
             Overall Best Bet
           </h3>
           <div className="text-[10px] md:text-xs font-black text-white/45 uppercase tracking-widest mt-1">
-            Chosen by the model and calibrated to market odds—this is the single play we’d back first.
+            The highest confidence-adjusted play after market calibration
           </div>
         </div>
         {isLoadingMarkets ? (
@@ -9626,7 +9723,7 @@ function BestBetsPage({
               Best Head-to-Head
             </h3>
             <div className="text-[10px] md:text-xs font-black text-white/45 uppercase tracking-widest mt-1">
-              The strongest moneyline read from the model for this round.
+              The strongest positive H2H read available this round
             </div>
           </div>
           <div className="grid grid-cols-1 gap-5 md:gap-6">
@@ -9648,7 +9745,7 @@ function BestBetsPage({
               Best Value Play
             </h3>
             <div className="text-[10px] md:text-xs font-black text-white/45 uppercase tracking-widest mt-1">
-              Best Secondary Value
+              Positive adjusted value that sits below the Core Play threshold
             </div>
           </div>
           <div className="grid grid-cols-1 gap-5 md:gap-6">
@@ -9670,7 +9767,7 @@ function BestBetsPage({
               High Variance Plays
             </h3>
             <div className="text-[10px] md:text-xs font-black text-white/45 uppercase tracking-widest mt-1">
-              Larger model disagreement, lower confidence, smaller stake.
+              Large raw model gaps that are deliberately down-ranked as less calibrated
             </div>
           </div>
           <div className="grid grid-cols-1 gap-5 md:gap-6">
@@ -12274,6 +12371,13 @@ function AppDashboard({
         onClose={() => setShowRetentionOffer(false)}
         onContinueToBilling={openCustomerPortal}
       />
+      {page === "matches" && !isPremium && !isAdmin && (
+        <div className="mb-4 md:mb-6">
+          <Round20OfferBanner
+            onUnlock={() => onRequestAccess("best-bets")}
+          />
+        </div>
+      )}
       <div className="grid grid-cols-1 xl:grid-cols-[300px_minmax(0,1fr)] gap-8 pb-24 xl:pb-0">
         <GlassCard className="hidden xl:block p-6 h-fit xl:sticky xl:top-6">
           <div className="flex items-center gap-4 pb-6 border-b border-[#1E1E2E] mb-6">
@@ -13405,6 +13509,7 @@ export default function App() {
             data={data}
             onGoApp={navigateToApp}
             onRequestPremium={requestPremiumAccess}
+            showRoundOffer={authState.checked && authState.tier !== "premium" && !isAdmin}
           />
         )}
 
