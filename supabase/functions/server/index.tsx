@@ -3472,6 +3472,7 @@ app.post("/create-checkout-session", async (c) => {
 
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
+      allow_promotion_codes: true,
       customer_email: email,
       client_reference_id: email,
       metadata: {
