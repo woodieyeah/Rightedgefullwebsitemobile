@@ -9648,7 +9648,7 @@ function BestBetsPage({
               Best Value Play
             </h3>
             <div className="text-[10px] md:text-xs font-black text-white/45 uppercase tracking-widest mt-1">
-              Positive adjusted value that sits below the Core Play threshold
+              Best Secondary Value
             </div>
           </div>
           <div className="grid grid-cols-1 gap-5 md:gap-6">
@@ -9670,7 +9670,7 @@ function BestBetsPage({
               High Variance Plays
             </h3>
             <div className="text-[10px] md:text-xs font-black text-white/45 uppercase tracking-widest mt-1">
-              Large raw model gaps that are deliberately down-ranked as less calibrated
+              Larger model disagreement, lower confidence, smaller stake.
             </div>
           </div>
           <div className="grid grid-cols-1 gap-5 md:gap-6">
