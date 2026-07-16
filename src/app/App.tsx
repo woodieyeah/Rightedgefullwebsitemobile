@@ -1945,6 +1945,11 @@ type FrozenPlayPayload = {
   bookmaker: string;
   modelPct: number;
   modelEdge: number;
+  marketImpliedPct?: number;
+  rawEdgePct?: number;
+  adjustedScore?: number;
+  chooserLabel?: PremiumPlayLabel;
+  isHighVariance?: boolean;
   marketPoint?: number;
   projectedValue?: number;
   predictedScore?: string;
@@ -2012,6 +2017,11 @@ function buildFrozenPayloadFromPlay(
     bookmaker: play.bookmaker,
     modelPct: play.modelPct,
     modelEdge: play.modelEdge,
+    marketImpliedPct: play.marketImpliedPct,
+    rawEdgePct: play.rawEdgePct,
+    adjustedScore: play.adjustedScore,
+    chooserLabel: play.chooserLabel,
+    isHighVariance: play.isHighVariance,
     marketPoint: play.marketPoint,
     projectedValue: play.projectedValue,
     predictedScore,
@@ -2091,6 +2101,11 @@ function reconstructFrozenPlay(
     odds: payload.odds,
     modelPct: payload.modelPct,
     modelEdge: payload.modelEdge,
+    marketImpliedPct: payload.marketImpliedPct,
+    rawEdgePct: payload.rawEdgePct,
+    adjustedScore: payload.adjustedScore,
+    chooserLabel: payload.chooserLabel,
+    isHighVariance: payload.isHighVariance,
     marketPoint: payload.marketPoint,
     projectedValue: payload.projectedValue,
   };
@@ -7827,6 +7842,8 @@ function PredictionsPage({
   );
 }
 
+type PremiumPlayLabel = "Core Play" | "Best H2H" | "Value Play" | "High Variance";
+
 type PremiumMarketPlay = {
   id: string;
   row: PredictionRow;
@@ -7836,6 +7853,12 @@ type PremiumMarketPlay = {
   odds: number;
   modelPct: number;
   modelEdge: number;
+  marketImpliedPct?: number;
+  rawEdgePct?: number;
+  adjustedScore?: number;
+  chooserLabel?: PremiumPlayLabel;
+  isHighVariance?: boolean;
+  isManualApproved?: boolean;
   marketPoint?: number;
   projectedValue?: number;
 };
@@ -8119,7 +8142,7 @@ function probabilityFromEdge(edge: number, scale = 7.5) {
 }
 
 /**
- * RIGHTEDGE_TUNING — single source of truth for best-bet selection.
+ * RIGHTEDGE_TUNING — single source of truth for conservative play selection.
  *
  * IMPORTANT: For lines and totals, "modelPct" is NOT a real win probability.
  * It is a relabelled points-gap (probabilityFromEdge maps a points edge to a
@@ -8127,7 +8150,9 @@ function probabilityFromEdge(edge: number, scale = 7.5) {
  * gap, not a % floor. H2H is the only market where modelPct is a true win prob,
  * so H2H is gated on win% and is the safer hit-rate anchor.
  *
- * Tune here; do not reintroduce inline literals elsewhere.
+ * The market is treated as informative. Large model/market disagreements are
+ * penalised rather than promoted automatically. Tune here; do not reintroduce
+ * inline chooser literals elsewhere.
  */
 const RIGHTEDGE_TUNING = {
   // Sigmoid sensitivity converting a points edge to a model number.
@@ -8149,6 +8174,29 @@ const RIGHTEDGE_TUNING = {
   minH2hOdds: 1.35, // H2H must clear positive value edge; short favs rarely do, so keep a real-price floor
   // Headline Best Bets cap odds for "feel-good" hit-rate; Value Plays may go higher.
   maxOddsHeadline: 2.4,
+  // Confidence-adjusted chooser weights. H2H remains the calibration anchor.
+  marketPenalty: {
+    "Head 2 Head": 1,
+    Line: 0.55,
+    Total: 0.65,
+  },
+  // Market disagreement above this range is suspicious, not extra confidence.
+  suspiciousRawEdgePct: 8,
+  extremeRawEdgePct: 10,
+  suspiciousEdgePenalty: 0.55,
+  extremeEdgePenalty: 0.25,
+  // Extra calibration penalties for demanding spreads and thin total gaps.
+  largeFavouriteLine: 6.5,
+  largeFavouriteLinePenalty: 0.7,
+  modestTotalGapPts: 6,
+  modestTotalGapPenalty: 0.8,
+  // Conservative bucket floors, measured in adjusted percentage-point score.
+  minCoreRawEdgePct: 1,
+  minCoreAdjustedScore: 1.25,
+  minBestH2hAdjustedScore: 0.5,
+  minValueAdjustedScore: 0.35,
+  // Keep enabled for the fast calibration patch. Set false after validation.
+  debugAdjustedScores: true,
 } as const;
 
 const MIN_PREMIUM_MATCH_VALUE_EDGE_PCT = RIGHTEDGE_TUNING.minValueEdgePct;
@@ -8165,6 +8213,136 @@ function formatPremiumMatchEdge(modelPct: number, odds: number) {
   if (!modelPct || !odds) return "—";
   const edgePct = getPremiumMatchValueEdgePct(modelPct, odds);
   return `${edgePct >= 0 ? "+" : ""}${formatPercent(edgePct, 1)}`;
+}
+
+type PremiumChooserMetrics = {
+  marketImpliedPct: number;
+  rawEdgePct: number;
+  adjustedScore: number;
+  marketPenalty: number;
+  disagreementPenalty: number;
+  structurePenalty: number;
+  isHighVariance: boolean;
+};
+
+function getPremiumChooserMetrics(play: PremiumMarketPlay): PremiumChooserMetrics {
+  const marketImpliedPct = getImpliedWinPctFromOdds(play.odds);
+  const rawEdgePct = play.modelPct - marketImpliedPct;
+  const absoluteRawEdge = Math.abs(rawEdgePct);
+  const marketPenalty = RIGHTEDGE_TUNING.marketPenalty[play.type];
+  const disagreementPenalty =
+    absoluteRawEdge >= RIGHTEDGE_TUNING.extremeRawEdgePct
+      ? RIGHTEDGE_TUNING.extremeEdgePenalty
+      : absoluteRawEdge >= RIGHTEDGE_TUNING.suspiciousRawEdgePct
+        ? RIGHTEDGE_TUNING.suspiciousEdgePenalty
+        : 1;
+
+  let structurePenalty = 1;
+  if (
+    play.type === "Line" &&
+    (play.marketPoint || 0) <= -RIGHTEDGE_TUNING.largeFavouriteLine
+  ) {
+    structurePenalty *= RIGHTEDGE_TUNING.largeFavouriteLinePenalty;
+  }
+  if (
+    play.type === "Total" &&
+    Math.abs((play.projectedValue || 0) - (play.marketPoint || 0)) <=
+      RIGHTEDGE_TUNING.modestTotalGapPts
+  ) {
+    structurePenalty *= RIGHTEDGE_TUNING.modestTotalGapPenalty;
+  }
+
+  const adjustedScore = rawEdgePct * marketPenalty * disagreementPenalty * structurePenalty;
+  const isHighVariance =
+    !play.isManualApproved &&
+    absoluteRawEdge >= RIGHTEDGE_TUNING.extremeRawEdgePct;
+
+  return {
+    marketImpliedPct,
+    rawEdgePct,
+    adjustedScore,
+    marketPenalty,
+    disagreementPenalty,
+    structurePenalty,
+    isHighVariance,
+  };
+}
+
+function withPremiumChooserMetrics(
+  play: PremiumMarketPlay,
+  chooserLabel?: PremiumPlayLabel,
+): PremiumMarketPlay {
+  const metrics = getPremiumChooserMetrics(play);
+  return {
+    ...play,
+    marketImpliedPct: metrics.marketImpliedPct,
+    rawEdgePct: metrics.rawEdgePct,
+    adjustedScore: metrics.adjustedScore,
+    chooserLabel: chooserLabel || play.chooserLabel,
+    isHighVariance: metrics.isHighVariance,
+  };
+}
+
+function getPremiumAdjustedScore(play: PremiumMarketPlay) {
+  return play.adjustedScore ?? getPremiumChooserMetrics(play).adjustedScore;
+}
+
+function getPremiumPlayKey(play: PremiumMarketPlay) {
+  return `${buildMatchLabelKey(play.row.match)}|${play.type}|${normalizeTeamName(play.selection)}`;
+}
+
+function comparePremiumAdjustedConfidence(a: PremiumMarketPlay, b: PremiumMarketPlay) {
+  const scoreDiff = getPremiumAdjustedScore(b) - getPremiumAdjustedScore(a);
+  if (Math.abs(scoreDiff) > 0.001) return scoreDiff;
+  const betrPreference = compareBetrPreferenceForSameOffer(a, b);
+  if (betrPreference) return betrPreference;
+  const rawEdgeDiff =
+    getPremiumChooserMetrics(b).rawEdgePct - getPremiumChooserMetrics(a).rawEdgePct;
+  if (Math.abs(rawEdgeDiff) > 0.001) return rawEdgeDiff;
+  return b.odds - a.odds;
+}
+
+function passesPremiumCoreThresholds(play: PremiumMarketPlay) {
+  const metrics = getPremiumChooserMetrics(play);
+  return (
+    !metrics.isHighVariance &&
+    metrics.rawEdgePct >= RIGHTEDGE_TUNING.minCoreRawEdgePct &&
+    metrics.adjustedScore >= RIGHTEDGE_TUNING.minCoreAdjustedScore
+  );
+}
+
+function logPremiumChooserScores(
+  row: PredictionRow,
+  mode: PremiumPlayMode,
+  plays: PremiumMarketPlay[],
+) {
+  if (!RIGHTEDGE_TUNING.debugAdjustedScores || typeof console === "undefined") return;
+  console.debug(`[RightEdge chooser] ${row.match} · ${mode}`);
+  console.table(
+    plays.slice(0, 12).map((play) => {
+      const metrics = getPremiumChooserMetrics(play);
+      return {
+        market: play.type,
+        selection: play.selection,
+        bookmaker: play.bookmaker,
+        odds: Number(play.odds.toFixed(2)),
+        market_implied_pct: Number(metrics.marketImpliedPct.toFixed(2)),
+        model_pct: Number(play.modelPct.toFixed(2)),
+        raw_edge_pct: Number(metrics.rawEdgePct.toFixed(2)),
+        market_penalty: metrics.marketPenalty,
+        disagreement_penalty: metrics.disagreementPenalty,
+        structure_penalty: metrics.structurePenalty,
+        adjusted_score: Number(metrics.adjustedScore.toFixed(2)),
+        bucket: metrics.isHighVariance
+          ? "High Variance"
+          : passesPremiumCoreThresholds(play)
+            ? "Core Play"
+            : play.type === "Head 2 Head"
+              ? "Best H2H"
+              : "Value Play",
+      };
+    }),
+  );
 }
 
 function isSamePremiumMarketOffer(a: PremiumMarketPlay, b: PremiumMarketPlay) {
@@ -8188,7 +8366,7 @@ function compareBetrPreferenceForSameOffer(a: PremiumMarketPlay, b: PremiumMarke
   return 0;
 }
 
-type PremiumPlayMode = "bestbet" | "value";
+type PremiumPlayMode = "bestbet" | "h2h" | "value" | "highvariance";
 
 function getBestPremiumMarketPlayForMatch(
   row: PredictionRow,
@@ -8203,7 +8381,7 @@ function getBestPremiumMarketPlayForMatch(
   const winnerWinPct = getPredictedWinnerWinPct(row);
   const sheetWinnerMarketOdds = getPredictedWinnerMarketOdds(row);
 
-  const isHeadline = mode === "bestbet";
+  const isHeadline = mode === "bestbet" || mode === "h2h";
   // Headline Best Bets cap odds for the "feel-good" hit-rate weekly product.
   // Value Plays may chase longer prices.
   const withinHeadlineOdds = (odds: number) =>
@@ -8333,7 +8511,7 @@ function getBestPremiumMarketPlayForMatch(
       withinHeadlineOdds(odds) &&
       h2hPassesValue(winnerWinPct, odds)
     ) {
-      return {
+      candidates.push({
         id: `${row.match}-fallback-h2h`,
         row,
         type: "Head 2 Head",
@@ -8343,50 +8521,55 @@ function getBestPremiumMarketPlayForMatch(
         modelPct: winnerWinPct,
         modelEdge: winnerWinPct - getImpliedWinPctFromOdds(odds),
         projectedValue: Math.abs(projectedHomeMargin),
-      };
+      });
     }
-    return null;
   }
 
-  const rankedCandidates = candidates.sort((a, b) => {
-    const aValueEdge = getPremiumMatchValueEdgePct(a.modelPct, a.odds);
-    const bValueEdge = getPremiumMatchValueEdgePct(b.modelPct, b.odds);
+  if (!candidates.length) return null;
 
-    if (isHeadline) {
-      // BEST BETS: every candidate already cleared a POSITIVE value edge above.
-      // Lead with the size of that value edge (the defensible "the model beats
-      // the market price" signal), then prefer margin markets (lines/totals)
-      // where the model has the most consistent edge. H2H stays eligible and
-      // ranks on its own value edge — so a genuine underdog/close-match value
-      // pick can headline, but a short favourite without edge never does.
-      const typeRank = (play: PremiumMarketPlay) =>
-        play.type === "Line" ? 3 : play.type === "Total" ? 2 : 1;
-      const aScore = (aValueEdge * 3) + (typeRank(a) * 1.5) + Math.min(6, Math.max(0, a.modelEdge));
-      const bScore = (bValueEdge * 3) + (typeRank(b) * 1.5) + Math.min(6, Math.max(0, b.modelEdge));
-      const scoreDiff = bScore - aScore;
-      if (Math.abs(scoreDiff) > 0.001) return scoreDiff;
-      const betrPreference = compareBetrPreferenceForSameOffer(a, b);
-      if (betrPreference) return betrPreference;
-      const valueEdgeDiff = bValueEdge - aValueEdge;
-      if (Math.abs(valueEdgeDiff) > 0.001) return valueEdgeDiff;
-      return b.modelPct - a.modelPct;
-    }
+  const scoredCandidates = candidates
+    .map((play) => withPremiumChooserMetrics(play))
+    .sort(comparePremiumAdjustedConfidence);
+  logPremiumChooserScores(row, mode, scoredCandidates);
 
-    // VALUE PLAYS (ROI): value edge weighted highest, longer odds rewarded.
-    const typeRank = (play: PremiumMarketPlay) =>
-      play.type === "Line" ? 3 : play.type === "Total" ? 2 : 1;
-    const aScore = (aValueEdge * 2) + a.modelPct + Math.min(8, Math.max(0, (a.odds - 1.8) * 6)) + typeRank(a);
-    const bScore = (bValueEdge * 2) + b.modelPct + Math.min(8, Math.max(0, (b.odds - 1.8) * 6)) + typeRank(b);
-    const scoreDiff = bScore - aScore;
-    if (Math.abs(scoreDiff) > 0.001) return scoreDiff;
-    const betrPreference = compareBetrPreferenceForSameOffer(a, b);
-    if (betrPreference) return betrPreference;
-    const valueEdgeDiff = bValueEdge - aValueEdge;
-    if (Math.abs(valueEdgeDiff) > 0.001) return valueEdgeDiff;
-    return b.odds - a.odds;
-  });
+  if (mode === "h2h") {
+    const bestH2h = scoredCandidates.find((play) => {
+      const metrics = getPremiumChooserMetrics(play);
+      return (
+        play.type === "Head 2 Head" &&
+        !metrics.isHighVariance &&
+        metrics.adjustedScore >= RIGHTEDGE_TUNING.minBestH2hAdjustedScore
+      );
+    });
+    return bestH2h ? withPremiumChooserMetrics(bestH2h, "Best H2H") : null;
+  }
 
-  return rankedCandidates[0];
+  if (mode === "highvariance") {
+    const highVariance = scoredCandidates.find((play) => {
+      const metrics = getPremiumChooserMetrics(play);
+      return metrics.rawEdgePct > 0 && metrics.isHighVariance;
+    });
+    return highVariance
+      ? withPremiumChooserMetrics(highVariance, "High Variance")
+      : null;
+  }
+
+  if (mode === "value") {
+    const valuePlay = scoredCandidates.find((play) => {
+      const metrics = getPremiumChooserMetrics(play);
+      return (
+        !metrics.isHighVariance &&
+        !passesPremiumCoreThresholds(play) &&
+        metrics.adjustedScore >= RIGHTEDGE_TUNING.minValueAdjustedScore
+      );
+    });
+    return valuePlay ? withPremiumChooserMetrics(valuePlay, "Value Play") : null;
+  }
+
+  // Overall Best Bet: adjusted confidence only. H2H can beat a line or total
+  // with a smaller raw edge because line/total disagreement is less calibrated.
+  const corePlay = scoredCandidates.find(passesPremiumCoreThresholds);
+  return corePlay ? withPremiumChooserMetrics(corePlay, "Core Play") : null;
 }
 
 
@@ -8545,7 +8728,7 @@ function getOfficialPendingPremiumMarketPlayForMatch(
     alignedFallback?.modelEdge ||
     (odds ? modelPct - getImpliedWinPctFromOdds(odds) : 0);
 
-  return {
+  return withPremiumChooserMetrics({
     id: `${row.match}-official-${type}-${selection}`,
     row,
     type,
@@ -8554,6 +8737,7 @@ function getOfficialPendingPremiumMarketPlayForMatch(
     odds,
     modelPct,
     modelEdge,
+    isManualApproved: true,
     marketPoint,
     projectedValue:
       type === "Total"
@@ -8561,7 +8745,7 @@ function getOfficialPendingPremiumMarketPlayForMatch(
         : type === "Line"
           ? projectedTeamMargin
           : Math.abs(projectedHomeMargin),
-  };
+  }, "Core Play");
 }
 
 function buildPremiumMarketPlays(
@@ -8594,6 +8778,7 @@ function buildPremiumMarketPlays(
     )
     .map((row) => {
       const livePlay = getBestPremiumMarketPlayForMatch(row, marketMap, mode);
+      if (mode !== "bestbet") return livePlay;
       return (
         getLockedCompletedPremiumMarketPlayForMatch(row) ||
         getOfficialPendingPremiumMarketPlayForMatch(
@@ -8800,10 +8985,12 @@ function PremiumMarketPlayCard({
   play,
   now,
   savedResult,
+  labels,
 }: {
   play: PremiumMarketPlay;
   now: number;
   savedResult?: SavedRoundResult | null;
+  labels?: PremiumPlayLabel[];
 }) {
   const { row } = play;
   const fixtureStatus = getFixtureStatusBadge(row.fixture, now);
@@ -8816,6 +9003,11 @@ function PremiumMarketPlayCard({
       ? `${Math.round(row.predictedHomeScore)}-${Math.round(row.predictedAwayScore)}`
       : "—";
   const originBadge = getOriginBadgeConfig(play.selection);
+  const displayLabels = labels?.length
+    ? labels
+    : play.chooserLabel
+      ? [play.chooserLabel]
+      : [];
   const detail =
     play.type === "Line"
       ? `Model margin ${play.projectedValue && play.projectedValue > 0 ? "+" : ""}${Math.round(play.projectedValue || 0)} vs market ${formatSgmLine(play.marketPoint || 0)}`
@@ -8827,6 +9019,18 @@ function PremiumMarketPlayCard({
     <GlassCard className="p-4 md:p-6 border-l-4 border-l-[#00E676]">
       <div className="flex items-start justify-between gap-3 md:gap-4 mb-4">
         <div className="min-w-0 flex-1">
+          {displayLabels.length > 0 && (
+            <div className="mb-2 flex flex-wrap gap-1.5">
+              {displayLabels.map((label) => (
+                <span
+                  key={label}
+                  className="inline-flex border border-[#00E676]/35 bg-[#00E676]/10 px-2 py-1 text-[8px] font-black uppercase tracking-widest text-[#00E676]"
+                >
+                  {label}
+                </span>
+              ))}
+            </div>
+          )}
           <div className="mb-2 flex flex-wrap items-center gap-2 text-[10px] uppercase font-black text-white/45 tracking-widest">
             <span>
               {row.fixture
@@ -9177,7 +9381,7 @@ function BestBetsPage({
   }, [data.predictions]);
 
   const canViewStartedPremiumPlays = isPremium || isAdmin;
-  // BEST BETS: hit-rate / feel-good list — H2H favourites led, headline odds capped.
+  // CORE PLAY: one conservative round leader ranked by adjusted confidence.
   // After kickoff the live odds stop feeding, so we merge in frozen snapshots so
   // the play stays visible exactly as it was at kickoff (first-write-wins).
   const matchReads = useMemo(() => {
@@ -9218,22 +9422,47 @@ function BestBetsPage({
       byKey.set(key, lockedPlay);
     }
     return [...byKey.values()]
-      .sort((a, b) => getFixtureSortValue(a.row) - getFixtureSortValue(b.row))
-      .slice(0, isAdmin ? 50 : 8);
-  }, [data, marketMap, now, canViewStartedPremiumPlays, isAdmin, frozen.snapshots, archivedMatchKeys, predictionByPairKey]);
-  // VALUE PLAYS: ROI list — value-edge ranked, longer prices allowed. Deduped
-  // against Best Bets so the same match never shows the identical selection twice.
-  const valuePlayReads = useMemo(() => {
-    const bestBetSelectionKeys = new Set(
-      matchReads.map((play) => `${buildMatchLabelKey(play.row.match)}|${play.type}|${play.selection}`),
-    );
-    return buildPremiumMarketPlays(data, marketMap, now, canViewStartedPremiumPlays, "value")
-      .filter(
-        (play) =>
-          !bestBetSelectionKeys.has(`${buildMatchLabelKey(play.row.match)}|${play.type}|${play.selection}`),
+      .map((play) => withPremiumChooserMetrics(play, "Core Play"))
+      .sort((a, b) =>
+        comparePremiumAdjustedConfidence(a, b) ||
+        getFixtureSortValue(a.row) - getFixtureSortValue(b.row)
       )
       .slice(0, isAdmin ? 50 : 8);
-  }, [data, marketMap, now, canViewStartedPremiumPlays, isAdmin, matchReads]);
+  }, [data, marketMap, now, canViewStartedPremiumPlays, isAdmin, frozen.snapshots, archivedMatchKeys, predictionByPairKey]);
+  const corePlay = matchReads[0] || null;
+
+  const bestH2hPlay = useMemo(() =>
+    buildPremiumMarketPlays(data, marketMap, now, canViewStartedPremiumPlays, "h2h")
+      .filter((play) => !archivedMatchKeys.has(getPredictionPairKey(play.row)))
+      .sort(comparePremiumAdjustedConfidence)[0] || null,
+  [data, marketMap, now, canViewStartedPremiumPlays, archivedMatchKeys]);
+
+  const bestH2hIsCore = Boolean(
+    corePlay && bestH2hPlay && getPremiumPlayKey(corePlay) === getPremiumPlayKey(bestH2hPlay),
+  );
+
+  // VALUE PLAY: strongest positive adjusted score that did not clear the Core
+  // threshold. Core and Best H2H selections are not repeated here.
+  const valuePlay = useMemo(() => {
+    const selectedKeys = new Set(
+      [corePlay, bestH2hPlay].filter(Boolean).map((play) => getPremiumPlayKey(play!)),
+    );
+    return buildPremiumMarketPlays(data, marketMap, now, canViewStartedPremiumPlays, "value")
+      .filter((play) => !archivedMatchKeys.has(getPredictionPairKey(play.row)))
+      .filter((play) => !selectedKeys.has(getPremiumPlayKey(play)))
+      .sort(comparePremiumAdjustedConfidence)[0] || null;
+  }, [data, marketMap, now, canViewStartedPremiumPlays, archivedMatchKeys, corePlay, bestH2hPlay]);
+
+  const highVariancePlays = useMemo(() => {
+    const selectedKeys = new Set(
+      [corePlay, bestH2hPlay, valuePlay].filter(Boolean).map((play) => getPremiumPlayKey(play!)),
+    );
+    return buildPremiumMarketPlays(data, marketMap, now, canViewStartedPremiumPlays, "highvariance")
+      .filter((play) => !archivedMatchKeys.has(getPredictionPairKey(play.row)))
+      .filter((play) => !selectedKeys.has(getPremiumPlayKey(play)))
+      .sort(comparePremiumAdjustedConfidence)
+      .slice(0, 3);
+  }, [data, marketMap, now, canViewStartedPremiumPlays, archivedMatchKeys, corePlay, bestH2hPlay, valuePlay]);
 
   const latestTryScorerRound = Math.max(
     0,
@@ -9359,10 +9588,10 @@ function BestBetsPage({
       <div className="flex flex-col gap-4">
         <div>
           <h3 className="text-lg md:text-2xl font-black text-white uppercase tracking-tight">
-            Match Best Bets
+            Overall Best Bet
           </h3>
           <div className="text-[10px] md:text-xs font-black text-white/45 uppercase tracking-widest mt-1">
-            Where our model sees the most value against the market this round
+            The highest confidence-adjusted play after market calibration
           </div>
         </div>
         {isLoadingMarkets ? (
@@ -9371,34 +9600,88 @@ function BestBetsPage({
               Loading live line and total prices...
             </div>
           </GlassCard>
-        ) : matchReads.length === 0 ? (
+        ) : !corePlay ? (
           <GlassCard className="p-4 md:p-8 text-center border-l-4 border-l-white/20">
             <div className="text-white/50 font-bold uppercase tracking-widest text-[10px] md:text-base">
-              MODELLING IN PROGRESS - PREDICTIONS AVAILABLE EVERY WEDNESDAY
+              No play clears the conservative Core Play threshold right now.
             </div>
           </GlassCard>
         ) : (
           <div className="grid grid-cols-1 gap-5 md:gap-6">
-            {matchReads.map((play) => (
-              <PremiumMarketPlayCard key={play.id} play={play} now={now} {...cardPropsForPlay(play)} />
-            ))}
+            <PremiumMarketPlayCard
+              key={corePlay.id}
+              play={corePlay}
+              now={now}
+              labels={bestH2hIsCore ? ["Core Play", "Best H2H"] : ["Core Play"]}
+              {...cardPropsForPlay(corePlay)}
+            />
           </div>
         )}
       </div>
 
-      {!isLoadingMarkets && valuePlayReads.length > 0 ? (
+      {!isLoadingMarkets && bestH2hPlay && !bestH2hIsCore ? (
         <div className="flex flex-col gap-4">
           <div>
             <h3 className="text-lg md:text-2xl font-black text-white uppercase tracking-tight">
-              Value Plays
+              Best Head-to-Head
             </h3>
             <div className="text-[10px] md:text-xs font-black text-white/45 uppercase tracking-widest mt-1">
-              Bigger model edges at longer prices — higher variance, higher ROI
+              The strongest positive H2H read available this round
             </div>
           </div>
           <div className="grid grid-cols-1 gap-5 md:gap-6">
-            {valuePlayReads.map((play) => (
-              <PremiumMarketPlayCard key={play.id} play={play} now={now} {...cardPropsForPlay(play)} />
+            <PremiumMarketPlayCard
+              key={bestH2hPlay.id}
+              play={bestH2hPlay}
+              now={now}
+              labels={["Best H2H"]}
+              {...cardPropsForPlay(bestH2hPlay)}
+            />
+          </div>
+        </div>
+      ) : null}
+
+      {!isLoadingMarkets && valuePlay ? (
+        <div className="flex flex-col gap-4">
+          <div>
+            <h3 className="text-lg md:text-2xl font-black text-white uppercase tracking-tight">
+              Best Value Play
+            </h3>
+            <div className="text-[10px] md:text-xs font-black text-white/45 uppercase tracking-widest mt-1">
+              Positive adjusted value that sits below the Core Play threshold
+            </div>
+          </div>
+          <div className="grid grid-cols-1 gap-5 md:gap-6">
+            <PremiumMarketPlayCard
+              key={valuePlay.id}
+              play={valuePlay}
+              now={now}
+              labels={["Value Play"]}
+              {...cardPropsForPlay(valuePlay)}
+            />
+          </div>
+        </div>
+      ) : null}
+
+      {!isLoadingMarkets && highVariancePlays.length > 0 ? (
+        <div className="flex flex-col gap-4">
+          <div>
+            <h3 className="text-lg md:text-2xl font-black text-white uppercase tracking-tight">
+              High Variance Plays
+            </h3>
+            <div className="text-[10px] md:text-xs font-black text-white/45 uppercase tracking-widest mt-1">
+              Large raw model gaps that are deliberately down-ranked as less calibrated
+            </div>
+          </div>
+          <div className="grid grid-cols-1 gap-5 md:gap-6">
+            {highVariancePlays.map((play) => (
+              <PremiumMarketPlayCard
+                key={play.id}
+                play={play}
+                now={now}
+                labels={["High Variance"]}
+                {...cardPropsForPlay(play)}
+              />
             ))}
           </div>
         </div>
