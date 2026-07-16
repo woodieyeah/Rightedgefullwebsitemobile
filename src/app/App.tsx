@@ -9591,7 +9591,7 @@ function BestBetsPage({
             Overall Best Bet
           </h3>
           <div className="text-[10px] md:text-xs font-black text-white/45 uppercase tracking-widest mt-1">
-            The highest confidence-adjusted play after market calibration
+            Chosen by the model and calibrated to market odds—this is the single play we’d back first.
           </div>
         </div>
         {isLoadingMarkets ? (
@@ -9626,7 +9626,7 @@ function BestBetsPage({
               Best Head-to-Head
             </h3>
             <div className="text-[10px] md:text-xs font-black text-white/45 uppercase tracking-widest mt-1">
-              The strongest positive H2H read available this round
+              The strongest moneyline read from the model for this round.
             </div>
           </div>
           <div className="grid grid-cols-1 gap-5 md:gap-6">
