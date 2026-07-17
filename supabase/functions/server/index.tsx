@@ -4960,11 +4960,11 @@ Deno.cron("Sunday Ledger Review", "0 8 * * 0", async () => {
 }
 
 // ---------------------------------------------------------------------------
-// Premium Plays freeze-at-kickoff + results entry
+// Premium Plays per-match T-24h freeze + results entry
 // ---------------------------------------------------------------------------
 
-// First-write-wins snapshot of a match's premium play + try scorer signals at
-// kickoff so the card keeps its kickoff values after the odds feed stops.
+// First-write-wins snapshot of a match's selected chooser buckets + try scorer
+// signals once that individual match enters its 24-hour kickoff window.
 // Public + idempotent: once a snapshot exists it is never overwritten.
 app.post("/round-snapshot", async (c) => {
   try {
@@ -5001,6 +5001,36 @@ app.post("/round-snapshot", async (c) => {
       payload: body.payload,
       frozenAt: new Date().toISOString(),
     };
+    const premiumPlays = Array.isArray(body.payload.premiumPlays)
+      ? body.payload.premiumPlays
+      : [];
+    if (premiumPlays.length || Number.isFinite(Number(body.payload.adjustedScore))) {
+      console.info("[round-snapshot] per-match T-24h freeze", {
+        round,
+        match: match || matchKey,
+        matchKey,
+        freezeWindowHours: body.payload.freezeWindowHours || 24,
+        plays: premiumPlays.length
+          ? premiumPlays.map((play: any) => ({
+              mode: play.mode,
+              selection: play.selection,
+              market: play.type,
+              odds: play.odds,
+              rawEdgePct: play.rawEdgePct,
+              adjustedScore: play.adjustedScore,
+              chooserLabel: play.chooserLabel,
+            }))
+          : [{
+              mode: "bestbet",
+              selection: body.payload.selection,
+              market: body.payload.type,
+              odds: body.payload.odds,
+              rawEdgePct: body.payload.rawEdgePct,
+              adjustedScore: body.payload.adjustedScore,
+              chooserLabel: body.payload.chooserLabel,
+            }],
+      });
+    }
     await kv.set(key, snapshot);
     return c.json({ ok: true, frozen: true, snapshot });
   } catch (error: any) {
@@ -5009,8 +5039,7 @@ app.post("/round-snapshot", async (c) => {
   }
 });
 
-// Public read of all frozen snapshots for a round (used after kickoff to render
-// the locked-in play values).
+// Public read of all per-match snapshots in a round.
 app.get("/round-snapshots", async (c) => {
   try {
     const round = Number(c.req.query("round"));
