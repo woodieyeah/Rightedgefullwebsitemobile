@@ -5532,74 +5532,23 @@ function HomeCard({
 
 function Round20OfferBanner({ onUnlock }: { onUnlock: () => void }) {
   return (
-    <section className="overflow-hidden border border-[#00E676]/40 bg-[linear-gradient(105deg,rgba(0,230,118,0.12),rgba(17,17,22,0.98)_48%,rgba(17,17,22,1))] p-4 sm:p-5 md:p-6">
-      <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-        <div className="min-w-0 max-w-[720px]">
-          <div className="mb-2 text-[9px] font-medium uppercase tracking-[0.22em] text-[#00E676] sm:text-[10px]">
-            Limited-time round offer
-          </div>
-          <h2 className="text-xl font-semibold leading-tight tracking-tight text-white sm:text-2xl md:text-3xl">
-            This round only: Premium for $3 with code ROUND20
+    <section className="overflow-hidden border border-[#00E676]/35 bg-[linear-gradient(105deg,rgba(0,230,118,0.09),rgba(17,17,22,0.98)_52%,rgba(17,17,22,1))] px-4 py-3 sm:px-5 sm:py-4">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="min-w-0 max-w-[760px]">
+          <h2 className="text-lg font-semibold leading-tight tracking-tight text-white sm:text-xl">
+            This round only: Premium for $3
           </h2>
-          <p className="mt-2 text-sm leading-relaxed text-[#9CA3AF] sm:text-base">
-            Unlock Core Play, Best H2H, Value, High Variance and Try Scorer Best Bets.
+          <p className="mt-1 text-xs leading-relaxed text-[#9CA3AF] sm:text-sm">
+            Unlock the full premium card. Enter code ROUND20 at checkout.
           </p>
-        </div>
-        <div className="w-full shrink-0 lg:w-[300px]">
-          <button
-            type="button"
-            onClick={onUnlock}
-            className="re-primary-cta inline-flex min-h-[48px] w-full items-center justify-center gap-2 border px-5 py-3 text-sm font-medium uppercase tracking-wider transition hover:opacity-90"
-          >
-            Unlock this round for $3
-            <ArrowRight className="h-4 w-4 shrink-0" />
-          </button>
-          <p className="mt-2 text-[10px] leading-relaxed text-[#6B7280] sm:text-[11px]">
-            Enter promo code ROUND20 at checkout. Renews at $14/week unless cancelled before next billing date.
-          </p>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function LandingRound20Offer({ onUnlock }: { onUnlock: () => void }) {
-  return (
-    <section className="mt-5 border border-[#1E1E2E] bg-[#111116] p-5 sm:mt-6 sm:p-6 md:p-8">
-      <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
-        <div className="max-w-[720px]">
-          <h2 className="text-2xl font-semibold tracking-tight text-white sm:text-3xl">
-            This round: full RightEdge Premium for $3
-          </h2>
-          <p className="mt-3 text-sm leading-relaxed text-[#9CA3AF] sm:text-base">
-            See exactly what the model is backing. Use promo code ROUND20 at checkout – renews at $14/week unless cancelled before next billing date.
+          <p className="mt-1 text-[10px] leading-relaxed text-[#6B7280] sm:text-[11px]">
+            Core Play, Best H2H, Value, High Variance + Try Scorer Best Bets.
           </p>
         </div>
         <button
           type="button"
           onClick={onUnlock}
-          className="re-primary-cta inline-flex min-h-[48px] w-full shrink-0 items-center justify-center gap-2 border px-5 py-3 text-center text-sm font-medium uppercase tracking-wider transition hover:opacity-90 md:w-auto"
-        >
-          Unlock this round for $3 (code ROUND20)
-          <ArrowRight className="h-4 w-4 shrink-0" />
-        </button>
-      </div>
-    </section>
-  );
-}
-
-function FreeMatchesRound20Upsell({ onUnlock }: { onUnlock: () => void }) {
-  return (
-    <section className="border border-[#1E1E2E] border-l-4 border-l-[#00E676] bg-[#111116] p-4 sm:p-5 md:p-6">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <p className="max-w-[820px] text-sm font-medium leading-relaxed text-white/80 sm:text-base">
-          <span className="font-semibold text-white">Special for this round – </span>
-          You’re seeing the projected scores for free. To see the actual bets (Core Play, Best Head-to-Head, Best Value, High Variance and Try Scorer Best Bets), unlock Premium this round for $3 with code ROUND20 at checkout.
-        </p>
-        <button
-          type="button"
-          onClick={onUnlock}
-          className="re-primary-cta inline-flex min-h-[46px] w-full shrink-0 items-center justify-center gap-2 border px-5 py-3 text-sm font-medium uppercase tracking-wider transition hover:opacity-90 lg:w-auto"
+          className="re-primary-cta inline-flex min-h-[42px] w-full shrink-0 items-center justify-center gap-2 border px-4 py-2.5 text-xs font-medium uppercase tracking-wider transition hover:opacity-90 md:w-auto"
         >
           Unlock this round for $3
           <ArrowRight className="h-4 w-4 shrink-0" />
@@ -6913,11 +6862,6 @@ function HomePage({
       )}
       <TryScorerTicker data={data} />
       <PublicHero />
-      {showRoundOffer && (
-        <LandingRound20Offer
-          onUnlock={() => onRequestPremium("round20_landing_hero")}
-        />
-      )}
       <HeroStickyCta onGoApp={onGoApp} />
       <div id="featured-match-section">
         <FeaturedMatchPreview
@@ -7630,12 +7574,6 @@ function PredictionsPage({
             </div>
           </div>
         </GlassCard>
-      )}
-
-      {!isPremium && !selectedArchive && (
-        <FreeMatchesRound20Upsell
-          onUnlock={() => onRequestAccess("best-bets")}
-        />
       )}
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 md:gap-8">
