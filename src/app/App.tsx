@@ -1600,6 +1600,18 @@ function hasPredictionKickedOff(row?: PredictionRow | null, now = Date.now()) {
   return getFixtureUtcKickoffMs(row.fixture) <= now;
 }
 
+const PREMIUM_MATCH_FREEZE_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+function isWithinPremiumMatchFreezeWindow(
+  row?: PredictionRow | null,
+  now = Date.now(),
+) {
+  if (!row?.fixture) return false;
+  const kickoff = getFixtureUtcKickoffMs(row.fixture);
+  if (!Number.isFinite(kickoff) || kickoff === Number.MAX_SAFE_INTEGER) return false;
+  return kickoff - now <= PREMIUM_MATCH_FREEZE_WINDOW_MS;
+}
+
 function getFixtureStatusBadge(fixture?: FixtureRow | null, now = Date.now()) {
   const kickoff = getFixtureUtcKickoffMs(fixture);
   if (!Number.isFinite(kickoff) || kickoff === Number.MAX_SAFE_INTEGER) {
@@ -1927,7 +1939,7 @@ function getRoundProofForTryScorer(row: TryScorerRow) {
 }
 
 // ---------------------------------------------------------------------------
-// Freeze-at-kickoff + results: shared types, helpers, and data hook.
+// T-24h per-match freeze + results: shared types, helpers, and data hook.
 // ---------------------------------------------------------------------------
 
 type FrozenTryScorer = {
@@ -1936,6 +1948,23 @@ type FrozenTryScorer = {
   position?: string;
   odds: number;
   bookmaker: string;
+};
+
+type FrozenChooserPlayPayload = {
+  mode: PremiumPlayMode;
+  selection: string;
+  type: PremiumMarketPlay["type"];
+  odds: number;
+  bookmaker: string;
+  modelPct: number;
+  modelEdge: number;
+  marketImpliedPct?: number;
+  rawEdgePct?: number;
+  adjustedScore?: number;
+  chooserLabel?: PremiumPlayLabel;
+  isHighVariance?: boolean;
+  marketPoint?: number;
+  projectedValue?: number;
 };
 
 type FrozenPlayPayload = {
@@ -1965,6 +1994,8 @@ type FrozenPlayPayload = {
     stadium: string;
     tz?: string;
   } | null;
+  premiumPlays?: FrozenChooserPlayPayload[];
+  freezeWindowHours?: number;
   tryScorers: FrozenTryScorer[];
 };
 
@@ -2000,10 +2031,41 @@ function playResultToProof(result: SavedRoundResult["playResult"]): ProofResult 
   return undefined;
 }
 
-// Build the snapshot payload for a live play + its try scorers at kickoff.
+function getPremiumLabelForMode(mode: PremiumPlayMode): PremiumPlayLabel {
+  if (mode === "h2h") return "Best H2H";
+  if (mode === "value") return "Value Play";
+  if (mode === "highvariance") return "High Variance";
+  return "Core Play";
+}
+
+function buildFrozenChooserPlay(
+  play: PremiumMarketPlay,
+  mode: PremiumPlayMode,
+): FrozenChooserPlayPayload {
+  return {
+    mode,
+    selection: play.selection,
+    type: play.type,
+    odds: play.odds,
+    bookmaker: play.bookmaker,
+    modelPct: play.modelPct,
+    modelEdge: play.modelEdge,
+    marketImpliedPct: play.marketImpliedPct,
+    rawEdgePct: play.rawEdgePct,
+    adjustedScore: play.adjustedScore,
+    chooserLabel: play.chooserLabel || getPremiumLabelForMode(mode),
+    isHighVariance: play.isHighVariance,
+    marketPoint: play.marketPoint,
+    projectedValue: play.projectedValue,
+  };
+}
+
+// Build one first-write snapshot containing every currently selected chooser
+// bucket for this match. The singular fields remain for older clients/archives.
 function buildFrozenPayloadFromPlay(
   play: PremiumMarketPlay,
   tryScorers: FrozenTryScorer[],
+  premiumPlays: FrozenChooserPlayPayload[],
 ): FrozenPlayPayload {
   const { row } = play;
   const predictedScore =
@@ -2039,17 +2101,22 @@ function buildFrozenPayloadFromPlay(
           tz: row.fixture.tz,
         }
       : null,
+    premiumPlays,
+    freezeWindowHours: 24,
     tryScorers,
   };
 }
 
-// Reconstruct a PremiumMarketPlay from a frozen snapshot, reusing the live
-// prediction row where available so PremiumMarketPlayCard renders identically.
-function reconstructFrozenPlay(
+function reconstructFrozenPlayForMode(
   snapshot: FrozenSnapshot,
   row: PredictionRow | null,
-): PremiumMarketPlay {
+  mode: PremiumPlayMode,
+): PremiumMarketPlay | null {
   const payload = snapshot.payload;
+  const hasChooserBundle = Boolean(payload.premiumPlays?.length);
+  const frozenPlay = payload.premiumPlays?.find((play) => play.mode === mode) ||
+    (!hasChooserBundle && mode === "bestbet" ? payload : null);
+  if (!frozenPlay) return null;
   const baseRow: PredictionRow =
     row || ({
       match: snapshot.match,
@@ -2093,22 +2160,33 @@ function reconstructFrozenPlay(
     } as PredictionRow);
 
   return {
-    id: `frozen-${snapshot.round}-${snapshot.matchKey}`,
+    id: `frozen-${snapshot.round}-${snapshot.matchKey}-${mode}`,
     row: baseRow,
-    type: payload.type,
-    selection: payload.selection,
-    bookmaker: payload.bookmaker,
-    odds: payload.odds,
-    modelPct: payload.modelPct,
-    modelEdge: payload.modelEdge,
-    marketImpliedPct: payload.marketImpliedPct,
-    rawEdgePct: payload.rawEdgePct,
-    adjustedScore: payload.adjustedScore,
-    chooserLabel: payload.chooserLabel,
-    isHighVariance: payload.isHighVariance,
-    marketPoint: payload.marketPoint,
-    projectedValue: payload.projectedValue,
+    type: frozenPlay.type,
+    selection: frozenPlay.selection,
+    bookmaker: frozenPlay.bookmaker,
+    odds: frozenPlay.odds,
+    modelPct: frozenPlay.modelPct,
+    modelEdge: frozenPlay.modelEdge,
+    marketImpliedPct: frozenPlay.marketImpliedPct,
+    rawEdgePct: frozenPlay.rawEdgePct,
+    adjustedScore: frozenPlay.adjustedScore,
+    chooserLabel: frozenPlay.chooserLabel || getPremiumLabelForMode(mode),
+    isHighVariance: frozenPlay.isHighVariance,
+    marketPoint: frozenPlay.marketPoint,
+    projectedValue: frozenPlay.projectedValue,
   };
+}
+
+// Backward-compatible Core Play reconstruction for existing snapshot callers.
+function reconstructFrozenPlay(
+  snapshot: FrozenSnapshot,
+  row: PredictionRow | null,
+): PremiumMarketPlay {
+  const corePlay = reconstructFrozenPlayForMode(snapshot, row, "bestbet");
+  if (corePlay) return corePlay;
+  const primaryMode = snapshot.payload.premiumPlays?.[0]?.mode || "bestbet";
+  return reconstructFrozenPlayForMode(snapshot, row, primaryMode)!;
 }
 
 // Convert a frozen snapshot + saved result into a RoundProofMatchPlay (for the
@@ -2369,8 +2447,8 @@ function getActiveRound(data: DashboardData): number {
 }
 
 // Shared freeze + results data for the active round. Loads snapshots/results
-// from KV, snapshots newly-kicked-off plays (first-write-wins), and exposes
-// lookup maps keyed by normalized match key.
+// from KV, snapshots each match independently at T-24h (first-write-wins), and
+// exposes lookup maps keyed by normalized match key.
 function useFrozenRoundData(
   data: DashboardData,
   marketMap: SgmMarketMap,
@@ -2418,8 +2496,8 @@ function useFrozenRoundData(
     return map;
   }, [results]);
 
-  // Freeze trigger: for each match that has kicked off and has a live play but
-  // no snapshot yet, POST it once. First-write-wins on the server locks values.
+  // Freeze trigger: once each match enters its own 24-hour kickoff window, save
+  // every selected chooser bucket in a single per-match first-write snapshot.
   useEffect(() => {
     if (!enableFreeze || !round) return;
     if (Object.keys(marketMap || {}).length === 0) return;
@@ -2432,15 +2510,37 @@ function useFrozenRoundData(
     }[] = [];
 
     for (const row of data.predictions) {
-      if (!hasPredictionKickedOff(row, now)) continue;
+      if (!isWithinPremiumMatchFreezeWindow(row, now)) continue;
       const matchKey = getPredictionPairKey(row);
       if (postedKeysRef.current.has(matchKey)) continue;
       if (snapshotByKey.has(matchKey)) {
         postedKeysRef.current.add(matchKey);
         continue;
       }
-      const play = getBestPremiumMarketPlayForMatch(row, marketMap);
-      if (!play) continue; // odds already gone and no live play — nothing to lock
+      const liveCorePlay = getBestPremiumMarketPlayForMatch(row, marketMap, "bestbet");
+      const corePlay =
+        getOfficialPendingPremiumMarketPlayForMatch(
+          row,
+          data.betLog,
+          marketMap,
+          liveCorePlay,
+        ) || liveCorePlay;
+      const selectedPlays = [
+        { mode: "bestbet" as const, play: corePlay },
+        { mode: "h2h" as const, play: getBestPremiumMarketPlayForMatch(row, marketMap, "h2h") },
+        { mode: "value" as const, play: getBestPremiumMarketPlayForMatch(row, marketMap, "value") },
+        { mode: "highvariance" as const, play: getBestPremiumMarketPlayForMatch(row, marketMap, "highvariance") },
+      ].filter((entry) => Boolean(entry.play)) as {
+        mode: PremiumPlayMode;
+        play: PremiumMarketPlay;
+      }[];
+      const primaryPlay =
+        selectedPlays.find((entry) => entry.mode === "bestbet")?.play ||
+        selectedPlays[0]?.play;
+      if (!primaryPlay) continue;
+      const frozenPremiumPlays = selectedPlays.map(({ mode, play }) =>
+        buildFrozenChooserPlay(play, mode)
+      );
       const tryScorerSignals = getTryScorerSignalsForPrediction(data, row, 5);
       const frozenScorers: FrozenTryScorer[] = tryScorerSignals.map(({ row: ts }) => ({
         player: ts.player,
@@ -2454,7 +2554,11 @@ function useFrozenRoundData(
         round: row.roundNumber,
         match: `${row.homeTeam} v ${row.awayTeam}`,
         matchKey,
-        payload: buildFrozenPayloadFromPlay(play, frozenScorers),
+        payload: buildFrozenPayloadFromPlay(
+          primaryPlay,
+          frozenScorers,
+          frozenPremiumPlays,
+        ),
       });
     }
 
@@ -7597,12 +7701,13 @@ function PredictionsPage({
           const savedResult = selectedArchive ? null : frozen.resultByKey.get(matchPairKey) || null;
           const rowKickedOff = !selectedArchive && hasPredictionKickedOff(row, now);
           const livePlay = selectedArchive ? null : getBestPremiumMarketPlayForMatch(row, marketMap);
-          // After kickoff the live odds stop feeding — render the frozen play so
-          // the strip keeps its kickoff values instead of vanishing.
+          const frozenCorePlay = frozenSnapshot
+            ? reconstructFrozenPlayForMode(frozenSnapshot, row, "bestbet")
+            : null;
+          // From T-24h onward the per-match snapshot always wins over live
+          // recalculation, even while the market feed continues to move.
           const premiumMarketPlay =
-            !livePlay && rowKickedOff && frozenSnapshot
-              ? reconstructFrozenPlay(frozenSnapshot, row)
-              : livePlay;
+            frozenCorePlay || livePlay;
           const settledPremiumBet = selectedArchive ? null : getSettledBetForPrediction(data, row);
           const liveTryScorerSignals = selectedArchive ? [] : getTryScorerSignalsForPrediction(data, row);
           // Frozen try scorers fill in if the live sheet signals dropped out.
@@ -8827,6 +8932,31 @@ function buildPremiumMarketPlays(
     .filter(Boolean) as PremiumMarketPlay[];
 }
 
+function overlayFrozenPremiumPlaysForMode(
+  livePlays: PremiumMarketPlay[],
+  snapshots: FrozenSnapshot[],
+  predictionByPairKey: Map<string, PredictionRow>,
+  archivedMatchKeys: Set<string>,
+  mode: PremiumPlayMode,
+) {
+  const byKey = new Map<string, PremiumMarketPlay>();
+  for (const play of livePlays) {
+    const matchKey = getPredictionPairKey(play.row);
+    if (archivedMatchKeys.has(matchKey) || isHiddenPremiumBestBetRow(play.row)) continue;
+    byKey.set(matchKey, play);
+  }
+
+  for (const snapshot of snapshots) {
+    if (archivedMatchKeys.has(snapshot.matchKey)) continue;
+    const row = predictionByPairKey.get(snapshot.matchKey) || null;
+    if (isHiddenPremiumBestBetRow(row)) continue;
+    const frozenPlay = reconstructFrozenPlayForMode(snapshot, row, mode);
+    if (frozenPlay) byKey.set(snapshot.matchKey, frozenPlay);
+  }
+
+  return [...byKey.values()];
+}
+
 // Admin-only inline form to enter a match result. Pre-fills from a saved
 // result. Renders nothing for non-admins (callers also gate on isAdmin).
 function AdminResultEntryForm({
@@ -9261,8 +9391,8 @@ function RoundProofMarketPlayCard({ play }: { play: RoundProofMatchPlay }) {
 
 // REQ2 — Dedicated admin-only results entry page. Lists every kicked-off
 // fixture in the active round with a compact AdminResultEntryForm each, prefilled
-// from saved KV results. Try-scorer signals come from the frozen snapshot (locked
-// at kickoff) when present, else computed live.
+// from saved KV results. Try-scorer signals come from the per-match T-24h
+// snapshot when present, else computed live.
 function AdminResultsPage({
   data,
   isAdmin = false,
@@ -9417,8 +9547,7 @@ function BestBetsPage({
 
   const canViewStartedPremiumPlays = isPremium || isAdmin;
   // CORE PLAY: one conservative round leader ranked by adjusted confidence.
-  // After kickoff the live odds stop feeding, so we merge in frozen snapshots so
-  // the play stays visible exactly as it was at kickoff (first-write-wins).
+  // Per-match T-24h snapshots always override live recalculation.
   const matchReads = useMemo(() => {
     const live = buildPremiumMarketPlays(data, marketMap, now, canViewStartedPremiumPlays, "bestbet");
     const byKey = new Map<string, PremiumMarketPlay>();
@@ -9428,7 +9557,7 @@ function BestBetsPage({
       if (isHiddenPremiumBestBetRow(play.row)) continue;
       byKey.set(key, play);
     }
-    // Overlay frozen plays for kicked-off matches (replaces empty-odds live play).
+    // Overlay each frozen Core Play as soon as its per-match snapshot exists.
     for (const snapshot of frozen.snapshots) {
       if (archivedMatchKeys.has(snapshot.matchKey)) continue;
       const row = predictionByPairKey.get(snapshot.matchKey) || null;
@@ -9438,8 +9567,8 @@ function BestBetsPage({
         byKey.set(snapshot.matchKey, lockedPlay);
         continue;
       }
-      if (row && !hasPredictionKickedOff(row, now)) continue;
-      byKey.set(snapshot.matchKey, reconstructFrozenPlay(snapshot, row));
+      const frozenCorePlay = reconstructFrozenPlayForMode(snapshot, row, "bestbet");
+      if (frozenCorePlay) byKey.set(snapshot.matchKey, frozenCorePlay);
     }
     // Frozen snapshots arrive after the initial live render. Re-apply locked
     // completed plays last so an old kickoff snapshot cannot replace them.
@@ -9467,10 +9596,14 @@ function BestBetsPage({
   const corePlay = matchReads[0] || null;
 
   const bestH2hPlay = useMemo(() =>
-    buildPremiumMarketPlays(data, marketMap, now, canViewStartedPremiumPlays, "h2h")
-      .filter((play) => !archivedMatchKeys.has(getPredictionPairKey(play.row)))
-      .sort(comparePremiumAdjustedConfidence)[0] || null,
-  [data, marketMap, now, canViewStartedPremiumPlays, archivedMatchKeys]);
+    overlayFrozenPremiumPlaysForMode(
+      buildPremiumMarketPlays(data, marketMap, now, canViewStartedPremiumPlays, "h2h"),
+      frozen.snapshots,
+      predictionByPairKey,
+      archivedMatchKeys,
+      "h2h",
+    ).sort(comparePremiumAdjustedConfidence)[0] || null,
+  [data, marketMap, now, canViewStartedPremiumPlays, frozen.snapshots, predictionByPairKey, archivedMatchKeys]);
 
   const bestH2hIsCore = Boolean(
     corePlay && bestH2hPlay && getPremiumPlayKey(corePlay) === getPremiumPlayKey(bestH2hPlay),
@@ -9482,22 +9615,32 @@ function BestBetsPage({
     const selectedKeys = new Set(
       [corePlay, bestH2hPlay].filter(Boolean).map((play) => getPremiumPlayKey(play!)),
     );
-    return buildPremiumMarketPlays(data, marketMap, now, canViewStartedPremiumPlays, "value")
-      .filter((play) => !archivedMatchKeys.has(getPredictionPairKey(play.row)))
+    return overlayFrozenPremiumPlaysForMode(
+      buildPremiumMarketPlays(data, marketMap, now, canViewStartedPremiumPlays, "value"),
+      frozen.snapshots,
+      predictionByPairKey,
+      archivedMatchKeys,
+      "value",
+    )
       .filter((play) => !selectedKeys.has(getPremiumPlayKey(play)))
       .sort(comparePremiumAdjustedConfidence)[0] || null;
-  }, [data, marketMap, now, canViewStartedPremiumPlays, archivedMatchKeys, corePlay, bestH2hPlay]);
+  }, [data, marketMap, now, canViewStartedPremiumPlays, frozen.snapshots, predictionByPairKey, archivedMatchKeys, corePlay, bestH2hPlay]);
 
   const highVariancePlays = useMemo(() => {
     const selectedKeys = new Set(
       [corePlay, bestH2hPlay, valuePlay].filter(Boolean).map((play) => getPremiumPlayKey(play!)),
     );
-    return buildPremiumMarketPlays(data, marketMap, now, canViewStartedPremiumPlays, "highvariance")
-      .filter((play) => !archivedMatchKeys.has(getPredictionPairKey(play.row)))
+    return overlayFrozenPremiumPlaysForMode(
+      buildPremiumMarketPlays(data, marketMap, now, canViewStartedPremiumPlays, "highvariance"),
+      frozen.snapshots,
+      predictionByPairKey,
+      archivedMatchKeys,
+      "highvariance",
+    )
       .filter((play) => !selectedKeys.has(getPremiumPlayKey(play)))
       .sort(comparePremiumAdjustedConfidence)
       .slice(0, 3);
-  }, [data, marketMap, now, canViewStartedPremiumPlays, archivedMatchKeys, corePlay, bestH2hPlay, valuePlay]);
+  }, [data, marketMap, now, canViewStartedPremiumPlays, frozen.snapshots, predictionByPairKey, archivedMatchKeys, corePlay, bestH2hPlay, valuePlay]);
 
   const latestTryScorerRound = Math.max(
     0,
@@ -9530,8 +9673,8 @@ function BestBetsPage({
           signal: getTryScorerSignal(row, keys),
         }));
     });
-  // Overlay frozen try scorers for kicked-off matches so the scorer signals do
-  // not vanish when the sheet stops feeding their odds.
+  // Overlay per-match frozen try scorers so the scorer signals do not change
+  // after the T-24h snapshot or vanish when the sheet stops feeding their odds.
   const liveScorerKeys = new Set(
     liveTryScorerBestBets.map(
       ({ row }) => `${getMatchPairKeyFromLabel(row.match)}|${normalizeTryScorerPlayerKey(row.player)}`,
