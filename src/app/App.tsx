@@ -2527,12 +2527,7 @@ function useFrozenRoundData(
         ) || liveCorePlay;
       const selectedPlays = [
         { mode: "bestbet" as const, play: corePlay },
-        {
-          mode: "h2h" as const,
-          play:
-            getManualBestH2hPlayForMatch(row, marketMap) ||
-            getBestPremiumMarketPlayForMatch(row, marketMap, "h2h"),
-        },
+        { mode: "h2h" as const, play: getBestPremiumMarketPlayForMatch(row, marketMap, "h2h") },
         { mode: "value" as const, play: getBestPremiumMarketPlayForMatch(row, marketMap, "value") },
         { mode: "highvariance" as const, play: getBestPremiumMarketPlayForMatch(row, marketMap, "highvariance") },
       ].filter((entry) => Boolean(entry.play)) as {
@@ -8717,93 +8712,6 @@ function getBestPremiumMarketPlayForMatch(
   return corePlay ? withPremiumChooserMetrics(corePlay, "Core Play") : null;
 }
 
-// Explicit editorial override requested for the current Premium Plays card.
-// This is deliberately unconditional so a mismatched sheet round number cannot
-// allow the chooser to replace Manly with Rabbitohs again.
-const MANUAL_BEST_H2H_TEAM = "Sea Eagles";
-
-function getManualBestH2hPlayForMatch(
-  row: PredictionRow,
-  marketMap: SgmMarketMap,
-): PremiumMarketPlay | null {
-  const normalizedTarget = normalizeTeamName(MANUAL_BEST_H2H_TEAM);
-  const selectedTeam = [row.homeTeam, row.awayTeam].find(
-    (team) => normalizeTeamName(team) === normalizedTarget,
-  );
-  if (!selectedTeam) return null;
-
-  const liveOffers = Object.entries(getSgmMatchMarkets(marketMap, row))
-    .map(([bookKey, bookData]) => {
-      const matchingOdds = Object.entries(bookData.h2h).find(
-        ([team]) => normalizeTeamName(team) === normalizedTarget,
-      )?.[1];
-      if (!matchingOdds || matchingOdds <= 1) return null;
-      return {
-        bookmaker: displayBookmakerName(bookKey),
-        odds: matchingOdds,
-      };
-    })
-    .filter(Boolean) as { bookmaker: string; odds: number }[];
-  const bestLiveOffer = liveOffers.sort((a, b) => b.odds - a.odds)[0] || null;
-  const isHome = normalizeTeamName(row.homeTeam) === normalizedTarget;
-  const sheetOdds = isHome ? row.marketHomeOdds : row.marketAwayOdds;
-  const odds = bestLiveOffer?.odds || sheetOdds;
-  if (!odds || odds <= 1) return null;
-
-  const modelOdds = isHome ? row.modelHomeOdds : row.modelAwayOdds;
-  const winnerPct = getPredictedWinnerWinPct(row);
-  const modelPct = modelOdds > 1
-    ? getImpliedWinPctFromOdds(modelOdds)
-    : normalizeTeamName(row.predictedWinner) === normalizedTarget
-      ? winnerPct
-      : Math.max(0, 100 - winnerPct);
-
-  return withPremiumChooserMetrics({
-    id: `${row.match}-manual-round-${row.roundNumber}-h2h-${normalizedTarget}`,
-    row,
-    type: "Head 2 Head",
-    selection: `${selectedTeam} head-to-head`,
-    bookmaker: bestLiveOffer?.bookmaker || "Best available",
-    odds,
-    modelPct,
-    modelEdge: modelPct - getImpliedWinPctFromOdds(odds),
-    isManualApproved: true,
-    projectedValue: Math.abs(row.predictedHomeScore - row.predictedAwayScore),
-  }, "Best H2H");
-}
-
-function selectBestH2hForRound(
-  candidates: PremiumMarketPlay[],
-  data: DashboardData,
-  marketMap: SgmMarketMap,
-  round: number,
-) {
-  const normalizedTarget = normalizeTeamName(MANUAL_BEST_H2H_TEAM);
-  const frozenOrLiveOverride = candidates.find(
-    (play) => normalizeTeamName(play.selection) === normalizedTarget,
-  );
-  if (frozenOrLiveOverride) {
-    return {
-      ...frozenOrLiveOverride,
-      chooserLabel: "Best H2H" as const,
-      isManualApproved: true,
-    };
-  }
-
-  const displayedRound = candidates[0]?.row.roundNumber || round;
-  const manualOverride = data.predictions
-    .filter((row) => !displayedRound || row.roundNumber === displayedRound)
-    .map((row) => getManualBestH2hPlayForMatch(row, marketMap))
-    .find(Boolean) as PremiumMarketPlay | undefined;
-  const anyLoadedManlyFixture = manualOverride || data.predictions
-    .map((row) => getManualBestH2hPlayForMatch(row, marketMap))
-    .find(Boolean) as PremiumMarketPlay | undefined;
-  // Do not fall back to a different club: while this override is active, Best
-  // H2H is Manly or no card at all.
-  return anyLoadedManlyFixture || null;
-}
-
-
 function parseOfficialPlayPoint(selection: string, type: PremiumMarketPlay["type"]) {
   const pattern =
     type === "Total"
@@ -9686,16 +9594,14 @@ function BestBetsPage({
   }, [data, marketMap, now, canViewStartedPremiumPlays, isAdmin, frozen.snapshots, archivedMatchKeys, predictionByPairKey]);
   const corePlay = matchReads[0] || null;
 
-  const bestH2hPlay = useMemo(() => {
-    const candidates = overlayFrozenPremiumPlaysForMode(
+  const bestH2hPlay = useMemo(() =>
+    overlayFrozenPremiumPlaysForMode(
       buildPremiumMarketPlays(data, marketMap, now, canViewStartedPremiumPlays, "h2h"),
       frozen.snapshots,
       predictionByPairKey,
       archivedMatchKeys,
       "h2h",
-    ).sort(comparePremiumAdjustedConfidence);
-    return selectBestH2hForRound(candidates, data, marketMap, frozen.round);
-  },
+    ).sort(comparePremiumAdjustedConfidence)[0] || null,
   [data, marketMap, now, canViewStartedPremiumPlays, frozen.snapshots, predictionByPairKey, archivedMatchKeys]);
 
   const bestH2hIsCore = Boolean(
