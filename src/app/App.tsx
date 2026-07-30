@@ -5634,34 +5634,6 @@ function HomeCard({
   );
 }
 
-function Round20OfferBanner({ onUnlock }: { onUnlock: () => void }) {
-  return (
-    <section className="overflow-hidden border border-[#00E676]/35 bg-[linear-gradient(105deg,rgba(0,230,118,0.09),rgba(17,17,22,0.98)_52%,rgba(17,17,22,1))] px-4 py-3 sm:px-5 sm:py-4">
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div className="min-w-0 max-w-[760px]">
-          <h2 className="text-lg font-semibold leading-tight tracking-tight text-white sm:text-xl">
-            This round only: Premium for $3
-          </h2>
-          <p className="mt-1 text-xs leading-relaxed text-[#9CA3AF] sm:text-sm">
-            Unlock the full premium card. Enter code ROUND20 at checkout.
-          </p>
-          <p className="mt-1 text-[10px] leading-relaxed text-[#6B7280] sm:text-[11px]">
-            Core Play, Best H2H, Value, High Variance + Try Scorer Best Bets.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={onUnlock}
-          className="re-primary-cta inline-flex min-h-[42px] w-full shrink-0 items-center justify-center gap-2 border px-4 py-2.5 text-xs font-medium uppercase tracking-wider transition hover:opacity-90 md:w-auto"
-        >
-          Unlock this round for $3
-          <ArrowRight className="h-4 w-4 shrink-0" />
-        </button>
-      </div>
-    </section>
-  );
-}
-
 function PublicHero() {
   return (
     <section className="relative mt-8 overflow-hidden pt-12 pb-3 sm:mt-10 sm:pt-16 sm:pb-4 md:mt-12 md:pt-20 md:pb-5">
@@ -6946,12 +6918,10 @@ function HomePage({
   data,
   onGoApp,
   onRequestPremium,
-  showRoundOffer,
 }: {
   data: DashboardData | null;
   onGoApp: (source: string) => void;
   onRequestPremium: (source: string) => void;
-  showRoundOffer: boolean;
 }) {
   const featured = getFeaturedPrediction(
     data?.predictions || [],
@@ -6959,11 +6929,6 @@ function HomePage({
 
   return (
     <div className="flex flex-col">
-      {showRoundOffer && (
-        <Round20OfferBanner
-          onUnlock={() => onRequestPremium("round20_landing_banner")}
-        />
-      )}
       <TryScorerTicker data={data} />
       <PublicHero />
       <HeroStickyCta onGoApp={onGoApp} />
@@ -12451,13 +12416,6 @@ function AppDashboard({
         onClose={() => setShowRetentionOffer(false)}
         onContinueToBilling={openCustomerPortal}
       />
-      {page === "matches" && !isPremium && !isAdmin && (
-        <div className="mb-4 md:mb-6">
-          <Round20OfferBanner
-            onUnlock={() => onRequestAccess("best-bets")}
-          />
-        </div>
-      )}
       <div className="grid grid-cols-1 xl:grid-cols-[300px_minmax(0,1fr)] gap-8 pb-24 xl:pb-0">
         <GlassCard className="hidden xl:block p-6 h-fit xl:sticky xl:top-6">
           <div className="flex items-center gap-4 pb-6 border-b border-[#1E1E2E] mb-6">
@@ -13589,7 +13547,6 @@ export default function App() {
             data={data}
             onGoApp={navigateToApp}
             onRequestPremium={requestPremiumAccess}
-            showRoundOffer={authState.checked && authState.tier !== "premium" && !isAdmin}
           />
         )}
 
