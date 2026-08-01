@@ -8046,6 +8046,63 @@ function getProofMarketLabel(market: RoundProofMatchPlay["market"] | PremiumMark
   return "Total";
 }
 
+function CompletedCorePlayRevealCard({ play }: { play: PremiumMarketPlay }) {
+  const { row } = play;
+
+  return (
+    <div className="border border-[#00E676]/35 border-l-4 border-l-[#00E676] bg-[#111116] px-4 py-4">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <span className="inline-flex border border-[#00E676]/35 bg-[#00E676]/10 px-2 py-1 text-[8px] font-black uppercase tracking-widest text-[#00E676]">
+          Core Play
+        </span>
+        <span className="text-[8px] font-black uppercase tracking-widest text-[#6B7280]">
+          Revealed after kickoff
+        </span>
+      </div>
+      <div className="flex items-center gap-3">
+        <TeamLogo
+          teamName={play.type === "Total" ? row.predictedWinner : play.selection}
+          className="h-9 w-9 shrink-0 rounded-sm"
+        />
+        <div className="min-w-0">
+          <div className="truncate text-base font-black uppercase tracking-tight text-white">
+            {play.selection}
+          </div>
+          <div className="mt-1 text-[9px] font-black uppercase tracking-widest text-[#6B7280]">
+            {play.type} · {play.bookmaker}
+          </div>
+        </div>
+      </div>
+      <div className="mt-4 grid grid-cols-3 gap-2">
+        <div className="border border-[#1E1E2E] bg-[#16161D] px-2 py-2">
+          <div className="text-[7px] font-black uppercase tracking-widest text-[#6B7280]">
+            Model
+          </div>
+          <div className="mt-1 text-sm font-black text-[#00E676]">
+            {formatPercent(play.modelPct, 1)}
+          </div>
+        </div>
+        <div className="border border-[#1E1E2E] bg-[#16161D] px-2 py-2">
+          <div className="text-[7px] font-black uppercase tracking-widest text-[#6B7280]">
+            Edge
+          </div>
+          <div className="mt-1 text-sm font-black text-[#00E676]">
+            {formatPremiumMatchEdge(play.modelPct, play.odds)}
+          </div>
+        </div>
+        <div className="border border-[#1E1E2E] bg-[#16161D] px-2 py-2">
+          <div className="text-[7px] font-black uppercase tracking-widest text-[#6B7280]">
+            Odds
+          </div>
+          <div className="mt-1 text-sm font-black text-white">
+            ${play.odds.toFixed(2)}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function MatchPremiumSignalStrip({
   matchCompleted,
   isPremium,
@@ -8155,11 +8212,19 @@ function MatchPremiumSignalStrip({
       : savedResultMatchPlay.length
         ? savedResultMatchPlay
         : fallbackMatchPlay;
+    const showCompletedCoreReveal =
+      Boolean(play) &&
+      matchPlays.length === 0;
 
-    if (!matchPlays.length && !tryScorerProofHits.length) return null;
+    if (!showCompletedCoreReveal && !matchPlays.length && !tryScorerProofHits.length) {
+      return null;
+    }
 
     return (
       <div className="mt-3 flex flex-col gap-2">
+        {showCompletedCoreReveal && play ? (
+          <CompletedCorePlayRevealCard play={play} />
+        ) : null}
         {matchPlays.map((proof) => (
           <div
             key={`${proof.match}-${proof.selection}`}
