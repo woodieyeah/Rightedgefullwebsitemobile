@@ -5960,10 +5960,12 @@ function FreeBetrMarketsPanel({
   row,
   isPremium,
   onRequestAccess,
+  revealedCorePlay,
 }: {
   row: PredictionRow;
   isPremium: boolean;
   onRequestAccess: (targetHash?: string) => void;
+  revealedCorePlay?: PremiumMarketPlay | null;
 }) {
   const [activeMarket, setActiveMarket] = useState<"h2h" | "line" | "total">("h2h");
   const [betrMarkets, setBetrMarkets] = useState<SgmMarketBookmakerData | null>(null);
@@ -6024,6 +6026,9 @@ function FreeBetrMarketsPanel({
   const hasLineMarkets = getFreeBetrLineOutcomes(row, betrMarkets).length > 0;
   const hasTotalMarkets = getFreeBetrTotalOutcomes(row, betrMarkets).length > 0;
   const matchCompleted = isFixtureCompleted(row.fixture);
+  const matchLive = hasPredictionKickedOff(row) && !matchCompleted;
+  const showPublicCorePlay = !isPremium && matchLive && Boolean(revealedCorePlay);
+  const hideUnavailableStatus = !isPremium && matchLive && !showPublicCorePlay;
 
   const marketAvailability =
     activeMarket === "h2h"
@@ -6157,7 +6162,66 @@ function FreeBetrMarketsPanel({
           </div>
         ) : (
           <div className={`flex flex-col gap-3 ${isPremiumLockedMarket ? "pointer-events-none select-none blur-sm opacity-45" : ""}`}>
-            {!marketAvailability && (
+            {!marketAvailability && showPublicCorePlay && revealedCorePlay && (
+              <div className="border border-[#00E676]/35 border-l-4 border-l-[#00E676] bg-[#111116] px-4 py-4">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <span className="inline-flex border border-[#00E676]/35 bg-[#00E676]/10 px-2 py-1 text-[8px] font-black uppercase tracking-widest text-[#00E676]">
+                    Core Play
+                  </span>
+                  <span className="text-[8px] font-black uppercase tracking-widest text-[#6B7280]">
+                    Revealed at kickoff
+                  </span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <TeamLogo
+                    teamName={
+                      revealedCorePlay.type === "Total"
+                        ? row.predictedWinner
+                        : revealedCorePlay.selection
+                    }
+                    className="h-9 w-9 shrink-0 rounded-sm"
+                  />
+                  <div className="min-w-0">
+                    <div className="truncate text-base font-black uppercase tracking-tight text-white">
+                      {revealedCorePlay.selection}
+                    </div>
+                    <div className="mt-1 text-[9px] font-black uppercase tracking-widest text-[#6B7280]">
+                      {revealedCorePlay.type} · {revealedCorePlay.bookmaker}
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-4 grid grid-cols-3 gap-2">
+                  <div className="border border-[#1E1E2E] bg-[#16161D] px-2 py-2">
+                    <div className="text-[7px] font-black uppercase tracking-widest text-[#6B7280]">
+                      Model
+                    </div>
+                    <div className="mt-1 text-sm font-black text-[#00E676]">
+                      {formatPercent(revealedCorePlay.modelPct, 1)}
+                    </div>
+                  </div>
+                  <div className="border border-[#1E1E2E] bg-[#16161D] px-2 py-2">
+                    <div className="text-[7px] font-black uppercase tracking-widest text-[#6B7280]">
+                      Edge
+                    </div>
+                    <div className="mt-1 text-sm font-black text-[#00E676]">
+                      {formatPremiumMatchEdge(
+                        revealedCorePlay.modelPct,
+                        revealedCorePlay.odds,
+                      )}
+                    </div>
+                  </div>
+                  <div className="border border-[#1E1E2E] bg-[#16161D] px-2 py-2">
+                    <div className="text-[7px] font-black uppercase tracking-widest text-[#6B7280]">
+                      Odds
+                    </div>
+                    <div className="mt-1 text-sm font-black text-white">
+                      ${revealedCorePlay.odds.toFixed(2)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+            {!marketAvailability && !showPublicCorePlay && !hideUnavailableStatus && (
               <div className="border border-[#1E1E2E] bg-[#16161D] px-4 py-4">
                 <div className="text-[10px] font-medium uppercase tracking-[0.18em] text-[#9CA3AF] mb-2">
                   {matchCompleted ? "Market status" : "Live status"}
@@ -7935,6 +7999,7 @@ function PredictionsPage({
                       row={row}
                       isPremium={isPremium}
                       onRequestAccess={onRequestAccess}
+                      revealedCorePlay={rowKickedOff ? premiumMarketPlay : null}
                     />
                   </div>
                 </div>
