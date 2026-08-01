@@ -8407,6 +8407,12 @@ function comparePremiumAdjustedConfidence(a: PremiumMarketPlay, b: PremiumMarket
   return b.odds - a.odds;
 }
 
+function comparePremiumPlaysByFixture(a: PremiumMarketPlay, b: PremiumMarketPlay) {
+  const fixtureDiff = getFixtureSortValue(a.row) - getFixtureSortValue(b.row);
+  if (fixtureDiff !== 0) return fixtureDiff;
+  return comparePremiumAdjustedConfidence(a, b);
+}
+
 function passesPremiumCoreThresholds(play: PremiumMarketPlay) {
   const metrics = getPremiumChooserMetrics(play);
   return (
@@ -9551,10 +9557,7 @@ function BestBetsPage({
     }
     return [...byKey.values()]
       .map((play) => withPremiumChooserMetrics(play, "Core Play"))
-      .sort((a, b) =>
-        comparePremiumAdjustedConfidence(a, b) ||
-        getFixtureSortValue(a.row) - getFixtureSortValue(b.row)
-      )
+      .sort(comparePremiumPlaysByFixture)
       .slice(0, isAdmin ? 50 : 8);
   }, [data, marketMap, now, canViewStartedPremiumPlays, isAdmin, frozen.snapshots, archivedMatchKeys, predictionByPairKey]);
 
@@ -9569,7 +9572,7 @@ function BestBetsPage({
       archivedMatchKeys,
       "h2h",
     )
-      .sort(comparePremiumAdjustedConfidence)
+      .sort(comparePremiumPlaysByFixture)
       .slice(0, isAdmin ? 50 : 8),
   [data, marketMap, now, canViewStartedPremiumPlays, isAdmin, frozen.snapshots, predictionByPairKey, archivedMatchKeys]);
 
@@ -9600,7 +9603,7 @@ function BestBetsPage({
       "value",
     )
       .filter((play) => !selectedKeys.has(getPremiumPlayKey(play)))
-      .sort(comparePremiumAdjustedConfidence)
+      .sort(comparePremiumPlaysByFixture)
       .slice(0, isAdmin ? 50 : 8);
   }, [data, marketMap, now, canViewStartedPremiumPlays, isAdmin, frozen.snapshots, predictionByPairKey, archivedMatchKeys, matchReads, bestH2hPlays]);
 
@@ -9616,7 +9619,7 @@ function BestBetsPage({
       "highvariance",
     )
       .filter((play) => !selectedKeys.has(getPremiumPlayKey(play)))
-      .sort(comparePremiumAdjustedConfidence)
+      .sort(comparePremiumPlaysByFixture)
       .slice(0, isAdmin ? 50 : 8);
   }, [data, marketMap, now, canViewStartedPremiumPlays, isAdmin, frozen.snapshots, predictionByPairKey, archivedMatchKeys, matchReads, bestH2hPlays, valuePlays]);
 
