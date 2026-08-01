@@ -5960,12 +5960,12 @@ function FreeBetrMarketsPanel({
   row,
   isPremium,
   onRequestAccess,
-  revealedCorePlay,
+  revealedPlays = [],
 }: {
   row: PredictionRow;
   isPremium: boolean;
   onRequestAccess: (targetHash?: string) => void;
-  revealedCorePlay?: PremiumMarketPlay | null;
+  revealedPlays?: PremiumPlayReveal[];
 }) {
   const [activeMarket, setActiveMarket] = useState<"h2h" | "line" | "total">("h2h");
   const [betrMarkets, setBetrMarkets] = useState<SgmMarketBookmakerData | null>(null);
@@ -6027,8 +6027,8 @@ function FreeBetrMarketsPanel({
   const hasTotalMarkets = getFreeBetrTotalOutcomes(row, betrMarkets).length > 0;
   const matchCompleted = isFixtureCompleted(row.fixture);
   const matchLive = hasPredictionKickedOff(row) && !matchCompleted;
-  const showPublicCorePlay = !isPremium && matchLive && Boolean(revealedCorePlay);
-  const hideUnavailableStatus = !isPremium && matchLive && !showPublicCorePlay;
+  const showPublicPlays = !isPremium && matchLive && revealedPlays.length > 0;
+  const hideUnavailableStatus = !isPremium && matchLive && !showPublicPlays;
 
   const marketAvailability =
     activeMarket === "h2h"
@@ -6162,66 +6162,19 @@ function FreeBetrMarketsPanel({
           </div>
         ) : (
           <div className={`flex flex-col gap-3 ${isPremiumLockedMarket ? "pointer-events-none select-none blur-sm opacity-45" : ""}`}>
-            {!marketAvailability && showPublicCorePlay && revealedCorePlay && (
-              <div className="border border-[#00E676]/35 border-l-4 border-l-[#00E676] bg-[#111116] px-4 py-4">
-                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                  <span className="inline-flex border border-[#00E676]/35 bg-[#00E676]/10 px-2 py-1 text-[8px] font-black uppercase tracking-widest text-[#00E676]">
-                    Core Play
-                  </span>
-                  <span className="text-[8px] font-black uppercase tracking-widest text-[#6B7280]">
-                    Revealed at kickoff
-                  </span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <TeamLogo
-                    teamName={
-                      revealedCorePlay.type === "Total"
-                        ? row.predictedWinner
-                        : revealedCorePlay.selection
-                    }
-                    className="h-9 w-9 shrink-0 rounded-sm"
+            {!marketAvailability && showPublicPlays && (
+              <div className="flex flex-col gap-2">
+                {revealedPlays.map(({ play, labels }) => (
+                  <PublicPremiumPlayRevealCard
+                    key={getPremiumPlayKey(play)}
+                    play={play}
+                    labels={labels}
+                    statusLabel="Revealed at kickoff"
                   />
-                  <div className="min-w-0">
-                    <div className="truncate text-base font-black uppercase tracking-tight text-white">
-                      {revealedCorePlay.selection}
-                    </div>
-                    <div className="mt-1 text-[9px] font-black uppercase tracking-widest text-[#6B7280]">
-                      {revealedCorePlay.type} · {revealedCorePlay.bookmaker}
-                    </div>
-                  </div>
-                </div>
-                <div className="mt-4 grid grid-cols-3 gap-2">
-                  <div className="border border-[#1E1E2E] bg-[#16161D] px-2 py-2">
-                    <div className="text-[7px] font-black uppercase tracking-widest text-[#6B7280]">
-                      Model
-                    </div>
-                    <div className="mt-1 text-sm font-black text-[#00E676]">
-                      {formatPercent(revealedCorePlay.modelPct, 1)}
-                    </div>
-                  </div>
-                  <div className="border border-[#1E1E2E] bg-[#16161D] px-2 py-2">
-                    <div className="text-[7px] font-black uppercase tracking-widest text-[#6B7280]">
-                      Edge
-                    </div>
-                    <div className="mt-1 text-sm font-black text-[#00E676]">
-                      {formatPremiumMatchEdge(
-                        revealedCorePlay.modelPct,
-                        revealedCorePlay.odds,
-                      )}
-                    </div>
-                  </div>
-                  <div className="border border-[#1E1E2E] bg-[#16161D] px-2 py-2">
-                    <div className="text-[7px] font-black uppercase tracking-widest text-[#6B7280]">
-                      Odds
-                    </div>
-                    <div className="mt-1 text-sm font-black text-white">
-                      ${revealedCorePlay.odds.toFixed(2)}
-                    </div>
-                  </div>
-                </div>
+                ))}
               </div>
             )}
-            {!marketAvailability && !showPublicCorePlay && !hideUnavailableStatus && (
+            {!marketAvailability && !showPublicPlays && !hideUnavailableStatus && (
               <div className="border border-[#1E1E2E] bg-[#16161D] px-4 py-4">
                 <div className="text-[10px] font-medium uppercase tracking-[0.18em] text-[#9CA3AF] mb-2">
                   {matchCompleted ? "Market status" : "Live status"}
@@ -7730,13 +7683,33 @@ function PredictionsPage({
           const savedResult = selectedArchive ? null : frozen.resultByKey.get(matchPairKey) || null;
           const rowKickedOff = !selectedArchive && hasPredictionKickedOff(row, now);
           const livePlay = selectedArchive ? null : getBestPremiumMarketPlayForMatch(row, marketMap);
+          const liveH2hPlay = selectedArchive
+            ? null
+            : getBestPremiumMarketPlayForMatch(row, marketMap, "h2h");
+          const liveHighVariancePlay = selectedArchive
+            ? null
+            : getBestPremiumMarketPlayForMatch(row, marketMap, "highvariance");
           const frozenCorePlay = frozenSnapshot
             ? reconstructFrozenPlayForMode(frozenSnapshot, row, "bestbet")
+            : null;
+          const frozenH2hPlay = frozenSnapshot
+            ? reconstructFrozenPlayForMode(frozenSnapshot, row, "h2h")
+            : null;
+          const frozenHighVariancePlay = frozenSnapshot
+            ? reconstructFrozenPlayForMode(frozenSnapshot, row, "highvariance")
             : null;
           // From T-24h onward the per-match snapshot always wins over live
           // recalculation, even while the market feed continues to move.
           const premiumMarketPlay =
             frozenCorePlay || livePlay;
+          const premiumH2hPlay = frozenH2hPlay || liveH2hPlay;
+          const premiumHighVariancePlay =
+            frozenHighVariancePlay || liveHighVariancePlay;
+          const premiumPlayReveals = buildPremiumPlayReveals([
+            { play: premiumMarketPlay, label: "Core Play" },
+            { play: premiumH2hPlay, label: "Best H2H" },
+            { play: premiumHighVariancePlay, label: "High Variance" },
+          ]);
           const settledPremiumBet = selectedArchive ? null : getSettledBetForPrediction(data, row);
           const liveTryScorerSignals = selectedArchive ? [] : getTryScorerSignalsForPrediction(data, row);
           // Frozen try scorers fill in if the live sheet signals dropped out.
@@ -7878,6 +7851,7 @@ function PredictionsPage({
                       matchLabel={`${row.homeTeam} v ${row.awayTeam}`}
                       savedResult={savedResult}
                       frozenTryScorers={frozenScorerList}
+                      publicRevealPlays={rowKickedOff ? premiumPlayReveals : []}
                     />
                   )}
                 </div>
@@ -7987,10 +7961,11 @@ function PredictionsPage({
                         tryScorerSignals={tryScorerSignals}
                         proofMatchPlays={proofMatchPlays}
                         proofTryScorerHits={proofTryScorerHits}
-                        matchLabel={`${row.homeTeam} v ${row.awayTeam}`}
-                        savedResult={savedResult}
-                        frozenTryScorers={frozenScorerList}
-                      />
+                      matchLabel={`${row.homeTeam} v ${row.awayTeam}`}
+                      savedResult={savedResult}
+                      frozenTryScorers={frozenScorerList}
+                      publicRevealPlays={rowKickedOff ? premiumPlayReveals : []}
+                    />
                     )}
                     {!matchCompleted && !isPremium && (
                       <UpcomingPremiumUnlockCta onRequestAccess={onRequestAccess} />
@@ -7999,7 +7974,7 @@ function PredictionsPage({
                       row={row}
                       isPremium={isPremium}
                       onRequestAccess={onRequestAccess}
-                      revealedCorePlay={rowKickedOff ? premiumMarketPlay : null}
+                      revealedPlays={rowKickedOff ? premiumPlayReveals : []}
                     />
                   </div>
                 </div>
@@ -8033,6 +8008,30 @@ type PremiumMarketPlay = {
   projectedValue?: number;
 };
 
+type PremiumPlayReveal = {
+  play: PremiumMarketPlay;
+  labels: PremiumPlayLabel[];
+};
+
+function buildPremiumPlayReveals(
+  entries: Array<{ play?: PremiumMarketPlay | null; label: PremiumPlayLabel }>,
+): PremiumPlayReveal[] {
+  const byPlayKey = new Map<string, PremiumPlayReveal>();
+
+  for (const { play, label } of entries) {
+    if (!play) continue;
+    const key = getPremiumPlayKey(play);
+    const existing = byPlayKey.get(key);
+    if (existing) {
+      if (!existing.labels.includes(label)) existing.labels.push(label);
+      continue;
+    }
+    byPlayKey.set(key, { play, labels: [label] });
+  }
+
+  return [...byPlayKey.values()];
+}
+
 function getProofResultClass(result: ProofResult) {
   if (result === "Hit") return "border-[#00E676]/45 bg-[#00E676]/12 text-[#00E676]";
   if (result === "Miss") return "border-[#FF2E63]/45 bg-[#FF2E63]/12 text-[#FF2E63]";
@@ -8046,17 +8045,32 @@ function getProofMarketLabel(market: RoundProofMatchPlay["market"] | PremiumMark
   return "Total";
 }
 
-function CompletedCorePlayRevealCard({ play }: { play: PremiumMarketPlay }) {
+function PublicPremiumPlayRevealCard({
+  play,
+  labels,
+  statusLabel,
+}: {
+  play: PremiumMarketPlay;
+  labels: PremiumPlayLabel[];
+  statusLabel: string;
+}) {
   const { row } = play;
 
   return (
     <div className="border border-[#00E676]/35 border-l-4 border-l-[#00E676] bg-[#111116] px-4 py-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <span className="inline-flex border border-[#00E676]/35 bg-[#00E676]/10 px-2 py-1 text-[8px] font-black uppercase tracking-widest text-[#00E676]">
-          Core Play
-        </span>
+        <div className="flex flex-wrap gap-1.5">
+          {labels.map((label) => (
+            <span
+              key={label}
+              className="inline-flex border border-[#00E676]/35 bg-[#00E676]/10 px-2 py-1 text-[8px] font-black uppercase tracking-widest text-[#00E676]"
+            >
+              {label}
+            </span>
+          ))}
+        </div>
         <span className="text-[8px] font-black uppercase tracking-widest text-[#6B7280]">
-          Revealed after kickoff
+          {statusLabel}
         </span>
       </div>
       <div className="flex items-center gap-3">
@@ -8114,6 +8128,7 @@ function MatchPremiumSignalStrip({
   matchLabel,
   savedResult,
   frozenTryScorers,
+  publicRevealPlays = [],
 }: {
   matchCompleted: boolean;
   isPremium: boolean;
@@ -8125,6 +8140,7 @@ function MatchPremiumSignalStrip({
   matchLabel?: string;
   savedResult?: SavedRoundResult | null;
   frozenTryScorers?: FrozenTryScorer[];
+  publicRevealPlays?: PremiumPlayReveal[];
 }) {
   // Settled try-scorer hits entered by an admin in the Results tab are synthesized
   // into the same proof shape so they render exactly like a hardcoded archive's
@@ -8212,19 +8228,30 @@ function MatchPremiumSignalStrip({
       : savedResultMatchPlay.length
         ? savedResultMatchPlay
         : fallbackMatchPlay;
-    const showCompletedCoreReveal =
-      Boolean(play) &&
-      matchPlays.length === 0;
+    const completedRevealPlays = isPremium
+      ? []
+      : publicRevealPlays.filter(({ play: revealedPlay }) =>
+          !matchPlays.some(
+            (proof) =>
+              proof.market === revealedPlay.type &&
+              selectionsReferToSameMarket(proof.selection, revealedPlay.selection),
+          ),
+        );
 
-    if (!showCompletedCoreReveal && !matchPlays.length && !tryScorerProofHits.length) {
+    if (!completedRevealPlays.length && !matchPlays.length && !tryScorerProofHits.length) {
       return null;
     }
 
     return (
       <div className="mt-3 flex flex-col gap-2">
-        {showCompletedCoreReveal && play ? (
-          <CompletedCorePlayRevealCard play={play} />
-        ) : null}
+        {completedRevealPlays.map(({ play: revealedPlay, labels }) => (
+          <PublicPremiumPlayRevealCard
+            key={getPremiumPlayKey(revealedPlay)}
+            play={revealedPlay}
+            labels={labels}
+            statusLabel="Revealed after kickoff"
+          />
+        ))}
         {matchPlays.map((proof) => (
           <div
             key={`${proof.match}-${proof.selection}`}
