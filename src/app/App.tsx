@@ -9510,8 +9510,8 @@ function BestBetsPage({
   }, [data.predictions]);
 
   const canViewStartedPremiumPlays = isPremium || isAdmin;
-  // CORE PLAY: one conservative round leader ranked by adjusted confidence.
-  // Per-match T-24h snapshots always override live recalculation.
+  // CORE PLAYS: keep every match whose best read clears the conservative
+  // threshold. Per-match T-24h snapshots always override live recalculation.
   const matchReads = useMemo(() => {
     const live = buildPremiumMarketPlays(data, marketMap, now, canViewStartedPremiumPlays, "bestbet");
     const byKey = new Map<string, PremiumMarketPlay>();
@@ -9557,27 +9557,40 @@ function BestBetsPage({
       )
       .slice(0, isAdmin ? 50 : 8);
   }, [data, marketMap, now, canViewStartedPremiumPlays, isAdmin, frozen.snapshots, archivedMatchKeys, predictionByPairKey]);
-  const corePlay = matchReads[0] || null;
 
-  const bestH2hPlay = useMemo(() =>
+  // BEST H2H: keep every qualifying match instead of collapsing the round to
+  // one winner. A selection that is also a Core Play is rendered once in the
+  // Core section with both labels.
+  const bestH2hPlays = useMemo(() =>
     overlayFrozenPremiumPlaysForMode(
       buildPremiumMarketPlays(data, marketMap, now, canViewStartedPremiumPlays, "h2h"),
       frozen.snapshots,
       predictionByPairKey,
       archivedMatchKeys,
       "h2h",
-    ).sort(comparePremiumAdjustedConfidence)[0] || null,
-  [data, marketMap, now, canViewStartedPremiumPlays, frozen.snapshots, predictionByPairKey, archivedMatchKeys]);
+    )
+      .sort(comparePremiumAdjustedConfidence)
+      .slice(0, isAdmin ? 50 : 8),
+  [data, marketMap, now, canViewStartedPremiumPlays, isAdmin, frozen.snapshots, predictionByPairKey, archivedMatchKeys]);
 
-  const bestH2hIsCore = Boolean(
-    corePlay && bestH2hPlay && getPremiumPlayKey(corePlay) === getPremiumPlayKey(bestH2hPlay),
+  const bestH2hKeys = useMemo(
+    () => new Set(bestH2hPlays.map(getPremiumPlayKey)),
+    [bestH2hPlays],
+  );
+  const corePlayKeys = useMemo(
+    () => new Set(matchReads.map(getPremiumPlayKey)),
+    [matchReads],
+  );
+  const standaloneBestH2hPlays = useMemo(
+    () => bestH2hPlays.filter((play) => !corePlayKeys.has(getPremiumPlayKey(play))),
+    [bestH2hPlays, corePlayKeys],
   );
 
-  // VALUE PLAY: strongest positive adjusted score that did not clear the Core
+  // VALUE PLAYS: keep every qualifying positive adjusted score below the Core
   // threshold. Core and Best H2H selections are not repeated here.
-  const valuePlay = useMemo(() => {
+  const valuePlays = useMemo(() => {
     const selectedKeys = new Set(
-      [corePlay, bestH2hPlay].filter(Boolean).map((play) => getPremiumPlayKey(play!)),
+      [...matchReads, ...bestH2hPlays].map(getPremiumPlayKey),
     );
     return overlayFrozenPremiumPlaysForMode(
       buildPremiumMarketPlays(data, marketMap, now, canViewStartedPremiumPlays, "value"),
@@ -9587,12 +9600,13 @@ function BestBetsPage({
       "value",
     )
       .filter((play) => !selectedKeys.has(getPremiumPlayKey(play)))
-      .sort(comparePremiumAdjustedConfidence)[0] || null;
-  }, [data, marketMap, now, canViewStartedPremiumPlays, frozen.snapshots, predictionByPairKey, archivedMatchKeys, corePlay, bestH2hPlay]);
+      .sort(comparePremiumAdjustedConfidence)
+      .slice(0, isAdmin ? 50 : 8);
+  }, [data, marketMap, now, canViewStartedPremiumPlays, isAdmin, frozen.snapshots, predictionByPairKey, archivedMatchKeys, matchReads, bestH2hPlays]);
 
   const highVariancePlays = useMemo(() => {
     const selectedKeys = new Set(
-      [corePlay, bestH2hPlay, valuePlay].filter(Boolean).map((play) => getPremiumPlayKey(play!)),
+      [...matchReads, ...bestH2hPlays, ...valuePlays].map(getPremiumPlayKey),
     );
     return overlayFrozenPremiumPlaysForMode(
       buildPremiumMarketPlays(data, marketMap, now, canViewStartedPremiumPlays, "highvariance"),
@@ -9603,8 +9617,8 @@ function BestBetsPage({
     )
       .filter((play) => !selectedKeys.has(getPremiumPlayKey(play)))
       .sort(comparePremiumAdjustedConfidence)
-      .slice(0, 3);
-  }, [data, marketMap, now, canViewStartedPremiumPlays, frozen.snapshots, predictionByPairKey, archivedMatchKeys, corePlay, bestH2hPlay, valuePlay]);
+      .slice(0, isAdmin ? 50 : 8);
+  }, [data, marketMap, now, canViewStartedPremiumPlays, isAdmin, frozen.snapshots, predictionByPairKey, archivedMatchKeys, matchReads, bestH2hPlays, valuePlays]);
 
   const latestTryScorerRound = Math.max(
     0,
@@ -9730,10 +9744,10 @@ function BestBetsPage({
       <div className="flex flex-col gap-4">
         <div>
           <h3 className="text-lg md:text-2xl font-black text-white uppercase tracking-tight">
-            Overall Best Bet
+            Overall Best Bets
           </h3>
           <div className="text-[10px] md:text-xs font-black text-white/45 uppercase tracking-widest mt-1">
-            The highest confidence-adjusted play after market calibration
+            Every play that clears the conservative Core Play threshold
           </div>
         </div>
         {isLoadingMarkets ? (
@@ -9742,7 +9756,7 @@ function BestBetsPage({
               Loading live line and total prices...
             </div>
           </GlassCard>
-        ) : !corePlay ? (
+        ) : matchReads.length === 0 ? (
           <GlassCard className="p-4 md:p-8 text-center border-l-4 border-l-white/20">
             <div className="text-white/50 font-bold uppercase tracking-widest text-[10px] md:text-base">
               No play clears the conservative Core Play threshold right now.
@@ -9750,57 +9764,67 @@ function BestBetsPage({
           </GlassCard>
         ) : (
           <div className="grid grid-cols-1 gap-5 md:gap-6">
-            <PremiumMarketPlayCard
-              key={corePlay.id}
-              play={corePlay}
-              now={now}
-              labels={bestH2hIsCore ? ["Core Play", "Best H2H"] : ["Core Play"]}
-              {...cardPropsForPlay(corePlay)}
-            />
+            {matchReads.map((play) => (
+              <PremiumMarketPlayCard
+                key={play.id}
+                play={play}
+                now={now}
+                labels={
+                  bestH2hKeys.has(getPremiumPlayKey(play))
+                    ? ["Core Play", "Best H2H"]
+                    : ["Core Play"]
+                }
+                {...cardPropsForPlay(play)}
+              />
+            ))}
           </div>
         )}
       </div>
 
-      {!isLoadingMarkets && bestH2hPlay && !bestH2hIsCore ? (
+      {!isLoadingMarkets && standaloneBestH2hPlays.length > 0 ? (
         <div className="flex flex-col gap-4">
           <div>
             <h3 className="text-lg md:text-2xl font-black text-white uppercase tracking-tight">
-              Best Head-to-Head
+              Best Head-to-Head Plays
             </h3>
             <div className="text-[10px] md:text-xs font-black text-white/45 uppercase tracking-widest mt-1">
-              The strongest positive H2H read available this round
+              Every positive H2H read that clears the calibrated threshold
             </div>
           </div>
           <div className="grid grid-cols-1 gap-5 md:gap-6">
-            <PremiumMarketPlayCard
-              key={bestH2hPlay.id}
-              play={bestH2hPlay}
-              now={now}
-              labels={["Best H2H"]}
-              {...cardPropsForPlay(bestH2hPlay)}
-            />
+            {standaloneBestH2hPlays.map((play) => (
+              <PremiumMarketPlayCard
+                key={play.id}
+                play={play}
+                now={now}
+                labels={["Best H2H"]}
+                {...cardPropsForPlay(play)}
+              />
+            ))}
           </div>
         </div>
       ) : null}
 
-      {!isLoadingMarkets && valuePlay ? (
+      {!isLoadingMarkets && valuePlays.length > 0 ? (
         <div className="flex flex-col gap-4">
           <div>
             <h3 className="text-lg md:text-2xl font-black text-white uppercase tracking-tight">
-              Best Value Play
+              Best Value Plays
             </h3>
             <div className="text-[10px] md:text-xs font-black text-white/45 uppercase tracking-widest mt-1">
               Positive adjusted value that sits below the Core Play threshold
             </div>
           </div>
           <div className="grid grid-cols-1 gap-5 md:gap-6">
-            <PremiumMarketPlayCard
-              key={valuePlay.id}
-              play={valuePlay}
-              now={now}
-              labels={["Value Play"]}
-              {...cardPropsForPlay(valuePlay)}
-            />
+            {valuePlays.map((play) => (
+              <PremiumMarketPlayCard
+                key={play.id}
+                play={play}
+                now={now}
+                labels={["Value Play"]}
+                {...cardPropsForPlay(play)}
+              />
+            ))}
           </div>
         </div>
       ) : null}
