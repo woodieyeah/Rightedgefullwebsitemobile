@@ -7900,7 +7900,7 @@ function PredictionsPage({
                       matchLabel={`${row.homeTeam} v ${row.awayTeam}`}
                       savedResult={savedResult}
                       frozenTryScorers={frozenScorerList}
-                      publicRevealPlays={rowKickedOff ? premiumPlayReveals : []}
+                      publicRevealPlays={isPremium || rowKickedOff ? premiumPlayReveals : []}
                     />
                   )}
                 </div>
@@ -8013,7 +8013,7 @@ function PredictionsPage({
                       matchLabel={`${row.homeTeam} v ${row.awayTeam}`}
                       savedResult={savedResult}
                       frozenTryScorers={frozenScorerList}
-                      publicRevealPlays={rowKickedOff ? premiumPlayReveals : []}
+                      publicRevealPlays={isPremium || rowKickedOff ? premiumPlayReveals : []}
                     />
                     )}
                     {!matchCompleted && !isPremium && (
@@ -8277,15 +8277,13 @@ function MatchPremiumSignalStrip({
       : savedResultMatchPlay.length
         ? savedResultMatchPlay
         : fallbackMatchPlay;
-    const completedRevealPlays = isPremium
-      ? []
-      : publicRevealPlays.filter(({ play: revealedPlay }) =>
-          !matchPlays.some(
-            (proof) =>
-              proof.market === revealedPlay.type &&
-              selectionsReferToSameMarket(proof.selection, revealedPlay.selection),
-          ),
-        );
+    const completedRevealPlays = publicRevealPlays.filter(({ play: revealedPlay }) =>
+      !matchPlays.some(
+        (proof) =>
+          proof.market === revealedPlay.type &&
+          selectionsReferToSameMarket(proof.selection, revealedPlay.selection),
+      ),
+    );
 
     if (!completedRevealPlays.length && !matchPlays.length && !tryScorerProofHits.length) {
       return null;
@@ -8356,6 +8354,35 @@ function MatchPremiumSignalStrip({
                   <span className="truncate">{scorer.player}</span>
                 </span>
               ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (isPremium && publicRevealPlays.length > 0) {
+    return (
+      <div className="mt-3 flex flex-col gap-2">
+        {publicRevealPlays.map(({ play: revealedPlay, labels }) => (
+          <PublicPremiumPlayRevealCard
+            key={getPremiumPlayKey(revealedPlay)}
+            play={revealedPlay}
+            labels={labels}
+            statusLabel={
+              hasPredictionKickedOff(revealedPlay.row)
+                ? "Revealed at kickoff"
+                : "Premium early access"
+            }
+          />
+        ))}
+        {hasTryScorers && (
+          <div className="min-w-0 border border-[#1E1E2E] bg-[#111116] px-3 py-2">
+            <div className="mb-1 text-[8px] font-black uppercase tracking-widest text-[#6B7280]">
+              Try scorers
+            </div>
+            <div className="truncate text-xs font-black uppercase text-white">
+              {scorerLabel}
             </div>
           </div>
         )}
