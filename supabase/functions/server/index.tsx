@@ -15,7 +15,7 @@ const BLUEBET_API_BASE_URL = "https://affiliate-api.bluebet.com.au";
 const BLUEBET_AFFILIATE_USER_AGENT =
   Deno.env.get("BLUEBET_AFFILIATE_USER_AGENT") || "rightedge.com.au";
 const AUTH_SESSION_COOKIE = "rightedge_session";
-const AUTH_SESSION_MAX_AGE_SECONDS = 7_776_000;
+const AUTH_SESSION_MAX_AGE_SECONDS = 15_552_000;
 const STRIPE_PREMIUM_EXPECTED_PRODUCT_ID = "prod_UhpquzY3WK2YXs";
 const STRIPE_PREMIUM_WEEKLY_AMOUNT_CENTS = 1400;
 const STRIPE_CHECKOUT_VERSION = "2026-06-05-current-premium-product";
@@ -209,7 +209,12 @@ function parseCookieHeader(cookieHeader?: string | null) {
   return cookieHeader.split(";").reduce<Record<string, string>>((acc, part) => {
     const [rawName, ...rawValue] = part.trim().split("=");
     if (!rawName) return acc;
-    acc[rawName] = decodeURIComponent(rawValue.join("=") || "");
+    const value = rawValue.join("=") || "";
+    try {
+      acc[rawName] = decodeURIComponent(value);
+    } catch {
+      acc[rawName] = value;
+    }
     return acc;
   }, {});
 }
@@ -297,44 +302,93 @@ function clearAuthSessionCookie(c: any) {
   );
 }
 
-async function getAuthSessionFromRequest(c: any): Promise<StoredAuthSession | null> {
+async function getAuthSessionFromRequest(
+  c: any,
+  options: { throwOnStoreError?: boolean } = {},
+): Promise<StoredAuthSession | null> {
+  const cookies = parseCookieHeader(c.req.header("cookie"));
+  const token = cookies[AUTH_SESSION_COOKIE];
+  if (!token) return null;
+
+  let stored: any;
   try {
-    const cookies = parseCookieHeader(c.req.header("cookie"));
-    const token = cookies[AUTH_SESSION_COOKIE];
-    if (!token) return null;
-
-    const stored = await kv.get(buildAuthSessionKey(token));
-    if (!stored) return null;
-
-    const session: StoredAuthSession =
-      typeof stored === "string" ? JSON.parse(stored) : stored;
-
-    if (!session?.email || !session?.tier || !session?.expiresAt) {
-      await kv.del(buildAuthSessionKey(token));
-      clearAuthSessionCookie(c);
-      return null;
-    }
-
-    if (Date.now() >= new Date(session.expiresAt).getTime()) {
-      await kv.del(buildAuthSessionKey(token));
-      clearAuthSessionCookie(c);
-      return null;
-    }
-
-    return session;
+    stored = await kv.get(buildAuthSessionKey(token));
   } catch (error) {
-    console.error("[auth/session] Failed to read session:", error);
+    console.error("[auth/session] Failed to read session store:", error);
+    if (options.throwOnStoreError) throw error;
     return null;
   }
+
+  if (!stored) return null;
+
+  const session = parseKvValue<StoredAuthSession>(stored);
+  const expiresAt = session?.expiresAt
+    ? new Date(session.expiresAt).getTime()
+    : Number.NaN;
+  const isValidTier = session?.tier === "free" || session?.tier === "premium";
+
+  if (
+    !session?.token ||
+    session.token !== token ||
+    !session.email ||
+    !isValidTier ||
+    !Number.isFinite(expiresAt)
+  ) {
+    try {
+      await kv.del(buildAuthSessionKey(token));
+    } catch (error) {
+      console.error("[auth/session] Failed to delete invalid session:", error);
+    } finally {
+      clearAuthSessionCookie(c);
+    }
+    return null;
+  }
+
+  if (Date.now() >= expiresAt) {
+    try {
+      await kv.del(buildAuthSessionKey(token));
+    } catch (error) {
+      console.error("[auth/session] Failed to delete expired session:", error);
+    } finally {
+      clearAuthSessionCookie(c);
+    }
+    return null;
+  }
+
+  return session;
+}
+
+async function renewAuthSession(
+  c: any,
+  session: StoredAuthSession,
+  tier: AuthSessionTier = session.tier,
+) {
+  const renewedSession: StoredAuthSession = {
+    ...session,
+    tier,
+    expiresAt: new Date(
+      Date.now() + AUTH_SESSION_MAX_AGE_SECONDS * 1000,
+    ).toISOString(),
+  };
+
+  await kv.set(
+    buildAuthSessionKey(renewedSession.token),
+    JSON.stringify(renewedSession),
+  );
+  writeAuthSessionCookie(c, renewedSession.token);
+  return renewedSession;
 }
 
 async function clearAuthSession(c: any) {
   const cookies = parseCookieHeader(c.req.header("cookie"));
   const token = cookies[AUTH_SESSION_COOKIE];
-  if (token) {
-    await kv.del(buildAuthSessionKey(token));
+  try {
+    if (token) {
+      await kv.del(buildAuthSessionKey(token));
+    }
+  } finally {
+    clearAuthSessionCookie(c);
   }
-  clearAuthSessionCookie(c);
 }
 
 // Mirrors the frontend ADMIN_EMAILS list (App.tsx). Server-side guard for
@@ -483,45 +537,47 @@ app.post("/track-event", async (c) => {
 });
 
 app.get("/auth/session", async (c) => {
-  const session = await getAuthSessionFromRequest(c);
+  c.header("Cache-Control", "private, no-store");
 
-  if (!session) {
-    clearAuthSessionCookie(c);
-    return c.json({
-      authenticated: false,
-      email: null,
-      tier: "none",
-      free: false,
-      premium: false,
+  try {
+    const session = await getAuthSessionFromRequest(c, {
+      throwOnStoreError: true,
     });
-  }
 
-  const premium = session.tier === "premium"
-    ? await isPremiumSubscriberActive(session.email)
-    : false;
+    if (!session) {
+      clearAuthSessionCookie(c);
+      return c.json({
+        authenticated: false,
+        email: null,
+        tier: "none",
+        free: false,
+        premium: false,
+      });
+    }
 
-  if (session.tier === "premium" && !premium) {
+    const premium = session.tier === "premium"
+      ? await isPremiumSubscriberActive(session.email)
+      : false;
+    const responseTier: AuthSessionTier =
+      session.tier === "premium" && !premium ? "free" : session.tier;
+    const renewedSession = await renewAuthSession(c, session);
+
     return c.json({
       authenticated: true,
-      email: session.email,
-      tier: "free",
+      email: renewedSession.email,
+      tier: responseTier,
       free: true,
-      premium: false,
-      expiresAt: session.expiresAt,
+      premium: responseTier === "premium" && premium,
+      expiresAt: renewedSession.expiresAt,
     });
+  } catch (error) {
+    console.error("[auth/session] Session refresh failed:", error);
+    return c.json({ error: "Unable to refresh session." }, 503);
   }
-
-  return c.json({
-    authenticated: true,
-    email: session.email,
-    tier: session.tier,
-    free: true,
-    premium,
-    expiresAt: session.expiresAt,
-  });
 });
 
 app.post("/auth/logout", async (c) => {
+  c.header("Cache-Control", "private, no-store");
   await clearAuthSession(c);
   return c.json({ success: true });
 });
