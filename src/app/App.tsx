@@ -3257,6 +3257,55 @@ let runtimeAuthState: RuntimeAuthState = {
   tier: "none",
 };
 
+type AuthSessionCheckResult =
+  | { status: "authenticated"; email: string; tier: Exclude<AuthTier, "none"> }
+  | { status: "unauthenticated" }
+  | { status: "failed" };
+
+let authSessionCheckPromise: Promise<AuthSessionCheckResult> | null = null;
+
+function requestAuthSession(): Promise<AuthSessionCheckResult> {
+  if (authSessionCheckPromise) return authSessionCheckPromise;
+
+  authSessionCheckPromise = (async (): Promise<AuthSessionCheckResult> => {
+    try {
+      const res = await fetch(`/api/auth/session`, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${publicAnonKey}`,
+        },
+        credentials: "include",
+      });
+
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok || !data) {
+        return { status: "failed" };
+      }
+
+      if (data.authenticated === true && data.email) {
+        return {
+          status: "authenticated",
+          email: String(data.email).trim().toLowerCase(),
+          tier: data.tier === "premium" ? "premium" : "free",
+        };
+      }
+
+      if (data.authenticated === false) {
+        return { status: "unauthenticated" };
+      }
+
+      return { status: "failed" };
+    } catch {
+      return { status: "failed" };
+    }
+  })().finally(() => {
+    authSessionCheckPromise = null;
+  });
+
+  return authSessionCheckPromise;
+}
+
 function updateRuntimeAuthState(nextState: RuntimeAuthState) {
   runtimeAuthState = nextState;
 }
@@ -13166,6 +13215,7 @@ export default function App() {
   const [emailGateTarget, setEmailGateTarget] = useState<"app" | "cricket">("app");
   const [showPaymentGate, setShowPaymentGate] = useState(false);
   const [authState, setAuthState] = useState<RuntimeAuthState>(() => runtimeAuthState);
+  const [authSessionCheckFailed, setAuthSessionCheckFailed] = useState(false);
   const [paidAccessState, setPaidAccessState] = useState(() => hasPaidAccess());
   const [isAdmin, setIsAdmin] = useState(() => isUserAdmin());
 
@@ -13181,43 +13231,32 @@ export default function App() {
   };
 
   const refreshAuthSession = async (): Promise<RuntimeAuthState> => {
-    try {
-      const res = await fetch(`/api/auth/session`, {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${publicAnonKey}`,
-        },
-        credentials: "include",
-      });
+    const result = await requestAuthSession();
 
-      const data = await res.json().catch(() => ({}));
-
-      if (res.ok && data.authenticated && data.email) {
-        const nextState: RuntimeAuthState = {
-          checked: true,
-          email: String(data.email).trim().toLowerCase(),
-          tier: data.tier === "premium" ? "premium" : "free",
-        };
-        applyAuthState(nextState);
-        return nextState;
-      }
-
+    if (result.status === "authenticated") {
       const nextState: RuntimeAuthState = {
         checked: true,
-        email: null,
-        tier: "none",
+        email: result.email,
+        tier: result.tier,
       };
-      applyAuthState(nextState);
-      return nextState;
-    } catch {
-      const nextState: RuntimeAuthState = {
-        checked: true,
-        email: null,
-        tier: "none",
-      };
+      setAuthSessionCheckFailed(false);
       applyAuthState(nextState);
       return nextState;
     }
+
+    if (result.status === "unauthenticated") {
+      const nextState: RuntimeAuthState = {
+        checked: true,
+        email: null,
+        tier: "none",
+      };
+      setAuthSessionCheckFailed(false);
+      applyAuthState(nextState);
+      return nextState;
+    }
+
+    setAuthSessionCheckFailed(true);
+    return runtimeAuthState;
   };
 
   // Setup Analytics Tracking (meta tags now handled by <Helmet> — rendered synchronously)
@@ -13665,6 +13704,28 @@ export default function App() {
   useEffect(() => {
     loadData();
   }, []);
+
+  if (!authState.checked) {
+    return (
+      <div className="min-h-screen bg-[#0A0A0F] text-white flex items-center justify-center px-6">
+        <div className="flex max-w-md flex-col items-center gap-4 text-center">
+          <RefreshCw className="h-6 w-6 animate-spin text-[#9CA3AF]" />
+          <div className="text-sm font-medium uppercase tracking-widest text-[#9CA3AF]">
+            Restoring your RightEdge session
+          </div>
+          {authSessionCheckFailed && (
+            <button
+              type="button"
+              onClick={() => void refreshAuthSession()}
+              className="border border-[#1E1E2E] px-4 py-2 text-xs font-medium uppercase tracking-widest text-white transition hover:border-white/30"
+            >
+              Retry
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <HelmetProvider>
