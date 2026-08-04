@@ -879,7 +879,11 @@ function getArchiveFixture(archive: RoundArchive, match: string): FixtureRow | n
 }
 
 function buildArchivedPredictionRows(archive: RoundArchive): PredictionRow[] {
-  return archive.matchPlays.map((play) => {
+  const rowsByMatch = new Map<string, PredictionRow>();
+
+  for (const play of archive.matchPlays) {
+    const matchKey = getMatchPairKeyFromLabel(play.match);
+    if (rowsByMatch.has(matchKey)) continue;
     const { homeTeam, awayTeam } = splitMatchTeams(play.match);
     const { homeScore, awayScore } = parseScorePair(play.finalScore || play.modelScore);
     const predictedWinner =
@@ -889,7 +893,7 @@ function buildArchivedPredictionRows(archive: RoundArchive): PredictionRow[] {
           ? awayTeam
           : normalizeTeamName(play.selection);
 
-    return {
+    rowsByMatch.set(matchKey, {
       match: `${homeTeam} v ${awayTeam}`,
       roundNumber: archive.round,
       homeTeam,
@@ -909,8 +913,10 @@ function buildArchivedPredictionRows(archive: RoundArchive): PredictionRow[] {
       confidence: "Value",
       fixture: getArchiveFixture(archive, play.match),
       bestEdge: 0,
-    };
-  });
+    });
+  }
+
+  return Array.from(rowsByMatch.values());
 }
 
 type RoundSummary = {
@@ -2189,10 +2195,68 @@ function reconstructFrozenPlay(
   return reconstructFrozenPlayForMode(snapshot, row, primaryMode)!;
 }
 
-// Convert a frozen snapshot + saved result into a RoundProofMatchPlay (for the
-// rolled-over archive view).
+type FrozenArchivePlay = FrozenChooserPlayPayload | FrozenPlayPayload;
+
+function getFrozenArchivePlays(snapshot: FrozenSnapshot): FrozenArchivePlay[] {
+  const bundled = snapshot.payload.premiumPlays || [];
+  return bundled.length > 0 ? bundled : [snapshot.payload];
+}
+
+function getFrozenPlayMarketPoint(play: FrozenArchivePlay) {
+  return Number.isFinite(play.marketPoint)
+    ? Number(play.marketPoint)
+    : parseOfficialPlayPoint(play.selection, play.type);
+}
+
+function settleFrozenPlayFromFinalScore(
+  snapshot: FrozenSnapshot,
+  play: FrozenArchivePlay,
+  result: SavedRoundResult | null,
+): ProofResult | undefined {
+  if (!result || result.finalHome == null || result.finalAway == null) return undefined;
+
+  const homeTeam = normalizeTeamName(snapshot.payload.homeTeam);
+  const awayTeam = normalizeTeamName(snapshot.payload.awayTeam);
+  const selectedTeam = normalizeTeamName(play.selection);
+  const selectedIsHome = selectedTeam === homeTeam;
+  const selectedIsAway = selectedTeam === awayTeam;
+
+  if (play.type === "Head 2 Head") {
+    if (!selectedIsHome && !selectedIsAway) return undefined;
+    if (result.finalHome === result.finalAway) return "Needs Check";
+    const selectedWon = selectedIsHome
+      ? result.finalHome > result.finalAway
+      : result.finalAway > result.finalHome;
+    return selectedWon ? "Hit" : "Miss";
+  }
+
+  const marketPoint = getFrozenPlayMarketPoint(play);
+  if (!Number.isFinite(marketPoint)) return undefined;
+
+  if (play.type === "Line") {
+    if (!selectedIsHome && !selectedIsAway) return undefined;
+    const selectedScore = selectedIsHome ? result.finalHome : result.finalAway;
+    const opponentScore = selectedIsHome ? result.finalAway : result.finalHome;
+    const margin = selectedScore + Number(marketPoint) - opponentScore;
+    if (margin === 0) return "Needs Check";
+    return margin > 0 ? "Hit" : "Miss";
+  }
+
+  const total = result.finalHome + result.finalAway;
+  const isOver = /\bover\b/i.test(play.selection);
+  const isUnder = /\bunder\b/i.test(play.selection);
+  if (!isOver && !isUnder) return undefined;
+  if (total === Number(marketPoint)) return "Needs Check";
+  return isOver
+    ? total > Number(marketPoint) ? "Hit" : "Miss"
+    : total < Number(marketPoint) ? "Hit" : "Miss";
+}
+
+// Convert one play from a frozen snapshot + saved result into the proof shape
+// consumed by completed match cards.
 function frozenToProofMatchPlay(
   snapshot: FrozenSnapshot,
+  play: FrozenArchivePlay,
   result: SavedRoundResult | null,
 ): RoundProofMatchPlay {
   const payload = snapshot.payload;
@@ -2200,16 +2264,25 @@ function frozenToProofMatchPlay(
     result && result.finalHome != null && result.finalAway != null
       ? `${result.finalHome}-${result.finalAway}`
       : "";
+  const hasChooserBundle = Boolean(payload.premiumPlays?.length);
+  const isPrimaryPlay =
+    !hasChooserBundle ||
+    ("mode" in play && play.mode === "bestbet");
+  const derivedResult = settleFrozenPlayFromFinalScore(snapshot, play, result);
+  const savedPrimaryResult = isPrimaryPlay
+    ? playResultToProof(result?.playResult ?? null)
+    : undefined;
+
   return {
     match: payload.fixture?.match || snapshot.match,
-    selection: payload.selection,
-    market: payload.type,
+    selection: play.selection,
+    market: play.type,
     modelScore: payload.predictedScore || "—",
     finalScore,
-    modelPct: payload.modelPct,
-    odds: payload.odds,
-    bookmaker: payload.bookmaker,
-    result: playResultToProof(result?.playResult ?? null) || "Pending",
+    modelPct: play.modelPct,
+    odds: play.odds,
+    bookmaker: play.bookmaker,
+    result: savedPrimaryResult || derivedResult || "Pending",
     note: "",
   };
 }
@@ -2297,7 +2370,18 @@ function buildKvDerivedArchive(
       });
     }
 
-    matchPlays.push(frozenToProofMatchPlay(snapshot, result));
+    const seenPlays = new Set<string>();
+    for (const play of getFrozenArchivePlays(snapshot)) {
+      const marketPoint = getFrozenPlayMarketPoint(play);
+      const playKey = [
+        play.type,
+        play.selection.trim().toLowerCase(),
+        Number.isFinite(marketPoint) ? marketPoint : "",
+      ].join("|");
+      if (seenPlays.has(playKey)) continue;
+      seenPlays.add(playKey);
+      matchPlays.push(frozenToProofMatchPlay(snapshot, play, result));
+    }
 
     for (const ts of snapshot.payload.tryScorers || []) {
       const hit = Boolean(result?.tryScorerHits?.[normalizeTryScorerPlayerKey(ts.player)]);
@@ -12542,6 +12626,10 @@ function AppDashboard({
     () => ROUND_ARCHIVES.find((archive) => archive.round === selectedArchiveRound) || null,
     [selectedArchiveRound, archiveVersion],
   );
+  const latestRoundArchive = useMemo(
+    () => ROUND_ARCHIVES[0] || null,
+    [archiveVersion],
+  );
 
   useEffect(() => {
     const handleHashChange = () => {
@@ -12832,11 +12920,27 @@ function AppDashboard({
             </div>
             <div className="flex flex-wrap items-center gap-2 md:gap-4 text-[10px] md:text-sm text-white font-medium uppercase tracking-wider mt-2 xl:mt-0">
               {page === "matches" ? (
-                <RoundSwitcher
-                  liveLabel={data?.currentRoundLabel || "Round 1"}
-                  selectedArchiveRound={selectedArchiveRound}
-                  onSelectArchiveRound={setSelectedArchiveRound}
-                />
+                <>
+                  {!selectedRoundArchive && latestRoundArchive ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedArchiveRound(latestRoundArchive.round);
+                        window.scrollTo({ top: 0, behavior: "smooth" });
+                      }}
+                      title={`View ${latestRoundArchive.label}`}
+                      className="inline-flex items-center gap-2 border border-[#FFEA00]/35 bg-[#FFEA00]/10 px-3 py-1.5 text-[#FFEA00] transition hover:border-[#FFEA00]/60 hover:bg-[#FFEA00]/15 md:px-4 md:py-2"
+                    >
+                      <span>Last Round Results</span>
+                      <ArrowRight className="h-3.5 w-3.5" />
+                    </button>
+                  ) : null}
+                  <RoundSwitcher
+                    liveLabel={data?.currentRoundLabel || "Round 1"}
+                    selectedArchiveRound={selectedArchiveRound}
+                    onSelectArchiveRound={setSelectedArchiveRound}
+                  />
+                </>
               ) : (
                 <span className="inline-flex items-center gap-2 bg-[#16161D] px-3 md:px-4 py-1.5 md:py-2 border border-[#1E1E2E]">
                   <span className="relative flex h-2.5 w-2.5">
