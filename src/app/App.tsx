@@ -809,10 +809,171 @@ const ROUND_15_LIVE_PROOF: RoundArchive = {
   ],
 };
 
+// Published Round 22 archive. This is intentionally embedded so it remains
+// available after the live model advances and does not depend on KV history.
+const ROUND_22_PROOF: RoundArchive = {
+  round: 22,
+  label: "Round 22 Results",
+  status: "Results",
+  fixtures: [
+    {
+      match: "Dragons v Dolphins",
+      day: "Friday",
+      dateISO: "2026-07-31",
+      dateLabel: "Jul 31",
+      aedt: "6:00 PM",
+      stadium: "WIN Stadium",
+    },
+    {
+      match: "Storm v Bulldogs",
+      day: "Friday",
+      dateISO: "2026-07-31",
+      dateLabel: "Jul 31",
+      aedt: "8:00 PM",
+      stadium: "AAMI Park",
+    },
+    {
+      match: "Titans v Warriors",
+      day: "Saturday",
+      dateISO: "2026-08-01",
+      dateLabel: "Aug 1",
+      aedt: "3:00 PM",
+      stadium: "CBUS Super Stadium",
+    },
+    {
+      match: "Panthers v Raiders",
+      day: "Saturday",
+      dateISO: "2026-08-01",
+      dateLabel: "Aug 1",
+      aedt: "5:30 PM",
+      stadium: "Glen Willow, Mudgee",
+    },
+    {
+      match: "Broncos v Knights",
+      day: "Saturday",
+      dateISO: "2026-08-01",
+      dateLabel: "Aug 1",
+      aedt: "7:30 PM",
+      stadium: "Suncorp Stadium",
+    },
+    {
+      match: "Sharks v Rabbitohs",
+      day: "Sunday",
+      dateISO: "2026-08-02",
+      dateLabel: "Aug 2",
+      aedt: "2:00 PM",
+      stadium: "Cronulla Stadium",
+    },
+    {
+      match: "Tigers v Eels",
+      day: "Sunday",
+      dateISO: "2026-08-02",
+      dateLabel: "Aug 2",
+      aedt: "4:05 PM",
+      stadium: "CommBank Stadium",
+    },
+  ],
+  matchPlays: [
+    {
+      match: "Dragons v Dolphins",
+      selection: "Dragons +15.5",
+      market: "Line",
+      modelScore: "17-30",
+      finalScore: "17-30",
+      odds: 1.92,
+      bookmaker: "Sportsbet",
+      result: "Hit",
+      note: "Dragons covered the line.",
+    },
+    {
+      match: "Storm v Bulldogs",
+      selection: "Storm +5.5",
+      market: "Line",
+      modelScore: "22-23",
+      finalScore: "22-23",
+      odds: 2,
+      bookmaker: "Sportsbet",
+      result: "Miss",
+      note: "Published Round 22 result.",
+    },
+    {
+      match: "Titans v Warriors",
+      selection: "Warriors -3.5",
+      market: "Line",
+      modelScore: "20-26",
+      finalScore: "20-26",
+      odds: 1.85,
+      bookmaker: "TAB",
+      result: "Hit",
+      note: "Warriors covered the line.",
+    },
+    {
+      match: "Panthers v Raiders",
+      selection: "Panthers -8.5",
+      market: "Line",
+      modelScore: "29-17",
+      finalScore: "29-17",
+      odds: 1.91,
+      bookmaker: "Sportsbet",
+      result: "Hit",
+      note: "Panthers covered the line.",
+    },
+    {
+      match: "Panthers v Raiders",
+      selection: "Panthers head-to-head",
+      market: "Head 2 Head",
+      modelScore: "29-17",
+      finalScore: "29-17",
+      odds: 1.38,
+      bookmaker: "Betr",
+      result: "Hit",
+      note: "Panthers won outright.",
+    },
+    {
+      match: "Broncos v Knights",
+      selection: "Knights +5.5",
+      market: "Line",
+      modelScore: "25-24",
+      finalScore: "25-24",
+      odds: 1.95,
+      bookmaker: "Sportsbet",
+      result: "Hit",
+      note: "Knights covered the line.",
+    },
+    {
+      match: "Sharks v Rabbitohs",
+      selection: "Rabbitohs +12.5",
+      market: "Line",
+      modelScore: "31-21",
+      finalScore: "31-21",
+      odds: 1.9,
+      bookmaker: "Sportsbet",
+      result: "Miss",
+      note: "Published Round 22 result.",
+    },
+    {
+      match: "Tigers v Eels",
+      selection: "Tigers +7.5",
+      market: "Line",
+      modelScore: "26-25",
+      finalScore: "26-25",
+      odds: 2,
+      bookmaker: "Sportsbet",
+      result: "Hit",
+      note: "Tigers covered the line.",
+    },
+  ],
+  tryScorers: [],
+};
+
 // Hardcoded proof archives (kept working as-is). New rounds are derived from KV
 // at runtime and merged in via registerKvDerivedArchives() below.
-const HARDCODED_PROOF_ARCHIVES: RoundArchive[] = [ROUND_15_LIVE_PROOF, ROUND_14_PROOF];
-const HARDCODED_ROUND_ARCHIVES: RoundArchive[] = [ROUND_14_PROOF];
+const HARDCODED_PROOF_ARCHIVES: RoundArchive[] = [
+  ROUND_22_PROOF,
+  ROUND_15_LIVE_PROOF,
+  ROUND_14_PROOF,
+];
+const HARDCODED_ROUND_ARCHIVES: RoundArchive[] = [ROUND_22_PROOF, ROUND_14_PROOF];
 
 // KV-derived archives (rolled-over rounds). Replaced wholesale when KV loads.
 let KV_DERIVED_ARCHIVES: RoundArchive[] = [];
@@ -12628,10 +12789,13 @@ function AppDashboard({
   const [archiveVersion, setArchiveVersion] = useState(0);
 
   // REQ3 rollover: load archives for rounds past their Tuesday boundary and
-  // register them so they render through the same dropdown UI as ROUND_14_PROOF.
+  // register them so they render through the same dropdown UI as hardcoded proof.
   useEffect(() => {
     if (!data) return;
-    const rounds = getArchivedRoundNumbers(data, Date.now());
+    const hardcodedRounds = new Set(HARDCODED_ROUND_ARCHIVES.map((archive) => archive.round));
+    const rounds = getArchivedRoundNumbers(data, Date.now()).filter(
+      (round) => !hardcodedRounds.has(round),
+    );
     if (rounds.length === 0) return;
     let mounted = true;
     loadKvDerivedArchivesForRounds(rounds).then((archives) => {
