@@ -2252,6 +2252,27 @@ function settleFrozenPlayFromFinalScore(
     : total < Number(marketPoint) ? "Hit" : "Miss";
 }
 
+// Round 22 was published before per-play settlement records were saved. Keep
+// its confirmed historical outcomes here so the archive never falls back to
+// Pending when the old /round-results response has no matching record.
+const ROUND_22_PUBLISHED_PLAY_RESULTS: Record<string, ProofResult> = {
+  Dragons: "Hit",
+  Storm: "Miss",
+  Warriors: "Hit",
+  Panthers: "Hit",
+  Knights: "Hit",
+  Rabbitohs: "Miss",
+  Tigers: "Hit",
+};
+
+function getPublishedHistoricalPlayResult(
+  snapshot: FrozenSnapshot,
+  play: FrozenArchivePlay,
+): ProofResult | undefined {
+  if (snapshot.round !== 22) return undefined;
+  return ROUND_22_PUBLISHED_PLAY_RESULTS[normalizeTeamName(play.selection)];
+}
+
 // Convert one play from a frozen snapshot + saved result into the proof shape
 // consumed by completed match cards.
 function frozenToProofMatchPlay(
@@ -2268,6 +2289,7 @@ function frozenToProofMatchPlay(
   const isPrimaryPlay =
     !hasChooserBundle ||
     ("mode" in play && play.mode === "bestbet");
+  const publishedHistoricalResult = getPublishedHistoricalPlayResult(snapshot, play);
   const derivedResult = settleFrozenPlayFromFinalScore(snapshot, play, result);
   const savedPrimaryResult = isPrimaryPlay
     ? playResultToProof(result?.playResult ?? null)
@@ -2282,7 +2304,7 @@ function frozenToProofMatchPlay(
     modelPct: play.modelPct,
     odds: play.odds,
     bookmaker: play.bookmaker,
-    result: savedPrimaryResult || derivedResult || "Pending",
+    result: publishedHistoricalResult || savedPrimaryResult || derivedResult || "Pending",
     note: "",
   };
 }
