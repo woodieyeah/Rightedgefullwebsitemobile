@@ -8059,6 +8059,17 @@ function PredictionsPage({
             }));
           const proofMatchPlays = getRoundProofMatchPlaysForPrediction(row, selectedArchive);
           const proofTryScorerHits = getRoundProofTryScorerHitsForPrediction(row, selectedArchive);
+          // The Sharks v Dragons archive contains an obsolete Sharks line,
+          // final score, and scorer proof. Ignore them on the matches card so
+          // it shows the current projection and Dragons +18.5 play only.
+          const hideLegacySharksDragonsProof =
+            getPredictionPairKey(row) === getMatchPairKeyFromLabel("Sharks v Dragons");
+          const matchesCardProofMatchPlays = hideLegacySharksDragonsProof
+            ? []
+            : proofMatchPlays;
+          const matchesCardProofTryScorerHits = hideLegacySharksDragonsProof
+            ? []
+            : proofTryScorerHits;
           const proofFinalScore = proofMatchPlays.find((play) => play.finalScore)?.finalScore || "";
           const proofFinalScorePair = proofFinalScore ? parseScorePair(proofFinalScore) : null;
           // An admin-entered result (final score or HIT/MISS/PUSH) settles the card
@@ -8073,16 +8084,20 @@ function PredictionsPage({
             savedResult && savedResult.finalHome != null && savedResult.finalAway != null
               ? { homeScore: savedResult.finalHome, awayScore: savedResult.finalAway }
               : null;
-          const displayHomeScore = proofFinalScorePair
-            ? proofFinalScorePair.homeScore
-            : savedFinalScorePair
-              ? savedFinalScorePair.homeScore
-              : projectedHomeScore;
-          const displayAwayScore = proofFinalScorePair
-            ? proofFinalScorePair.awayScore
-            : savedFinalScorePair
-              ? savedFinalScorePair.awayScore
-              : projectedAwayScore;
+          const displayHomeScore = hideLegacySharksDragonsProof
+            ? projectedHomeScore
+            : proofFinalScorePair
+              ? proofFinalScorePair.homeScore
+              : savedFinalScorePair
+                ? savedFinalScorePair.homeScore
+                : projectedHomeScore;
+          const displayAwayScore = hideLegacySharksDragonsProof
+            ? projectedAwayScore
+            : proofFinalScorePair
+              ? proofFinalScorePair.awayScore
+              : savedFinalScorePair
+                ? savedFinalScorePair.awayScore
+                : projectedAwayScore;
           const matchCompleted = Boolean(selectedArchive) || isFixtureCompleted(row.fixture, now) || hasSettledRoundProofForPrediction(row, selectedArchive) || hasSavedSettlement;
           const fixtureStatus = matchCompleted
             ? {
@@ -8162,10 +8177,10 @@ function PredictionsPage({
                       play={premiumMarketPlay}
                       settledBet={settledPremiumBet}
                       tryScorerSignals={tryScorerSignals}
-                      proofMatchPlays={proofMatchPlays}
-                      proofTryScorerHits={proofTryScorerHits}
+                      proofMatchPlays={matchesCardProofMatchPlays}
+                      proofTryScorerHits={matchesCardProofTryScorerHits}
                       matchLabel={`${row.homeTeam} v ${row.awayTeam}`}
-                      savedResult={savedResult}
+                      savedResult={hideLegacySharksDragonsProof ? null : savedResult}
                       frozenTryScorers={frozenScorerList}
                       publicRevealPlays={isPremium || rowKickedOff ? premiumPlayReveals : []}
                     />
@@ -8275,10 +8290,10 @@ function PredictionsPage({
                         play={premiumMarketPlay}
                         settledBet={settledPremiumBet}
                         tryScorerSignals={tryScorerSignals}
-                        proofMatchPlays={proofMatchPlays}
-                        proofTryScorerHits={proofTryScorerHits}
+                        proofMatchPlays={matchesCardProofMatchPlays}
+                        proofTryScorerHits={matchesCardProofTryScorerHits}
                       matchLabel={`${row.homeTeam} v ${row.awayTeam}`}
-                      savedResult={savedResult}
+                      savedResult={hideLegacySharksDragonsProof ? null : savedResult}
                       frozenTryScorers={frozenScorerList}
                       publicRevealPlays={isPremium || rowKickedOff ? premiumPlayReveals : []}
                     />
