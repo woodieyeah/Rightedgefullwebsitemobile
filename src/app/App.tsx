@@ -11395,11 +11395,20 @@ function TryScorersPage({
 
                 {/* Desktop */}
                 <div className="hidden md:block overflow-x-auto">
-                  <table className="w-full min-w-[920px] text-left border-collapse">
+                  <table className="w-full table-fixed text-left border-collapse">
+                    <colgroup>
+                      <col className="w-[24%]" />
+                      <col className="w-[8%]" />
+                      <col className="w-[10%]" />
+                      <col className="w-[11%]" />
+                      <col className="w-[11%]" />
+                      <col className="w-[22%]" />
+                      <col className="w-[14%]" />
+                    </colgroup>
                     <thead>
                       <tr className="border-b border-white/10">
                         {["Player", "Round", "Model %", "Market %", "Best Odds", "Bookmaker", "Signal"].map((h) => (
-                          <th key={h} className="pb-3 px-3 font-black text-white/40 uppercase tracking-widest text-[10px]">
+                          <th key={h} className="px-2 pb-3 font-black text-white/40 uppercase tracking-widest text-[10px]">
                             {h}
                           </th>
                         ))}
@@ -11418,27 +11427,27 @@ function TryScorersPage({
                               : "hover:bg-white/[0.03]"
                           }`}
                         >
-                          <td className="py-4 px-3">
-                            <div className="flex items-center gap-2">
+                          <td className="px-2 py-4">
+                            <div className="flex min-w-0 items-center gap-2">
                               <TeamLogo teamName={row.team} className="w-5 h-5 text-[8px]" />
-                              <span className="text-sm font-black text-white">{row.player}</span>
+                              <span className="min-w-0 truncate text-sm font-black text-white">{row.player}</span>
                             </div>
                           </td>
-                          <td className="py-4 px-3 text-xs font-black text-white/40 uppercase tracking-widest">
+                          <td className="px-2 py-4 text-xs font-black text-white/40 uppercase tracking-widest">
                             {row.round ? `R${row.round}` : "—"}
                           </td>
-                          <td className="py-4 px-3 text-sm font-bold text-white">
+                          <td className="px-2 py-4 text-sm font-bold text-white">
                             {formatPercent(row.statsInsiderPct, 1)}
                           </td>
-                          <td className="py-4 px-3 text-sm font-bold text-white/50">
+                          <td className="px-2 py-4 text-sm font-bold text-white/50">
                             {formatPercent(row.marketImpliedPct, 1)}
                           </td>
-                          <td className="py-4 px-3">
+                          <td className="px-2 py-4">
                             <div className={isBetrBookmaker(row.bookmaker) ? "text-sm font-black text-[#093AD3]" : "text-sm font-black text-[#00E676]"}>
                               ${row.bestOdds.toFixed(2)}
                             </div>
                           </td>
-                          <td className="py-4 px-3 text-xs font-bold text-[#FFEA00] uppercase tracking-wider min-w-[150px]">
+                          <td className="px-2 py-4 text-xs font-bold text-[#FFEA00] uppercase tracking-wider">
                             <AffiliateMarketButton
                               payload="rightedge_try_scorer"
                               bookmaker={row.bookmaker}
@@ -11447,8 +11456,8 @@ function TryScorersPage({
                               className="!min-h-[34px] !px-2.5 !py-1 !text-[10px]"
                             />
                           </td>
-                          <td className="py-4 px-3">
-                            <span className={`inline-flex px-2 py-1 text-xs font-black uppercase tracking-widest ${getTryScorerSignalClass(signal?.label)}`}>
+                          <td className="px-2 py-4">
+                            <span className={`inline-flex max-w-full whitespace-nowrap px-2 py-1 text-[10px] font-black uppercase tracking-wider ${getTryScorerSignalClass(signal?.label)}`}>
                               {signal?.label || "Watch"}
                             </span>
                           </td>
