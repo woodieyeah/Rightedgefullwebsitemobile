@@ -7954,20 +7954,21 @@ function MatchesUpgradeBanner({
 
   return (
     <div
-      className="border border-[#1E1E2E] bg-[#16161D] px-4 py-3 md:px-5"
+      className="relative border border-[#1E1E2E] bg-[#16161D] px-4 py-2.5 pr-10 md:px-5 md:py-3 md:pr-11"
       role="region"
       aria-label="Premium upgrade information"
     >
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between md:gap-5">
+      <span aria-hidden="true" className="absolute inset-y-0 left-0 w-1 bg-[#4ADE80]" />
+      <div className="flex flex-col gap-2.5 md:flex-row md:items-center md:justify-between md:gap-5">
         <div className="min-w-0 flex-1">
-          <div className="text-sm font-semibold leading-snug text-white">
+          <div className="text-[15px] font-bold leading-snug text-white md:text-base">
             You're seeing the model's predictions. Premium subscribers see which ones it backs.
           </div>
-          <div className="mt-1 text-xs leading-relaxed text-[#9CA3AF]">
+          <div className="mt-0.5 text-[11px] leading-relaxed text-[#9CA3AF] md:text-xs">
             Core Plays, best H2H and try scorer value — every match, every round.
           </div>
         </div>
-        <div className="flex shrink-0 items-center gap-2 self-start md:self-auto">
+        <div className="flex shrink-0 items-center self-start md:self-auto">
           <button
             type="button"
             onClick={() => onRequestAccess("best-bets")}
@@ -7975,17 +7976,17 @@ function MatchesUpgradeBanner({
           >
             See what's inside
           </button>
-          <button
-            type="button"
-            onClick={dismiss}
-            className="inline-flex h-9 w-9 shrink-0 items-center justify-center border border-[#1E1E2E] text-[#6B7280] transition hover:border-white/20 hover:text-white"
-            aria-label="Dismiss premium upgrade information"
-            title="Not now"
-          >
-            <X className="h-4 w-4" />
-          </button>
         </div>
       </div>
+      <button
+        type="button"
+        onClick={dismiss}
+        className="absolute right-1.5 top-1.5 inline-flex h-7 w-7 items-center justify-center bg-transparent text-[#6B7280] transition hover:text-white"
+        aria-label="Dismiss premium upgrade information"
+        title="Not now"
+      >
+        <X className="h-4 w-4" />
+      </button>
     </div>
   );
 }
