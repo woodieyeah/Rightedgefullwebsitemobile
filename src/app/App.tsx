@@ -7907,6 +7907,89 @@ function RoundCentrePage({ data }: { data: DashboardData }) {
   );
 }
 
+const MATCHES_UPGRADE_DISMISSED_AT_KEY = "re_matches_upgrade_dismissed_at";
+const MATCHES_UPGRADE_DISMISSAL_MS = 7 * 24 * 60 * 60 * 1000;
+
+function MatchesUpgradeBanner({
+  isPremium,
+  onRequestAccess,
+}: {
+  isPremium: boolean;
+  onRequestAccess: (targetHash?: string) => void;
+}) {
+  // Start hidden. The app resolves the existing subscription state before this
+  // component mounts, and the effect below checks the persisted dismissal.
+  const [isDismissed, setIsDismissed] = useState(true);
+
+  useEffect(() => {
+    if (isPremium) {
+      setIsDismissed(true);
+      return;
+    }
+
+    try {
+      const dismissedAt = Number(localStorage.getItem(MATCHES_UPGRADE_DISMISSED_AT_KEY));
+      const dismissalIsActive =
+        Number.isFinite(dismissedAt) &&
+        dismissedAt > 0 &&
+        Date.now() - dismissedAt < MATCHES_UPGRADE_DISMISSAL_MS;
+
+      if (!dismissalIsActive) {
+        localStorage.removeItem(MATCHES_UPGRADE_DISMISSED_AT_KEY);
+      }
+      setIsDismissed(dismissalIsActive);
+    } catch {
+      setIsDismissed(false);
+    }
+  }, [isPremium]);
+
+  if (isPremium || isDismissed) return null;
+
+  const dismiss = () => {
+    try {
+      localStorage.setItem(MATCHES_UPGRADE_DISMISSED_AT_KEY, String(Date.now()));
+    } catch {}
+    setIsDismissed(true);
+  };
+
+  return (
+    <div
+      className="border border-[#1E1E2E] bg-[#16161D] px-4 py-3 md:px-5"
+      role="region"
+      aria-label="Premium upgrade information"
+    >
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between md:gap-5">
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-semibold leading-snug text-white">
+            You're seeing the model's predictions. Premium subscribers see which ones it backs.
+          </div>
+          <div className="mt-1 text-xs leading-relaxed text-[#9CA3AF]">
+            Core Plays, best H2H and try scorer value — every match, every round.
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center gap-2 self-start md:self-auto">
+          <button
+            type="button"
+            onClick={() => onRequestAccess("best-bets")}
+            className="re-primary-cta inline-flex min-h-[36px] items-center justify-center border px-4 text-[10px] font-medium uppercase tracking-widest transition hover:opacity-90"
+          >
+            See what's inside
+          </button>
+          <button
+            type="button"
+            onClick={dismiss}
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center border border-[#1E1E2E] text-[#6B7280] transition hover:border-white/20 hover:text-white"
+            aria-label="Dismiss premium upgrade information"
+            title="Not now"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function PredictionsPage({
   data,
   onRequestAccess,
@@ -7959,6 +8042,11 @@ function PredictionsPage({
   return (
     <div className="flex flex-col gap-6 md:gap-8">
       <ResponsibleGamblingNotice />
+
+      <MatchesUpgradeBanner
+        isPremium={isPremium}
+        onRequestAccess={onRequestAccess}
+      />
 
       {selectedArchive && (
         <GlassCard className="p-4 md:p-5 border-l-4 border-l-[#00E676]">
