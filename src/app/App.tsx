@@ -11414,7 +11414,7 @@ function TryScorersPage({
                           key={i}
                           className={`transition-colors ${
                             isBestBet
-                              ? "border-l-2 border-l-[#00E676]/60 bg-[#00E676]/[0.06] hover:bg-[#00E676]/[0.08]"
+                              ? "border-l-2 border-l-[#00E676]/60 bg-[#f6f6f3] hover:bg-[#f6f6f3]"
                               : "hover:bg-white/[0.03]"
                           }`}
                         >
@@ -11470,7 +11470,7 @@ function TryScorersPage({
                         key={i}
                         className={`flex items-center justify-between gap-4 py-4 transition-colors ${
                           isBestBet
-                            ? "-mx-3 border-l-2 border-l-[#00E676]/60 bg-[#00E676]/[0.06] px-3"
+                            ? "-mx-3 border-l-2 border-l-[#00E676]/60 bg-[#f6f6f3] px-3"
                             : ""
                         }`}
                       >
