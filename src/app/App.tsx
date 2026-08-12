@@ -405,6 +405,7 @@ type RoundArchiveFixture = {
   dateLabel: string;
   aedt: string;
   stadium: string;
+  finalScore?: string;
 };
 
 type RoundArchive = {
@@ -809,6 +810,223 @@ const ROUND_15_LIVE_PROOF: RoundArchive = {
   ],
 };
 
+// Published Round 23 archive. Embedded so the completed round remains
+// available in Last Round Results after the live model advances to Round 24.
+const ROUND_23_PROOF: RoundArchive = {
+  round: 23,
+  label: "Round 23 Results",
+  status: "Results",
+  fixtures: [
+    {
+      match: "Titans v Cowboys",
+      day: "Thursday",
+      dateISO: "2026-08-06",
+      dateLabel: "Aug 6",
+      aedt: "7:50 PM",
+      stadium: "Cbus Super Stadium",
+      finalScore: "8-30",
+    },
+    {
+      match: "Warriors v Panthers",
+      day: "Friday",
+      dateISO: "2026-08-07",
+      dateLabel: "Aug 7",
+      aedt: "6:00 PM",
+      stadium: "Go Media Stadium",
+      finalScore: "28-12",
+    },
+    {
+      match: "Roosters v Bulldogs",
+      day: "Friday",
+      dateISO: "2026-08-07",
+      dateLabel: "Aug 7",
+      aedt: "8:00 PM",
+      stadium: "Allianz Stadium",
+      finalScore: "20-18",
+    },
+    {
+      match: "Storm v Sea Eagles",
+      day: "Saturday",
+      dateISO: "2026-08-08",
+      dateLabel: "Aug 8",
+      aedt: "3:00 PM",
+      stadium: "HBF Park, Perth",
+      finalScore: "42-20",
+    },
+    {
+      match: "Dolphins v Broncos",
+      day: "Saturday",
+      dateISO: "2026-08-08",
+      dateLabel: "Aug 8",
+      aedt: "5:30 PM",
+      stadium: "Suncorp Stadium",
+      finalScore: "40-32",
+    },
+    {
+      match: "Rabbitohs v Eels",
+      day: "Saturday",
+      dateISO: "2026-08-08",
+      dateLabel: "Aug 8",
+      aedt: "7:30 PM",
+      stadium: "Allianz Stadium",
+      finalScore: "28-24",
+    },
+    {
+      match: "Raiders v Knights",
+      day: "Sunday",
+      dateISO: "2026-08-09",
+      dateLabel: "Aug 9",
+      aedt: "2:00 PM",
+      stadium: "GIO Stadium",
+      finalScore: "24-30",
+    },
+    {
+      match: "Dragons v Sharks",
+      day: "Sunday",
+      dateISO: "2026-08-09",
+      dateLabel: "Aug 9",
+      aedt: "4:05 PM",
+      stadium: "Netstrata Jubilee Stadium",
+      finalScore: "24-16",
+    },
+  ],
+  matchPlays: [
+    {
+      match: "Titans v Cowboys",
+      selection: "Titans +4.5",
+      market: "Line",
+      modelScore: "24-23",
+      finalScore: "8-30",
+      modelPct: 58.3,
+      odds: 1.82,
+      bookmaker: "Sportsbet",
+      result: "Miss",
+      note: "Titans lost by 22 points and did not cover +4.5.",
+    },
+    {
+      match: "Warriors v Panthers",
+      selection: "Over 40.5",
+      market: "Total",
+      modelScore: "22-23",
+      finalScore: "28-12",
+      modelPct: 63.7,
+      odds: 1.9,
+      bookmaker: "Sportsbet",
+      result: "Miss",
+      note: "The match total was 40, missing Over 40.5 by half a point.",
+    },
+    {
+      match: "Roosters v Bulldogs",
+      selection: "Roosters -8.5",
+      market: "Line",
+      modelScore: "28-17",
+      finalScore: "20-18",
+      modelPct: 58.3,
+      odds: 1.9,
+      bookmaker: "Unibet",
+      result: "Miss",
+      note: "Roosters won by two points and did not cover -8.5.",
+    },
+    {
+      match: "Dolphins v Broncos",
+      selection: "Dolphins -7.5",
+      market: "Line",
+      modelScore: "30-18",
+      finalScore: "40-32",
+      modelPct: 61.5,
+      odds: 1.85,
+      bookmaker: "Betr",
+      result: "Hit",
+      note: "Dolphins covered the line.",
+    },
+    {
+      match: "Dolphins v Broncos",
+      selection: "Dolphins head-to-head",
+      market: "Head 2 Head",
+      modelScore: "30-18",
+      finalScore: "40-32",
+      modelPct: 71.4,
+      odds: 1.44,
+      bookmaker: "Neds",
+      result: "Hit",
+      note: "Dolphins won outright.",
+    },
+    {
+      match: "Rabbitohs v Eels",
+      selection: "Rabbitohs -10.5",
+      market: "Line",
+      modelScore: "32-18",
+      finalScore: "28-24",
+      modelPct: 61.5,
+      odds: 1.85,
+      bookmaker: "Betr",
+      result: "Miss",
+      note: "Rabbitohs won by four points and did not cover -10.5.",
+    },
+    {
+      match: "Rabbitohs v Eels",
+      selection: "Rabbitohs head-to-head",
+      market: "Head 2 Head",
+      modelScore: "32-18",
+      finalScore: "28-24",
+      modelPct: 75.2,
+      odds: 1.35,
+      bookmaker: "Ladbrokes",
+      result: "Hit",
+      note: "Rabbitohs won outright.",
+    },
+    {
+      match: "Raiders v Knights",
+      selection: "Knights +1.5",
+      market: "Line",
+      modelScore: "25-23",
+      finalScore: "24-30",
+      modelPct: 58.3,
+      odds: 1.9,
+      bookmaker: "Betr",
+      result: "Hit",
+      note: "Knights won outright and covered +1.5.",
+    },
+    {
+      match: "Raiders v Knights",
+      selection: "Knights head-to-head",
+      market: "Head 2 Head",
+      modelScore: "25-23",
+      finalScore: "24-30",
+      modelPct: 50.8,
+      odds: 2,
+      bookmaker: "Betr",
+      result: "Hit",
+      note: "Knights won outright.",
+    },
+    {
+      match: "Raiders v Knights",
+      selection: "Over 44.5",
+      market: "Total",
+      modelScore: "25-23",
+      finalScore: "24-30",
+      modelPct: 63.7,
+      odds: 1.9,
+      bookmaker: "TAB",
+      result: "Hit",
+      note: "The match total finished over 44.5.",
+    },
+    {
+      match: "Dragons v Sharks",
+      selection: "Dragons +18.5",
+      market: "Line",
+      modelScore: "16-33",
+      finalScore: "24-16",
+      modelPct: 58.3,
+      odds: 1.85,
+      bookmaker: "TAB",
+      result: "Hit",
+      note: "Dragons won outright 24-16 and covered +18.5.",
+    },
+  ],
+  tryScorers: [],
+};
+
 // Published Round 22 archive. This is intentionally embedded so it remains
 // available after the live model advances and does not depend on KV history.
 const ROUND_22_PROOF: RoundArchive = {
@@ -969,11 +1187,16 @@ const ROUND_22_PROOF: RoundArchive = {
 // Hardcoded proof archives (kept working as-is). New rounds are derived from KV
 // at runtime and merged in via registerKvDerivedArchives() below.
 const HARDCODED_PROOF_ARCHIVES: RoundArchive[] = [
+  ROUND_23_PROOF,
   ROUND_22_PROOF,
   ROUND_15_LIVE_PROOF,
   ROUND_14_PROOF,
 ];
-const HARDCODED_ROUND_ARCHIVES: RoundArchive[] = [ROUND_22_PROOF, ROUND_14_PROOF];
+const HARDCODED_ROUND_ARCHIVES: RoundArchive[] = [
+  ROUND_23_PROOF,
+  ROUND_22_PROOF,
+  ROUND_14_PROOF,
+];
 
 // KV-derived archives (rolled-over rounds). Replaced wholesale when KV loads.
 let KV_DERIVED_ARCHIVES: RoundArchive[] = [];
@@ -1073,6 +1296,43 @@ function buildArchivedPredictionRows(archive: RoundArchive): PredictionRow[] {
       stake: 0,
       confidence: "Value",
       fixture: getArchiveFixture(archive, play.match),
+      bestEdge: 0,
+    });
+  }
+
+  // Include completed fixtures that had no published premium play so the
+  // archive still shows every match from the round.
+  for (const fixture of archive.fixtures) {
+    const matchKey = getMatchPairKeyFromLabel(fixture.match);
+    if (rowsByMatch.has(matchKey) || !fixture.finalScore) continue;
+    const { homeTeam, awayTeam } = splitMatchTeams(fixture.match);
+    const { homeScore, awayScore } = parseScorePair(fixture.finalScore);
+    const predictedWinner =
+      homeScore > awayScore
+        ? homeTeam
+        : awayScore > homeScore
+          ? awayTeam
+          : "—";
+
+    rowsByMatch.set(matchKey, {
+      match: `${homeTeam} v ${awayTeam}`,
+      roundNumber: archive.round,
+      homeTeam,
+      awayTeam,
+      predictedWinner,
+      predictedHomeScore: homeScore,
+      predictedAwayScore: awayScore,
+      modelHomeOdds: 0,
+      modelAwayOdds: 0,
+      marketHomeOdds: 0,
+      marketAwayOdds: 0,
+      homeOverlay: 0,
+      awayOverlay: 0,
+      bestBet: "",
+      side: "",
+      stake: 0,
+      confidence: "Value",
+      fixture: getArchiveFixture(archive, fixture.match),
       bestEdge: 0,
     });
   }
@@ -8152,6 +8412,7 @@ function PredictionsPage({
           // final score, and scorer proof. Ignore them on the matches card so
           // it shows the current projection and Dragons +18.5 play only.
           const hideLegacySharksDragonsProof =
+            !selectedArchive &&
             getPredictionPairKey(row) === getMatchPairKeyFromLabel("Sharks v Dragons");
           const matchesCardProofMatchPlays = hideLegacySharksDragonsProof
             ? []
