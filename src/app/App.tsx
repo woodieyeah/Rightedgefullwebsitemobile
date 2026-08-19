@@ -12304,7 +12304,11 @@ function buildSameGameMultiCards(
 }
 
 function getEstimatedSgmPrice(legs: SameGameMultiLeg[]) {
-  if (legs.length !== 3 || legs.some((leg) => !Number.isFinite(leg.odds) || leg.odds <= 1)) {
+  if (
+    legs.length < 2 ||
+    legs.length > 3 ||
+    legs.some((leg) => !Number.isFinite(leg.odds) || leg.odds <= 1)
+  ) {
     return null;
   }
   const rawPrice = legs.reduce((product, leg) => product * leg.odds, 1);
@@ -12370,7 +12374,7 @@ function SameGameMultiCard({
           return (
             <div
               key={`${card.key}-${leg.kind}-${leg.label}`}
-              className={`grid min-h-[58px] grid-cols-[22px_22px_minmax(0,1fr)_auto_56px] items-center gap-2 border-b border-[#1E1E2E] py-3 whitespace-nowrap ${locked ? "text-[#4B5563]" : ""}`}
+              className={`grid min-h-[58px] grid-cols-[22px_22px_minmax(0,1fr)_minmax(76px,auto)_minmax(82px,auto)] items-center gap-2 border-b border-[#1E1E2E] py-3 whitespace-nowrap ${locked ? "text-[#4B5563]" : ""}`}
             >
               {locked ? (
                 <>
@@ -12411,7 +12415,7 @@ function SameGameMultiCard({
                   </span>
                   <span
                     aria-label={`Model ${modelValue}`}
-                    className="min-w-[56px] text-right text-[15px] font-medium tabular-nums text-[#147A42]"
+                    className="min-w-[82px] text-right text-[15px] font-medium tabular-nums text-[#147A42]"
                     style={{ fontVariantNumeric: "tabular-nums" }}
                   >
                     Model {modelValue}
