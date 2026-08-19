@@ -12167,7 +12167,7 @@ function getSameGameMultiResultLeg(
         modelPct: probabilityFromEdge(lineEdge, RIGHTEDGE_TUNING.lineScale),
         odds: line.odds,
       } as SameGameMultiLeg;
-      return leg.modelPct > leg.marketPct ? leg : null;
+      if (leg.modelPct > leg.marketPct) return leg;
     }
   }
 
@@ -12244,8 +12244,7 @@ function buildSameGameMultiCards(
 
       const resultLeg = getSameGameMultiResultLeg(match, betrMarkets);
       const totalLeg = getSameGameMultiTotalLeg(match, betrMarkets);
-      const projectedWinnerKey = normalizeTeamName(getSameGameMultiWinner(match));
-      const scorerLegs = getTryScorerPageRows(
+      const qualifyingScorers = getTryScorerPageRows(
         data.tryScorers.filter((row) => {
           if (match.roundNumber && row.round && row.round !== match.roundNumber) return false;
           return getMatchPairKeyFromLabel(row.match) === getPredictionPairKey(match);
@@ -12253,7 +12252,6 @@ function buildSameGameMultiCards(
       )
         .filter(
           (row) =>
-            normalizeTeamName(row.team) === projectedWinnerKey &&
             row.statsInsiderPct >= 25 &&
             row.statsInsiderPct > row.marketImpliedPct,
         )
@@ -12262,8 +12260,36 @@ function buildSameGameMultiCards(
             (b.statsInsiderPct - b.marketImpliedPct) -
               (a.statsInsiderPct - a.marketImpliedPct) ||
             b.statsInsiderPct - a.statsInsiderPct,
-        )
-        .slice(0, 2)
+        );
+
+      const scorerRows = resultLeg
+        ? qualifyingScorers.filter(
+            (row) => normalizeTeamName(row.team) === normalizeTeamName(resultLeg.team || ""),
+          )
+        : Object.values(
+            qualifyingScorers.reduce((groups, row) => {
+              const teamKey = normalizeTeamName(row.team);
+              if (!groups[teamKey]) groups[teamKey] = [];
+              groups[teamKey].push(row);
+              return groups;
+            }, {} as Record<string, TryScorerRow[]>),
+          ).sort((a, b) => {
+            const aCardSize = Math.min(3, a.length + (totalLeg ? 1 : 0));
+            const bCardSize = Math.min(3, b.length + (totalLeg ? 1 : 0));
+            if (aCardSize !== bCardSize) return bCardSize - aCardSize;
+            const topEdge = (rows: TryScorerRow[]) =>
+              rows
+                .slice(0, 3)
+                .reduce(
+                  (sum, row) => sum + row.statsInsiderPct - row.marketImpliedPct,
+                  0,
+                );
+            return topEdge(b) - topEdge(a);
+          })[0] || [];
+
+      const scorerLimit = resultLeg ? 2 : 3;
+      const scorerLegs = scorerRows
+        .slice(0, scorerLimit)
         .map<SameGameMultiLeg>((row) => ({
           kind: "try-scorer",
           label: row.player,
@@ -12279,7 +12305,7 @@ function buildSameGameMultiCards(
         ...scorerLegs,
         ...(totalLeg ? [totalLeg] : []),
       ].slice(0, 3);
-      if (legs.length !== 3) return null;
+      if (legs.length < 2) return null;
 
       return {
         key,
@@ -12297,7 +12323,11 @@ function buildSameGameMultiCards(
 }
 
 function getEstimatedSgmPrice(legs: SameGameMultiLeg[]) {
-  if (legs.length !== 3 || legs.some((leg) => !Number.isFinite(leg.odds) || leg.odds <= 1)) {
+  if (
+    legs.length < 2 ||
+    legs.length > 3 ||
+    legs.some((leg) => !Number.isFinite(leg.odds) || leg.odds <= 1)
+  ) {
     return null;
   }
   const rawPrice = legs.reduce((product, leg) => product * leg.odds, 1);
@@ -12320,18 +12350,35 @@ function SameGameMultiCard({
 
   return (
     <article className="border border-[#1E1E2E] bg-[#111116]">
-      <div className="flex items-start justify-between gap-4 border-b border-[#1E1E2E] px-4 py-4 md:px-6 md:py-5">
+      <div className="flex items-start justify-between gap-4 border-b border-[#1E1E2E] px-4 py-5 md:px-6">
         <div className="min-w-0">
-          <h2 className="text-lg font-black uppercase tracking-tight text-white md:text-2xl">
+          <div className="mb-3 inline-flex bg-[#4ADE80]/10 px-2 py-1 text-[9px] font-black uppercase tracking-[0.18em] text-[#4ADE80]">
+            Model Multi
+          </div>
+          <h2 className="truncate text-[22px] font-black uppercase leading-none tracking-tight text-white">
             {card.match}
           </h2>
-          <div className="mt-1 text-[10px] font-black uppercase tracking-widest text-[#9CA3AF] md:text-xs">
+          <div className="mt-2 text-xs font-medium uppercase tracking-wider text-[#9CA3AF]">
             {kickoff}
           </div>
         </div>
-        <div className="shrink-0 text-[10px] font-black uppercase tracking-widest text-[#9CA3AF] md:text-xs">
-          {card.legs.length} Legs
-        </div>
+        {estimatedPrice !== null ? (
+          <div className="shrink-0 text-right">
+            <div className="text-[9px] font-black uppercase tracking-[0.16em] text-[#9CA3AF]">
+              Est. Price · {card.legs.length} Legs
+            </div>
+            <div
+              className="mt-1 text-[32px] font-black leading-none tabular-nums text-white"
+              style={{ fontVariantNumeric: "tabular-nums" }}
+            >
+              ${estimatedPrice.toFixed(2)}
+            </div>
+          </div>
+        ) : (
+          <div className="shrink-0 text-right text-[9px] font-black uppercase tracking-[0.16em] text-[#9CA3AF]">
+            {card.legs.length} Legs
+          </div>
+        )}
       </div>
 
       <div className="px-4 md:px-6">
@@ -12340,77 +12387,72 @@ function SameGameMultiCard({
           return (
             <div
               key={`${card.key}-${leg.kind}-${leg.label}`}
-              className={`grid min-h-[64px] grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-[#1E1E2E] py-3 ${locked ? "text-[#4B5563]" : ""}`}
+              className={`grid min-h-[58px] grid-cols-[22px_22px_minmax(0,1fr)_auto_56px] items-center gap-2 border-b border-[#1E1E2E] py-3 whitespace-nowrap ${locked ? "text-[#4B5563]" : ""}`}
             >
               {locked ? (
-                <div aria-label="Premium leg hidden" className="flex min-w-0 items-center gap-2 overflow-hidden whitespace-nowrap">
-                  <span className="text-xs font-black tabular-nums text-[#6B7280]">
+                <>
+                  <span className="text-[11px] font-medium tabular-nums text-[#6B7280]">
                     {String(index + 1).padStart(2, "0")}
                   </span>
-                  <span className="text-[#4B5563]">·</span>
-                  <div className="h-2.5 w-2/3 max-w-[240px] bg-[#25252E]" />
-                </div>
+                  <span className="h-[22px] w-[22px]" aria-hidden="true" />
+                  <div aria-label="Premium leg hidden" className="h-2.5 w-2/3 max-w-[240px] bg-[#25252E]" />
+                  <div className="h-2.5 w-10 bg-[#25252E]" aria-hidden="true" />
+                  <div className="h-3 w-12 justify-self-end bg-[#25252E]" aria-hidden="true" />
+                </>
               ) : (
-                <div className="flex min-w-0 items-center gap-2 overflow-hidden whitespace-nowrap">
-                  <span className="shrink-0 text-xs font-black tabular-nums text-[#6B7280]">
+                <>
+                  <span className="text-[11px] font-medium tabular-nums text-[#9CA3AF]">
                     {String(index + 1).padStart(2, "0")}
                   </span>
-                  <span className="shrink-0 text-[#4B5563]">·</span>
                   {leg.team ? (
-                    <TeamLogo teamName={leg.team} className="h-6 w-6 shrink-0 text-[8px]" />
+                    <TeamLogo teamName={leg.team} className="h-[22px] w-[22px] rounded-[4px] text-[8px]" />
                   ) : (
-                    <span className="h-6 w-6 shrink-0" aria-hidden="true" />
+                    <span className="h-[22px] w-[22px]" aria-hidden="true" />
                   )}
-                  <span className="min-w-0 truncate text-xs font-black uppercase tracking-wide text-white md:text-sm">
-                    {leg.label}
-                  </span>
-                  {leg.suffix ? (
-                    <span className="shrink-0 text-[11px] font-black uppercase tracking-wider text-[#9CA3AF]">
-                      {leg.suffix}
+                  <span className="flex min-w-0 items-baseline gap-2 overflow-hidden">
+                    <span className="min-w-0 truncate text-[15px] font-black uppercase tracking-tight text-white">
+                      {leg.label}
                     </span>
-                  ) : null}
-                </div>
-              )}
-              {!locked ? (
-                <div
-                  className="flex shrink-0 items-center gap-2 whitespace-nowrap text-[9px] font-black uppercase tracking-wider tabular-nums sm:gap-4 md:text-[10px]"
-                  style={{ fontVariantNumeric: "tabular-nums" }}
-                >
-                  <span className="text-[#9CA3AF]">Market {formatPercent(leg.marketPct, 1)}</span>
-                  <span className="text-[#4ADE80]">Model {formatPercent(leg.modelPct, 1)}</span>
-                </div>
-              ) : (
-                <div className="h-2.5 w-14 bg-[#25252E]" aria-hidden="true" />
+                    {leg.suffix ? (
+                      <span className="shrink-0 text-[11px] font-medium uppercase tracking-wider text-[#9CA3AF]">
+                        {leg.suffix}
+                      </span>
+                    ) : null}
+                  </span>
+                  <span
+                    aria-label={`Market ${formatPercent(leg.marketPct, 1)}`}
+                    className="text-right text-[13px] font-medium tabular-nums text-[#9CA3AF]"
+                    style={{ fontVariantNumeric: "tabular-nums" }}
+                  >
+                    {formatPercent(leg.marketPct, 1)}
+                  </span>
+                  <span
+                    aria-label={`Model ${formatPercent(leg.modelPct, 1)}`}
+                    className="min-w-[56px] text-right text-[15px] font-medium tabular-nums text-[#4ADE80]"
+                    style={{ fontVariantNumeric: "tabular-nums" }}
+                  >
+                    {formatPercent(leg.modelPct, 1)}
+                  </span>
+                </>
               )}
             </div>
           );
         })}
       </div>
 
-      {estimatedPrice !== null ? (
-        <div className="border-b border-[#1E1E2E] bg-[#0A0A0F] px-4 py-4 md:px-6">
-          <div className="flex items-end justify-between gap-4">
-            <div className="text-[11px] font-black uppercase tracking-widest text-[#9CA3AF]">
-              Est. Same Game Multi
-            </div>
-            <div className="text-2xl font-black tabular-nums text-white" style={{ fontVariantNumeric: "tabular-nums" }}>
-              ${estimatedPrice.toFixed(2)}
-            </div>
-          </div>
-          <div className="mt-2 text-[11px] font-medium leading-relaxed text-[#9CA3AF]">
-            Betr prices correlated legs shorter than the legs multiplied. Confirm the live price in your bet slip.
-          </div>
-        </div>
-      ) : null}
-
-      <div className="p-4 md:p-6">
+      <div className="px-4 pb-4 pt-4 md:px-6 md:pb-5">
         {isPremium ? (
           <BetrAffiliateLink
             payload={`rightedge_sgm_${slugifyPayloadPart(card.match)}`}
-            className="re-betr-button flex min-h-[48px] w-full items-center justify-center gap-2 border border-[#093AD3] bg-[#093AD3] px-5 text-xs font-black uppercase tracking-widest text-white transition hover:opacity-90"
+            className="re-betr-button flex min-h-[48px] w-full items-center justify-start gap-3 border border-[#093AD3] bg-[#093AD3] px-4 text-xs font-black uppercase tracking-widest text-white transition hover:opacity-90"
           >
-            <BetrLogoMark className="h-6 w-6 !rounded-none" />
-            <span>Build at Betr</span>
+            <img
+              src="/betr-square.png"
+              alt=""
+              aria-hidden="true"
+              className="h-6 w-6 shrink-0 rounded-[4px] border border-[#093AD3] bg-[#093AD3] object-contain"
+            />
+            <span>Build This Multi</span>
           </BetrAffiliateLink>
         ) : (
           <button
@@ -12421,6 +12463,9 @@ function SameGameMultiCard({
             Unlock Premium Plays — $14/week
           </button>
         )}
+        <div className="mt-3 text-[11px] font-medium leading-relaxed text-[#9CA3AF]">
+          Correlated legs are priced shorter than the legs multiplied. Confirm the live price before you bet.
+        </div>
       </div>
     </article>
   );
@@ -12919,7 +12964,7 @@ function AppDashboard({
       case "same-game-multi":
         return {
           title: "Same Game Multi",
-          subtitle: "Model-aligned leg combinations by match",
+          subtitle: "Three-leg combinations from the model's read on each match",
         };
       case "try-scorers":
         return {
@@ -13095,8 +13140,8 @@ function AppDashboard({
                   <div className="mt-2 text-[10px] font-black uppercase tracking-widest text-[#9CA3AF] md:text-sm">
                     {pageTitle.subtitle}
                   </div>
-                  <div className="mt-2 text-xs font-medium text-[#9CA3AF]">
-                    Legs are selected where the model prices a market shorter than the book.
+                  <div className="mt-2 whitespace-nowrap text-xs font-medium text-[#9CA3AF]">
+                    Every leg carries a model probability above the market's.
                   </div>
                 </div>
               ) : (
