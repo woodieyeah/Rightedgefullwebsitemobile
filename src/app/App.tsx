@@ -7,7 +7,6 @@ import {
 import { AdminDashboard } from "./components/AdminDashboard";
 import { trackLinkedInConversion } from "../lib/linkedin";
 import { capturePostHogEvent, identifyPostHogUser } from "../lib/posthog";
-import { getSgmPrice, type BetrSgmPriceResult } from "../lib/betrSgm";
 import {
   Activity,
   ArrowRight,
@@ -2212,6 +2211,12 @@ function getTryScorerSignal(row: TryScorerRow, bestBetKeys?: Set<string>) {
   }
 
   return null;
+}
+
+function getTryScorerPageRows(rows: TryScorerRow[]) {
+  return rows.filter(
+    (row) => getTryScorerSignal(row) || isTryScorerBestBetCandidate(row),
+  );
 }
 
 function getTryScorerSignalClass(label?: string) {
@@ -11630,8 +11635,7 @@ function TryScorersPage({
       ? data.tryScorers
       : data.tryScorers.filter((row) => row.round === selectedRound);
 
-  const valuePlays = roundFilteredRows
-    .filter((row) => getTryScorerSignal(row) || isTryScorerBestBetCandidate(row));
+  const valuePlays = getTryScorerPageRows(roundFilteredRows);
   const roundLabel =
     selectedRound === "all" ? "All rounds" : `Round ${selectedRound}`;
 
@@ -11884,10 +11888,11 @@ function TryScorersPage({
 type SameGameMultiLeg = {
   kind: "result" | "total" | "try-scorer";
   label: string;
+  suffix?: string;
   marketPct: number;
   modelPct: number;
+  odds: number;
   team?: string;
-  totalSide?: "Over" | "Under";
 };
 
 type SameGameMultiCardData = {
@@ -11896,6 +11901,8 @@ type SameGameMultiCardData = {
   fixture?: FixtureRow | null;
   legs: SameGameMultiLeg[];
 };
+
+const SGM_CORRELATION_FACTOR = 0.83;
 
 type SgmMarketBookmakerData = {
   h2h: Record<string, number>;
@@ -12152,26 +12159,30 @@ function getSameGameMultiResultLeg(
   if (line) {
     const lineEdge = projectedMargin + line.point;
     if (lineEdge >= RIGHTEDGE_TUNING.minLineEdgePts) {
-      return {
+      const leg = {
         kind: "result",
         label: `${winner} ${formatSgmLine(line.point)}`,
         team: winner,
         marketPct: getImpliedWinPctFromOdds(line.odds),
         modelPct: probabilityFromEdge(lineEdge, RIGHTEDGE_TUNING.lineScale),
-      };
+        odds: line.odds,
+      } as SameGameMultiLeg;
+      return leg.modelPct > leg.marketPct ? leg : null;
     }
   }
 
   const h2hOdds = betrMarkets.h2h[winnerKey];
   if (!Number.isFinite(h2hOdds) || h2hOdds <= 1) return null;
 
-  return {
+  const leg = {
     kind: "result",
-    label: `${winner} HEAD-TO-HEAD`,
+    label: winner,
     team: winner,
     marketPct: getImpliedWinPctFromOdds(h2hOdds),
     modelPct: h2hModelPct,
-  };
+    odds: h2hOdds,
+  } as SameGameMultiLeg;
+  return leg.modelPct > leg.marketPct ? leg : null;
 }
 
 function getSameGameMultiTotalLeg(
@@ -12195,13 +12206,14 @@ function getSameGameMultiTotalLeg(
   );
   if (!offer || offer.odds <= 1) return null;
 
-  return {
+  const leg = {
     kind: "total",
-    label: `${side} ${offer.point} TOTAL POINTS`,
-    totalSide: side,
+    label: `${side} ${offer.point}`,
     marketPct: getImpliedWinPctFromOdds(offer.odds),
     modelPct: probabilityFromEdge(totalGap, RIGHTEDGE_TUNING.totalScale),
-  };
+    odds: offer.odds,
+  } as SameGameMultiLeg;
+  return leg.modelPct > leg.marketPct ? leg : null;
 }
 
 function buildSameGameMultiCards(
@@ -12211,14 +12223,8 @@ function buildSameGameMultiCards(
   const settledMatchKeys = new Set(
     data.betLog
       .filter((bet) => bet.result === "W" || bet.result === "L")
-      .map((bet) => buildMatchLabelKey(bet.match)),
+      .map((bet) => `${bet.round}:${buildMatchLabelKey(bet.match)}`),
   );
-  const tryScorersByMatch = data.tryScorers.reduce((groups, row) => {
-    const key = buildMatchLabelKey(row.match);
-    if (!groups[key]) groups[key] = [];
-    groups[key].push(row);
-    return groups;
-  }, {} as Record<string, TryScorerRow[]>);
   const fixtureOrder = new Map(
     data.fixtures.map((fixture, index) => [
       buildMatchKey(fixture.homeTeam, fixture.awayTeam),
@@ -12227,36 +12233,53 @@ function buildSameGameMultiCards(
   );
 
   return data.predictions
-    .filter((match) => !settledMatchKeys.has(buildMatchLabelKey(match.match)))
+    .filter(
+      (match) =>
+        !settledMatchKeys.has(`${match.roundNumber}:${buildMatchLabelKey(match.match)}`),
+    )
     .map((match): SameGameMultiCardData | null => {
       const key = buildMatchLabelKey(match.match);
       const betrMarkets = getSgmMatchMarkets(marketMap, match).betr;
       if (!betrMarkets) return null;
 
       const resultLeg = getSameGameMultiResultLeg(match, betrMarkets);
-      if (!resultLeg) return null;
-
       const totalLeg = getSameGameMultiTotalLeg(match, betrMarkets);
-      const scorerLimit = totalLeg?.totalSide === "Under" ? 1 : 2;
       const projectedWinnerKey = normalizeTeamName(getSameGameMultiWinner(match));
-      const scorerLegs = [...(tryScorersByMatch[key] || [])]
+      const scorerLegs = getTryScorerPageRows(
+        data.tryScorers.filter((row) => {
+          if (match.roundNumber && row.round && row.round !== match.roundNumber) return false;
+          return getMatchPairKeyFromLabel(row.match) === getPredictionPairKey(match);
+        }),
+      )
         .filter(
           (row) =>
             normalizeTeamName(row.team) === projectedWinnerKey &&
-            row.statsInsiderPct >= 40,
+            row.statsInsiderPct >= 25 &&
+            row.statsInsiderPct > row.marketImpliedPct,
         )
-        .sort((a, b) => b.statsInsiderPct - a.statsInsiderPct)
-        .slice(0, scorerLimit)
+        .sort(
+          (a, b) =>
+            (b.statsInsiderPct - b.marketImpliedPct) -
+              (a.statsInsiderPct - a.marketImpliedPct) ||
+            b.statsInsiderPct - a.statsInsiderPct,
+        )
+        .slice(0, 2)
         .map<SameGameMultiLeg>((row) => ({
           kind: "try-scorer",
-          label: `${row.player} ANYTIME`,
+          label: row.player,
+          suffix: "ANYTIME",
           team: row.team,
           marketPct: row.marketImpliedPct,
           modelPct: row.statsInsiderPct,
+          odds: row.bestOdds,
         }));
 
-      const legs = [resultLeg, ...(totalLeg ? [totalLeg] : []), ...scorerLegs];
-      if (legs.length < 3) return null;
+      const legs = [
+        ...(resultLeg ? [resultLeg] : []),
+        ...scorerLegs,
+        ...(totalLeg ? [totalLeg] : []),
+      ].slice(0, 3);
+      if (legs.length !== 3) return null;
 
       return {
         key,
@@ -12273,35 +12296,24 @@ function buildSameGameMultiCards(
     });
 }
 
-function isAvailableSgmPrice(
-  result: BetrSgmPriceResult | undefined,
-): result is Extract<BetrSgmPriceResult, { price: number }> {
-  return Boolean(result && "price" in result && Number.isFinite(result.price) && result.price > 1);
-}
-
-function formatSgmPriceTime(fetchedAt: string) {
-  const date = new Date(fetchedAt);
-  if (Number.isNaN(date.getTime())) return "";
-  return new Intl.DateTimeFormat("en-AU", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-    timeZone: "Australia/Brisbane",
-  }).format(date);
+function getEstimatedSgmPrice(legs: SameGameMultiLeg[]) {
+  if (legs.length !== 3 || legs.some((leg) => !Number.isFinite(leg.odds) || leg.odds <= 1)) {
+    return null;
+  }
+  const rawPrice = legs.reduce((product, leg) => product * leg.odds, 1);
+  return Math.floor((rawPrice * SGM_CORRELATION_FACTOR) / 0.05) * 0.05;
 }
 
 function SameGameMultiCard({
   card,
-  priceResult,
   isPremium,
   onRequestAccess,
 }: {
   card: SameGameMultiCardData;
-  priceResult?: BetrSgmPriceResult;
   isPremium: boolean;
   onRequestAccess: (targetHash?: string) => void;
 }) {
-  const price = isPremium && isAvailableSgmPrice(priceResult) ? priceResult : null;
+  const estimatedPrice = isPremium ? getEstimatedSgmPrice(card.legs) : null;
   const kickoff = card.fixture
     ? `${card.fixture.day} ${card.fixture.dateLabel} @ ${card.fixture.aedt} AEST`
     : "KICKOFF TBC";
@@ -12328,24 +12340,40 @@ function SameGameMultiCard({
           return (
             <div
               key={`${card.key}-${leg.kind}-${leg.label}`}
-              className={`grid min-h-[74px] grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-3 border-b border-[#1E1E2E] py-4 ${locked ? "text-[#4B5563]" : ""}`}
+              className={`grid min-h-[64px] grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-[#1E1E2E] py-3 ${locked ? "text-[#4B5563]" : ""}`}
             >
-              <div className="text-xs font-black tabular-nums text-[#6B7280]">
-                {String(index + 1).padStart(2, "0")}
-              </div>
               {locked ? (
-                <div aria-label="Premium leg hidden" className="space-y-2">
-                  <div className="h-2.5 w-2/3 bg-[#25252E]" />
-                  <div className="h-2 w-1/3 bg-[#1E1E27]" />
+                <div aria-label="Premium leg hidden" className="flex min-w-0 items-center gap-2 overflow-hidden whitespace-nowrap">
+                  <span className="text-xs font-black tabular-nums text-[#6B7280]">
+                    {String(index + 1).padStart(2, "0")}
+                  </span>
+                  <span className="text-[#4B5563]">·</span>
+                  <div className="h-2.5 w-2/3 max-w-[240px] bg-[#25252E]" />
                 </div>
               ) : (
-                <div className="text-xs font-black uppercase tracking-wide text-white md:text-sm">
-                  {leg.label}
+                <div className="flex min-w-0 items-center gap-2 overflow-hidden whitespace-nowrap">
+                  <span className="shrink-0 text-xs font-black tabular-nums text-[#6B7280]">
+                    {String(index + 1).padStart(2, "0")}
+                  </span>
+                  <span className="shrink-0 text-[#4B5563]">·</span>
+                  {leg.team ? (
+                    <TeamLogo teamName={leg.team} className="h-6 w-6 shrink-0 text-[8px]" />
+                  ) : (
+                    <span className="h-6 w-6 shrink-0" aria-hidden="true" />
+                  )}
+                  <span className="min-w-0 truncate text-xs font-black uppercase tracking-wide text-white md:text-sm">
+                    {leg.label}
+                  </span>
+                  {leg.suffix ? (
+                    <span className="shrink-0 text-[11px] font-black uppercase tracking-wider text-[#9CA3AF]">
+                      {leg.suffix}
+                    </span>
+                  ) : null}
                 </div>
               )}
               {!locked ? (
                 <div
-                  className="flex min-w-[108px] flex-col items-end gap-1 text-[9px] font-black uppercase tracking-wider tabular-nums md:min-w-[220px] md:flex-row md:justify-end md:gap-4 md:text-[10px]"
+                  className="flex shrink-0 items-center gap-2 whitespace-nowrap text-[9px] font-black uppercase tracking-wider tabular-nums sm:gap-4 md:text-[10px]"
                   style={{ fontVariantNumeric: "tabular-nums" }}
                 >
                   <span className="text-[#9CA3AF]">Market {formatPercent(leg.marketPct, 1)}</span>
@@ -12359,24 +12387,18 @@ function SameGameMultiCard({
         })}
       </div>
 
-      {isPremium ? (
-        <div className="px-4 py-4 text-[9px] font-black uppercase leading-relaxed tracking-widest text-[#9CA3AF] md:px-6 md:text-[10px]">
-          Every leg sits on the same side of the model&apos;s read. Correlated legs are priced shorter than the legs multiplied.
-        </div>
-      ) : null}
-
-      {price ? (
-        <div className="flex items-end justify-between gap-4 border-y border-[#1E1E2E] bg-[#0A0A0F] px-4 py-4 md:px-6">
-          <div>
-            <div className="text-[10px] font-black uppercase tracking-widest text-white">
-              Betr Same Game Multi
+      {estimatedPrice !== null ? (
+        <div className="border-b border-[#1E1E2E] bg-[#0A0A0F] px-4 py-4 md:px-6">
+          <div className="flex items-end justify-between gap-4">
+            <div className="text-[11px] font-black uppercase tracking-widest text-[#9CA3AF]">
+              Est. Same Game Multi
             </div>
-            <div className="mt-1 text-[9px] font-black uppercase tracking-widest text-[#9CA3AF]">
-              Price as at {formatSgmPriceTime(price.fetchedAt)} AEST
+            <div className="text-2xl font-black tabular-nums text-white" style={{ fontVariantNumeric: "tabular-nums" }}>
+              ${estimatedPrice.toFixed(2)}
             </div>
           </div>
-          <div className="text-3xl font-black tabular-nums text-white" style={{ fontVariantNumeric: "tabular-nums" }}>
-            ${price.price.toFixed(2)}
+          <div className="mt-2 text-[11px] font-medium leading-relaxed text-[#9CA3AF]">
+            Betr prices correlated legs shorter than the legs multiplied. Confirm the live price in your bet slip.
           </div>
         </div>
       ) : null}
@@ -12385,9 +12407,10 @@ function SameGameMultiCard({
         {isPremium ? (
           <BetrAffiliateLink
             payload={`rightedge_sgm_${slugifyPayloadPart(card.match)}`}
-            className="flex min-h-[48px] w-full items-center justify-center bg-[#093AD3] px-5 text-xs font-black uppercase tracking-widest text-white transition hover:bg-[#0B46F0]"
+            className="re-betr-button flex min-h-[48px] w-full items-center justify-center gap-2 border border-[#093AD3] bg-[#093AD3] px-5 text-xs font-black uppercase tracking-widest text-white transition hover:opacity-90"
           >
-            {price ? "Build this at Betr" : "Build these legs at Betr"}
+            <BetrLogoMark className="h-6 w-6 !rounded-none" />
+            <span>Build at Betr</span>
           </BetrAffiliateLink>
         ) : (
           <button
@@ -12413,7 +12436,6 @@ function SameGameMultiPage({
   isPremium: boolean;
 }) {
   const [marketMap, setMarketMap] = useState<SgmMarketMap>({});
-  const [priceResults, setPriceResults] = useState<Record<string, BetrSgmPriceResult>>({});
   const cards = useMemo(() => buildSameGameMultiCards(data, marketMap), [data, marketMap]);
 
   useEffect(() => {
@@ -12430,28 +12452,15 @@ function SameGameMultiPage({
     };
   }, []);
 
-  useEffect(() => {
-    let mounted = true;
-    Promise.all(
-      cards.map(async (card) => [card.key, await getSgmPrice(card.key, [])] as const),
-    ).then((entries) => {
-      if (mounted) setPriceResults(Object.fromEntries(entries));
-    });
-    return () => {
-      mounted = false;
-    };
-  }, [cards]);
-
   return (
     <div className="flex flex-col gap-6 md:gap-8">
       <ResponsibleGamblingNotice />
       {cards.length ? (
-        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+        <div className="flex flex-col gap-5">
           {cards.map((card) => (
             <SameGameMultiCard
               key={card.key}
               card={card}
-              priceResult={priceResults[card.key]}
               isPremium={isPremium}
               onRequestAccess={onRequestAccess}
             />
@@ -13085,6 +13094,9 @@ function AppDashboard({
                   </h1>
                   <div className="mt-2 text-[10px] font-black uppercase tracking-widest text-[#9CA3AF] md:text-sm">
                     {pageTitle.subtitle}
+                  </div>
+                  <div className="mt-2 text-xs font-medium text-[#9CA3AF]">
+                    Legs are selected where the model prices a market shorter than the book.
                   </div>
                 </div>
               ) : (
