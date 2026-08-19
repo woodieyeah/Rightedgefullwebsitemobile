@@ -7,6 +7,7 @@ import {
 import { AdminDashboard } from "./components/AdminDashboard";
 import { trackLinkedInConversion } from "../lib/linkedin";
 import { capturePostHogEvent, identifyPostHogUser } from "../lib/posthog";
+import { getSgmPrice, type BetrSgmPriceResult } from "../lib/betrSgm";
 import {
   Activity,
   ArrowRight,
@@ -1394,6 +1395,12 @@ const appPages = [
     label: "Premium Plays",
     mobileLabel: "Plays",
     icon: <Flame className="w-5 h-5" />,
+  },
+  {
+    id: "same-game-multi",
+    label: "Same Game Multi",
+    mobileLabel: "SGM",
+    icon: <BadgeCheck className="w-5 h-5" />,
   },
   {
     id: "try-scorers",
@@ -4069,7 +4076,7 @@ function PaymentGateModal({
   useEffect(() => {
     if (!open) return;
     const currentPremiumHash = window.location.hash.replace("#", "");
-    const section = ["matches", "best-bets", "try-scorers"].includes(currentPremiumHash)
+    const section = ["matches", "best-bets", "same-game-multi", "try-scorers"].includes(currentPremiumHash)
       ? currentPremiumHash
       : "best-bets";
     (window as any).trackAnalyticsEvent?.("premium_paywall_view", {
@@ -4125,7 +4132,7 @@ function PaymentGateModal({
 
       setStep("processing");
       const currentPremiumHash = window.location.hash.replace("#", "");
-      let returnHash = ["matches", "best-bets", "try-scorers"].includes(currentPremiumHash)
+      let returnHash = ["matches", "best-bets", "same-game-multi", "try-scorers"].includes(currentPremiumHash)
         ? currentPremiumHash
         : "best-bets";
       const returnUrl = `${window.location.origin}${window.location.pathname}`;
@@ -11874,32 +11881,20 @@ function TryScorersPage({
   );
 }
 
-type SgmLeg = {
+type SameGameMultiLeg = {
+  kind: "result" | "total" | "try-scorer";
   label: string;
-  typeLabel: string;
-  team?: string;
+  marketPct: number;
   modelPct: number;
-  odds: number;
+  team?: string;
+  totalSide?: "Over" | "Under";
 };
 
-type SgmCombo = {
-  id: string;
-  title: string;
-  confidence: "High Prob" | "Attack Stack" | "Scorer Pair";
-  bookmaker: string;
-  estimatedOdds: number;
-  modelHitPct: number;
-  legs: SgmLeg[];
-};
-
-type SgmMatchGroup = {
+type SameGameMultiCardData = {
   key: string;
   match: string;
-  homeTeam: string;
-  awayTeam: string;
-  selectedTeam: string;
-  projectedMargin: number;
-  combos: SgmCombo[];
+  fixture?: FixtureRow | null;
+  legs: SameGameMultiLeg[];
 };
 
 type SgmMarketBookmakerData = {
@@ -12016,30 +12011,6 @@ function buildSgmMarketMap(rawOdds: any[]): SgmMarketMap {
   return prices;
 }
 
-function getPredictionSide(match: PredictionRow) {
-  const homePct = getImpliedWinPctFromOdds(match.modelHomeOdds);
-  const awayPct = getImpliedWinPctFromOdds(match.modelAwayOdds);
-  const homeIsSelected = homePct >= awayPct;
-  return {
-    team: homeIsSelected ? match.homeTeam : match.awayTeam,
-    modelPct: homeIsSelected ? homePct : awayPct,
-    odds: homeIsSelected ? match.marketHomeOdds : match.marketAwayOdds,
-  };
-}
-
-function getH2hOddsForBookmaker(
-  marketMap: SgmMarketMap,
-  match: PredictionRow,
-  team: string,
-  bookmaker: string,
-  fallbackOdds: number,
-) {
-  const matchKey = buildMatchLabelKey(match.match);
-  const teamKey = normalizeTeamName(team);
-  const bookKey = normalizeBookmakerName(bookmaker);
-  return marketMap[matchKey]?.[bookKey]?.h2h[teamKey] || fallbackOdds || 0;
-}
-
 function getSgmMatchMarkets(marketMap: SgmMarketMap, match: PredictionRow) {
   const parts = String(match.match || "").split(/\s+v\s+/i);
   const directKey = buildMatchLabelKey(match.match);
@@ -12142,38 +12113,6 @@ function findBestTotalOffer(
   })[0] || null;
 }
 
-function marketHasCoreSgmData(data?: SgmMarketBookmakerData) {
-  if (!data) return false;
-  return Object.keys(data.h2h).length > 0 && data.spreads.length > 0 && data.totals.length > 0;
-}
-
-function resolveSgmBookmaker(
-  marketMap: SgmMarketMap,
-  match: PredictionRow,
-  preferredBookmaker: string,
-) {
-  const matchMarkets = getSgmMatchMarkets(marketMap, match);
-  const preferredKey = normalizeBookmakerName(preferredBookmaker);
-
-  if (preferredKey && marketHasCoreSgmData(matchMarkets[preferredKey])) {
-    return displayBookmakerName(preferredKey);
-  }
-
-  const fullMarketBookKey = Object.entries(matchMarkets).find(([, data]) =>
-    marketHasCoreSgmData(data),
-  )?.[0];
-
-  if (fullMarketBookKey) return displayBookmakerName(fullMarketBookKey);
-
-  if (preferredKey && matchMarkets[preferredKey]) {
-    return displayBookmakerName(preferredKey);
-  }
-
-  return preferredBookmaker && normalizeBookmakerName(preferredBookmaker)
-    ? displayBookmakerName(preferredBookmaker)
-    : "Best available";
-}
-
 function formatSgmLine(point: number) {
   if (point > 0) return `+${point}`;
   return String(point);
@@ -12186,294 +12125,147 @@ function getSelectedTeamProjectedMargin(match: PredictionRow, selectedTeam: stri
     : -homeMargin;
 }
 
-function getSpreadLeg(
-  marketMap: SgmMarketMap,
+function getSameGameMultiWinner(match: PredictionRow) {
+  const predictedWinnerKey = normalizeTeamName(match.predictedWinner);
+  if (predictedWinnerKey === normalizeTeamName(match.homeTeam)) return match.homeTeam;
+  if (predictedWinnerKey === normalizeTeamName(match.awayTeam)) return match.awayTeam;
+  return match.predictedHomeScore >= match.predictedAwayScore
+    ? match.homeTeam
+    : match.awayTeam;
+}
+
+function getSameGameMultiResultLeg(
   match: PredictionRow,
-  selectedTeam: string,
-  bookmaker: string,
-) {
-  const bookKey = normalizeBookmakerName(bookmaker);
-  const spread = getSgmMatchMarkets(marketMap, match)[bookKey]?.spreads.find(
-    (row) => normalizeTeamName(row.team) === normalizeTeamName(selectedTeam),
+  betrMarkets: SgmMarketBookmakerData,
+): SameGameMultiLeg | null {
+  const winner = getSameGameMultiWinner(match);
+  const winnerKey = normalizeTeamName(winner);
+  const projectedMargin = getSelectedTeamProjectedMargin(match, winner);
+  const winnerIsHome = winnerKey === normalizeTeamName(match.homeTeam);
+  const h2hModelPct = getImpliedWinPctFromOdds(
+    winnerIsHome ? match.modelHomeOdds : match.modelAwayOdds,
   );
-  if (!spread) return null;
+  const line = betrMarkets.spreads.find(
+    (offer) => normalizeTeamName(offer.team) === winnerKey,
+  );
 
-  const projectedMargin = getSelectedTeamProjectedMargin(match, selectedTeam);
-  const coverEdge = projectedMargin + spread.point;
-  // Unified with the best-bet engine: single source of truth for line model %.
-  const modelPct = probabilityFromEdge(coverEdge, RIGHTEDGE_TUNING.lineScale);
+  if (line) {
+    const lineEdge = projectedMargin + line.point;
+    if (lineEdge >= RIGHTEDGE_TUNING.minLineEdgePts) {
+      return {
+        kind: "result",
+        label: `${winner} ${formatSgmLine(line.point)}`,
+        team: winner,
+        marketPct: getImpliedWinPctFromOdds(line.odds),
+        modelPct: probabilityFromEdge(lineEdge, RIGHTEDGE_TUNING.lineScale),
+      };
+    }
+  }
+
+  const h2hOdds = betrMarkets.h2h[winnerKey];
+  if (!Number.isFinite(h2hOdds) || h2hOdds <= 1) return null;
 
   return {
-    label: `${selectedTeam} ${formatSgmLine(spread.point)} line`,
-    typeLabel: "Line",
-    team: selectedTeam,
-    modelPct,
-    odds: spread.odds,
-  } as SgmLeg;
-}
-
-function getTotalLeg(
-  marketMap: SgmMarketMap,
-  match: PredictionRow,
-  bookmaker: string,
-) {
-  const bookKey = normalizeBookmakerName(bookmaker);
-  const projectedTotal = match.predictedHomeScore + match.predictedAwayScore;
-  const totals = getSgmMatchMarkets(marketMap, match)[bookKey]?.totals || [];
-  if (!totals.length || !projectedTotal) return null;
-
-  const sortedTotals = [...totals].sort(
-    (a, b) => Math.abs(projectedTotal - a.point) - Math.abs(projectedTotal - b.point),
-  );
-  const total = sortedTotals[0];
-  const side = projectedTotal >= total.point ? "Over" : "Under";
-  const matchingTotal = totals.find((row) => row.side === side && row.point === total.point) || total;
-  const totalDiff = Math.abs(projectedTotal - matchingTotal.point);
-
-  return {
-    label: `${side} ${matchingTotal.point} total points`,
-    typeLabel: "Total",
-    // Unified with the best-bet engine: single source of truth for total model %.
-    modelPct: probabilityFromEdge(totalDiff, RIGHTEDGE_TUNING.totalScale),
-    odds: matchingTotal.odds,
-  } as SgmLeg;
-}
-
-function buildSgmHitPct(legs: SgmLeg[], correlationMultiplier: number) {
-  const independent = legs.reduce(
-    (product, leg) => product * (Math.max(leg.modelPct, 1) / 100),
-    1,
-  );
-  return Math.max(1, Math.min(55, independent * correlationMultiplier * 100));
-}
-
-function makeSgmCombo({
-  id,
-  title,
-  confidence,
-  bookmaker,
-  legs,
-  correlationMultiplier,
-}: {
-  id: string;
-  title: string;
-  confidence: SgmCombo["confidence"];
-  bookmaker: string;
-  legs: SgmLeg[];
-  correlationMultiplier: number;
-}): SgmCombo | null {
-  if (legs.length < 2 || legs.some((leg) => !leg.modelPct || !leg.odds)) return null;
-  const modelHitPct = buildSgmHitPct(legs, correlationMultiplier);
-  if (modelHitPct < 40) return null;
-
-  return {
-    id,
-    title,
-    confidence,
-    bookmaker: displayBookmakerName(bookmaker),
-    estimatedOdds: legs.reduce((product, leg) => product * leg.odds, 1),
-    modelHitPct,
-    legs,
+    kind: "result",
+    label: `${winner} HEAD-TO-HEAD`,
+    team: winner,
+    marketPct: getImpliedWinPctFromOdds(h2hOdds),
+    modelPct: h2hModelPct,
   };
 }
 
-function buildSgmMatchGroups(
+function getSameGameMultiTotalLeg(
+  match: PredictionRow,
+  betrMarkets: SgmMarketBookmakerData,
+): SameGameMultiLeg | null {
+  const projectedTotal = match.predictedHomeScore + match.predictedAwayScore;
+  if (!Number.isFinite(projectedTotal) || !betrMarkets.totals.length) return null;
+
+  const closestPoint = [...betrMarkets.totals].sort(
+    (a, b) => Math.abs(projectedTotal - a.point) - Math.abs(projectedTotal - b.point),
+  )[0]?.point;
+  if (!Number.isFinite(closestPoint)) return null;
+
+  const totalGap = Math.abs(projectedTotal - closestPoint);
+  if (totalGap >= 3) return null;
+
+  const side: "Over" | "Under" = projectedTotal >= closestPoint ? "Over" : "Under";
+  const offer = betrMarkets.totals.find(
+    (total) => total.side === side && Math.abs(total.point - closestPoint) <= 0.01,
+  );
+  if (!offer || offer.odds <= 1) return null;
+
+  return {
+    kind: "total",
+    label: `${side} ${offer.point} TOTAL POINTS`,
+    totalSide: side,
+    marketPct: getImpliedWinPctFromOdds(offer.odds),
+    modelPct: probabilityFromEdge(totalGap, RIGHTEDGE_TUNING.totalScale),
+  };
+}
+
+function buildSameGameMultiCards(
   data: DashboardData,
-  marketMap: SgmMarketMap = {},
-): SgmMatchGroup[] {
+  marketMap: SgmMarketMap,
+): SameGameMultiCardData[] {
   const settledMatchKeys = new Set(
     data.betLog
-      .filter((b) => b.result === "W" || b.result === "L")
-      .map((b) => buildMatchLabelKey(b.match)),
+      .filter((bet) => bet.result === "W" || bet.result === "L")
+      .map((bet) => buildMatchLabelKey(bet.match)),
   );
-
-  const tryScorersByMatch = data.tryScorers
-    .filter((row) => row.statsInsiderPct >= 45 && row.bestOdds > 1)
-    .reduce((groups, row) => {
-      const key = buildMatchLabelKey(row.match);
-      if (!groups[key]) groups[key] = [];
-      groups[key].push(row);
-      return groups;
-    }, {} as Record<string, TryScorerRow[]>);
-
+  const tryScorersByMatch = data.tryScorers.reduce((groups, row) => {
+    const key = buildMatchLabelKey(row.match);
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(row);
+    return groups;
+  }, {} as Record<string, TryScorerRow[]>);
   const fixtureOrder = new Map(
-    data.fixtures.map((fixture, idx) => [
+    data.fixtures.map((fixture, index) => [
       buildMatchKey(fixture.homeTeam, fixture.awayTeam),
-      idx,
+      index,
     ]),
   );
 
   return data.predictions
     .filter((match) => !settledMatchKeys.has(buildMatchLabelKey(match.match)))
-    .map((match) => {
-      const matchKey = buildMatchLabelKey(match.match);
-      const selected = getPredictionSide(match);
-      const projectedMargin = Math.abs(match.predictedHomeScore - match.predictedAwayScore);
-      const selectedTeamScorers = [...(tryScorersByMatch[matchKey] || [])]
-        .filter((row) => normalizeTeamName(row.team) === normalizeTeamName(selected.team))
-        .sort((a, b) => b.statsInsiderPct - a.statsInsiderPct);
-      const allScorers = [...(tryScorersByMatch[matchKey] || [])]
-        .sort((a, b) => b.statsInsiderPct - a.statsInsiderPct);
-      const combos: SgmCombo[] = [];
+    .map((match): SameGameMultiCardData | null => {
+      const key = buildMatchLabelKey(match.match);
+      const betrMarkets = getSgmMatchMarkets(marketMap, match).betr;
+      if (!betrMarkets) return null;
 
-      const addCombo = (combo: SgmCombo | null) => {
-        if (combo && !combos.some((existing) => existing.id === combo.id)) {
-          combos.push(combo);
-        }
-      };
+      const resultLeg = getSameGameMultiResultLeg(match, betrMarkets);
+      if (!resultLeg) return null;
 
-      const topTeamScorer = selectedTeamScorers[0];
-      if (topTeamScorer) {
-        const bookie = resolveSgmBookmaker(marketMap, match, topTeamScorer.bookmaker);
-        const h2hOddsForBookie = getH2hOddsForBookmaker(
-          marketMap,
-          match,
-          selected.team,
-          bookie,
-          selected.odds,
-        );
-        const sideLeg = {
-          label: `${selected.team} head-to-head`,
-          typeLabel: "Head 2 Head",
-          team: selected.team,
-          modelPct: selected.modelPct,
-          odds: h2hOddsForBookie,
-        };
-        const topScorerLeg = {
-          label: topTeamScorer.player,
-          typeLabel: "Anytime try",
-          team: topTeamScorer.team,
-          modelPct: topTeamScorer.statsInsiderPct,
-          odds: topTeamScorer.bestOdds,
-        };
-        const spreadLeg = getSpreadLeg(marketMap, match, selected.team, bookie);
-        const totalLeg = getTotalLeg(marketMap, match, bookie);
-
-        addCombo(makeSgmCombo({
-          id: `${matchKey}-side-top-scorer`,
-          title: "Side + top scorer",
-          confidence: "High Prob",
-          bookmaker: bookie,
-          correlationMultiplier: 1.1,
-          legs: [sideLeg, topScorerLeg],
+      const totalLeg = getSameGameMultiTotalLeg(match, betrMarkets);
+      const scorerLimit = totalLeg?.totalSide === "Under" ? 1 : 2;
+      const projectedWinnerKey = normalizeTeamName(getSameGameMultiWinner(match));
+      const scorerLegs = [...(tryScorersByMatch[key] || [])]
+        .filter(
+          (row) =>
+            normalizeTeamName(row.team) === projectedWinnerKey &&
+            row.statsInsiderPct >= 40,
+        )
+        .sort((a, b) => b.statsInsiderPct - a.statsInsiderPct)
+        .slice(0, scorerLimit)
+        .map<SameGameMultiLeg>((row) => ({
+          kind: "try-scorer",
+          label: `${row.player} ANYTIME`,
+          team: row.team,
+          marketPct: row.marketImpliedPct,
+          modelPct: row.statsInsiderPct,
         }));
 
-        if (totalLeg) {
-          addCombo(makeSgmCombo({
-            id: `${matchKey}-side-top-scorer-total`,
-            title: "Side + scorer + total",
-            confidence: "High Prob",
-            bookmaker: bookie,
-            correlationMultiplier: normalizeTeamName(topTeamScorer.team) === normalizeTeamName(selected.team)
-              ? 1.14
-              : 1.02,
-            legs: [sideLeg, topScorerLeg, totalLeg],
-          }));
-
-          addCombo(makeSgmCombo({
-            id: `${matchKey}-scorer-total`,
-            title: "Scorer + total",
-            confidence: "High Prob",
-            bookmaker: bookie,
-            correlationMultiplier: normalizeTeamName(topTeamScorer.team) === normalizeTeamName(selected.team)
-              ? 1.24
-              : 1.08,
-            legs: [topScorerLeg, totalLeg],
-          }));
-        }
-
-        if (spreadLeg) {
-          addCombo(makeSgmCombo({
-            id: `${matchKey}-line-top-scorer`,
-            title: "Line + scorer",
-            confidence: "High Prob",
-            bookmaker: bookie,
-            correlationMultiplier: normalizeTeamName(topTeamScorer.team) === normalizeTeamName(selected.team)
-              ? 1.35
-              : 1.05,
-            legs: [spreadLeg, topScorerLeg],
-          }));
-        }
-      }
-
-      const sameBookieTeamPair = selectedTeamScorers.find((first, idx) =>
-        selectedTeamScorers.slice(idx + 1).some(
-          (second) => normalizeBookmakerName(second.bookmaker) === normalizeBookmakerName(first.bookmaker),
-        ),
-      );
-      const secondSameBookieTeamScorer = sameBookieTeamPair
-        ? selectedTeamScorers.find(
-            (row) =>
-              row.player !== sameBookieTeamPair.player &&
-              normalizeBookmakerName(row.bookmaker) === normalizeBookmakerName(sameBookieTeamPair.bookmaker),
-          )
-        : undefined;
-
-      if (sameBookieTeamPair && secondSameBookieTeamScorer && (projectedMargin >= 8 || selected.modelPct >= 58)) {
-        const bookie = resolveSgmBookmaker(marketMap, match, sameBookieTeamPair.bookmaker);
-        const h2hOddsForBookie = getH2hOddsForBookmaker(
-          marketMap,
-          match,
-          selected.team,
-          bookie,
-          selected.odds,
-        );
-        addCombo(makeSgmCombo({
-          id: `${matchKey}-team-attack-stack`,
-          title: "Winning team attack stack",
-          confidence: "Attack Stack",
-          bookmaker: bookie,
-          correlationMultiplier: 1.22,
-          legs: [
-            { label: `${selected.team} head-to-head`, typeLabel: "Head 2 Head", team: selected.team, modelPct: selected.modelPct, odds: h2hOddsForBookie },
-            { label: sameBookieTeamPair.player, typeLabel: "Anytime try", team: sameBookieTeamPair.team, modelPct: sameBookieTeamPair.statsInsiderPct, odds: sameBookieTeamPair.bestOdds },
-            { label: secondSameBookieTeamScorer.player, typeLabel: "Anytime try", team: secondSameBookieTeamScorer.team, modelPct: secondSameBookieTeamScorer.statsInsiderPct, odds: secondSameBookieTeamScorer.bestOdds },
-          ],
-        }));
-      }
-
-      const sameBookiePair = allScorers.find((first, idx) =>
-        allScorers.slice(idx + 1).some(
-          (second) => normalizeBookmakerName(second.bookmaker) === normalizeBookmakerName(first.bookmaker),
-        ),
-      );
-      const secondSameBookieScorer = sameBookiePair
-        ? allScorers.find(
-            (row) =>
-              row.player !== sameBookiePair.player &&
-              normalizeBookmakerName(row.bookmaker) === normalizeBookmakerName(sameBookiePair.bookmaker),
-          )
-        : undefined;
-
-      if (sameBookiePair && secondSameBookieScorer) {
-        const bookie = resolveSgmBookmaker(marketMap, match, sameBookiePair.bookmaker);
-        addCombo(makeSgmCombo({
-          id: `${matchKey}-two-scorers`,
-          title: "Two highest-probability scorers",
-          confidence: "Scorer Pair",
-          bookmaker: bookie,
-          correlationMultiplier:
-            normalizeTeamName(sameBookiePair.team) === normalizeTeamName(secondSameBookieScorer.team)
-              ? 1.08
-              : 0.96,
-          legs: [
-            { label: sameBookiePair.player, typeLabel: "Anytime try", team: sameBookiePair.team, modelPct: sameBookiePair.statsInsiderPct, odds: sameBookiePair.bestOdds },
-            { label: secondSameBookieScorer.player, typeLabel: "Anytime try", team: secondSameBookieScorer.team, modelPct: secondSameBookieScorer.statsInsiderPct, odds: secondSameBookieScorer.bestOdds },
-          ],
-        }));
-      }
+      const legs = [resultLeg, ...(totalLeg ? [totalLeg] : []), ...scorerLegs];
+      if (legs.length < 3) return null;
 
       return {
-        key: matchKey,
-        match: match.match,
-        homeTeam: match.homeTeam,
-        awayTeam: match.awayTeam,
-        selectedTeam: selected.team,
-        projectedMargin,
-        combos: combos.sort((a, b) => b.modelHitPct - a.modelHitPct),
+        key,
+        match: `${match.homeTeam} V ${match.awayTeam}`,
+        fixture: match.fixture,
+        legs,
       };
     })
-    .filter((group) => group.combos.length > 0)
+    .filter((card): card is SameGameMultiCardData => Boolean(card))
     .sort((a, b) => {
       const aOrder = fixtureOrder.get(a.key) ?? 999;
       const bOrder = fixtureOrder.get(b.key) ?? 999;
@@ -12481,91 +12273,157 @@ function buildSgmMatchGroups(
     });
 }
 
-function SgmComboCard({ combo }: { combo: SgmCombo }) {
-  const showHighProbBadge = combo.modelHitPct >= 50;
+function isAvailableSgmPrice(
+  result: BetrSgmPriceResult | undefined,
+): result is Extract<BetrSgmPriceResult, { price: number }> {
+  return Boolean(result && "price" in result && Number.isFinite(result.price) && result.price > 1);
+}
+
+function formatSgmPriceTime(fetchedAt: string) {
+  const date = new Date(fetchedAt);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("en-AU", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: "Australia/Brisbane",
+  }).format(date);
+}
+
+function SameGameMultiCard({
+  card,
+  priceResult,
+  isPremium,
+  onRequestAccess,
+}: {
+  card: SameGameMultiCardData;
+  priceResult?: BetrSgmPriceResult;
+  isPremium: boolean;
+  onRequestAccess: (targetHash?: string) => void;
+}) {
+  const price = isPremium && isAvailableSgmPrice(priceResult) ? priceResult : null;
+  const kickoff = card.fixture
+    ? `${card.fixture.day} ${card.fixture.dateLabel} @ ${card.fixture.aedt} AEST`
+    : "KICKOFF TBC";
 
   return (
-    <GlassCard className="p-5 md:p-6 relative overflow-hidden border-l-4 border-l-[#0047FF]">
-      <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(0,71,255,0.08),transparent_55%)]" />
-      <div className="relative z-10">
-        <div className="flex items-start justify-between gap-4 mb-5">
-          <div>
-            <div className="text-lg md:text-2xl font-black text-white tracking-tight">
-              {combo.title}
-            </div>
+    <article className="border border-[#1E1E2E] bg-[#111116]">
+      <div className="flex items-start justify-between gap-4 border-b border-[#1E1E2E] px-4 py-4 md:px-6 md:py-5">
+        <div className="min-w-0">
+          <h2 className="text-lg font-black uppercase tracking-tight text-white md:text-2xl">
+            {card.match}
+          </h2>
+          <div className="mt-1 text-[10px] font-black uppercase tracking-widest text-[#9CA3AF] md:text-xs">
+            {kickoff}
           </div>
-          {showHighProbBadge ? (
-            <span className="shrink-0 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest bg-[#00E676] text-black">
-              High Prob
-            </span>
-          ) : null}
         </div>
-
-        <div className="space-y-3 mb-5">
-          {combo.legs.map((leg) => (
-            <div key={`${combo.id}-${leg.label}`} className="flex items-start gap-3 bg-[#111317] border border-white/10 p-3">
-              {leg.team ? (
-                <TeamLogo teamName={leg.team} className="w-7 h-7 text-[10px]" />
-              ) : (
-                <div className="w-7 h-7 flex items-center justify-center bg-[#FFEA00] text-black shrink-0">
-                  <Target className="w-4 h-4 stroke-[3px]" />
-                </div>
-              )}
-              <div className="min-w-0 flex-1">
-                <div className="text-[9px] text-[#FFEA00] font-black uppercase tracking-widest mb-1">
-                  {leg.typeLabel}
-                </div>
-                <div className="text-sm font-black text-white uppercase tracking-wide leading-snug">
-                  {leg.label}
-                </div>
-                <div className="text-[10px] text-white/40 font-black uppercase tracking-widest mt-1">
-                  Odds {leg.odds.toFixed(2)}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <div className="mb-5">
-          <div className="bg-[#111317] border border-white/10 p-3 max-w-[220px]">
-            <div className="text-[9px] font-black text-white/40 uppercase tracking-widest mb-1">
-              Est. odds
-            </div>
-            <div className="text-2xl font-black text-[#00E676]">
-              {combo.estimatedOdds.toFixed(2)}
-            </div>
-            <div className="text-[9px] font-black text-white/40 uppercase tracking-widest mt-1">
-              {combo.bookmaker}
-            </div>
-          </div>
+        <div className="shrink-0 text-[10px] font-black uppercase tracking-widest text-[#9CA3AF] md:text-xs">
+          {card.legs.length} Legs
         </div>
       </div>
-    </GlassCard>
+
+      <div className="px-4 md:px-6">
+        {card.legs.map((leg, index) => {
+          const locked = !isPremium && index > 0;
+          return (
+            <div
+              key={`${card.key}-${leg.kind}-${leg.label}`}
+              className={`grid min-h-[74px] grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-3 border-b border-[#1E1E2E] py-4 ${locked ? "text-[#4B5563]" : ""}`}
+            >
+              <div className="text-xs font-black tabular-nums text-[#6B7280]">
+                {String(index + 1).padStart(2, "0")}
+              </div>
+              {locked ? (
+                <div aria-label="Premium leg hidden" className="space-y-2">
+                  <div className="h-2.5 w-2/3 bg-[#25252E]" />
+                  <div className="h-2 w-1/3 bg-[#1E1E27]" />
+                </div>
+              ) : (
+                <div className="text-xs font-black uppercase tracking-wide text-white md:text-sm">
+                  {leg.label}
+                </div>
+              )}
+              {!locked ? (
+                <div
+                  className="flex min-w-[108px] flex-col items-end gap-1 text-[9px] font-black uppercase tracking-wider tabular-nums md:min-w-[220px] md:flex-row md:justify-end md:gap-4 md:text-[10px]"
+                  style={{ fontVariantNumeric: "tabular-nums" }}
+                >
+                  <span className="text-[#9CA3AF]">Market {formatPercent(leg.marketPct, 1)}</span>
+                  <span className="text-[#4ADE80]">Model {formatPercent(leg.modelPct, 1)}</span>
+                </div>
+              ) : (
+                <div className="h-2.5 w-14 bg-[#25252E]" aria-hidden="true" />
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {isPremium ? (
+        <div className="px-4 py-4 text-[9px] font-black uppercase leading-relaxed tracking-widest text-[#9CA3AF] md:px-6 md:text-[10px]">
+          Every leg sits on the same side of the model&apos;s read. Correlated legs are priced shorter than the legs multiplied.
+        </div>
+      ) : null}
+
+      {price ? (
+        <div className="flex items-end justify-between gap-4 border-y border-[#1E1E2E] bg-[#0A0A0F] px-4 py-4 md:px-6">
+          <div>
+            <div className="text-[10px] font-black uppercase tracking-widest text-white">
+              Betr Same Game Multi
+            </div>
+            <div className="mt-1 text-[9px] font-black uppercase tracking-widest text-[#9CA3AF]">
+              Price as at {formatSgmPriceTime(price.fetchedAt)} AEST
+            </div>
+          </div>
+          <div className="text-3xl font-black tabular-nums text-white" style={{ fontVariantNumeric: "tabular-nums" }}>
+            ${price.price.toFixed(2)}
+          </div>
+        </div>
+      ) : null}
+
+      <div className="p-4 md:p-6">
+        {isPremium ? (
+          <BetrAffiliateLink
+            payload={`rightedge_sgm_${slugifyPayloadPart(card.match)}`}
+            className="flex min-h-[48px] w-full items-center justify-center bg-[#093AD3] px-5 text-xs font-black uppercase tracking-widest text-white transition hover:bg-[#0B46F0]"
+          >
+            {price ? "Build this at Betr" : "Build these legs at Betr"}
+          </BetrAffiliateLink>
+        ) : (
+          <button
+            type="button"
+            onClick={() => onRequestAccess("same-game-multi")}
+            className="re-primary-cta flex min-h-[48px] w-full items-center justify-center border px-5 text-xs font-medium uppercase tracking-widest transition hover:opacity-90"
+          >
+            Unlock Premium Plays — $14/week
+          </button>
+        )}
+      </div>
+    </article>
   );
 }
 
-function SgmBuilderPage({
+function SameGameMultiPage({
   data,
   onRequestAccess,
+  isPremium,
 }: {
   data: DashboardData;
   onRequestAccess: (targetHash?: string) => void;
+  isPremium: boolean;
 }) {
-  const [sgmMarketMap, setSgmMarketMap] = useState<SgmMarketMap>({});
-  const groups = useMemo(
-    () => buildSgmMatchGroups(data, sgmMarketMap),
-    [data, sgmMarketMap],
-  );
-  const [selectedMatchKey, setSelectedMatchKey] = useState("");
+  const [marketMap, setMarketMap] = useState<SgmMarketMap>({});
+  const [priceResults, setPriceResults] = useState<Record<string, BetrSgmPriceResult>>({});
+  const cards = useMemo(() => buildSameGameMultiCards(data, marketMap), [data, marketMap]);
 
   useEffect(() => {
     let mounted = true;
-    fetchLiveOddsCached()
+    fetchLiveOddsCached("betr")
       .then((rawOdds) => {
-        if (mounted) setSgmMarketMap(buildSgmMarketMap(rawOdds));
+        if (mounted) setMarketMap(buildSgmMarketMap(rawOdds));
       })
       .catch(() => {
-        if (mounted) setSgmMarketMap({});
+        if (mounted) setMarketMap({});
       });
     return () => {
       mounted = false;
@@ -12573,126 +12431,37 @@ function SgmBuilderPage({
   }, []);
 
   useEffect(() => {
-    if (!groups.length) {
-      setSelectedMatchKey("");
-      return;
-    }
-    setSelectedMatchKey((current) =>
-      groups.some((group) => group.key === current) ? current : groups[0].key,
-    );
-  }, [groups]);
-
-  const selectedGroup =
-    groups.find((group) => group.key === selectedMatchKey) || groups[0];
-
-  if (!hasPaidAccess()) {
-    return (
-      <div className="flex flex-col gap-6 md:gap-8">
-        <GlassCard className="p-8 md:p-12 text-center !border-[#FF2E63] !shadow-[8px_8px_0_0_#FF2E63] relative overflow-hidden">
-          <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(255,234,0,0.08),transparent_55%)]" />
-          <div className="relative z-10 flex flex-col items-center max-w-xl mx-auto">
-            <div className="bg-[#FF2E63] p-4 mb-6 shadow-[4px_4px_0_0_#0047FF]">
-              <Lock className="w-10 h-10 text-white stroke-[3px]" />
-            </div>
-            <h2 className="text-3xl md:text-5xl font-black text-white uppercase tracking-tight mb-3">
-              Premium Content
-            </h2>
-            <p className="text-sm md:text-base text-white/70 font-bold leading-relaxed mb-8">
-              Same Game Multis are included with RightEdge Premium: cleaner same-bookie team, total and try-scorer combinations by match.
-            </p>
-            <button
-              onClick={() => onRequestAccess("sgm-builder")}
-              className="inline-flex items-center justify-center gap-3 bg-[#FF2E63] text-white px-8 py-4 text-base font-black uppercase tracking-wider hover:bg-[#E62959] transition-colors shadow-[4px_4px_0_0_#0047FF]"
-            >
-              Unlock Premium Plays — $14/week
-              <ArrowRight className="w-5 h-5 stroke-[3px]" />
-            </button>
-          </div>
-        </GlassCard>
-      </div>
-    );
-  }
+    let mounted = true;
+    Promise.all(
+      cards.map(async (card) => [card.key, await getSgmPrice(card.key, [])] as const),
+    ).then((entries) => {
+      if (mounted) setPriceResults(Object.fromEntries(entries));
+    });
+    return () => {
+      mounted = false;
+    };
+  }, [cards]);
 
   return (
     <div className="flex flex-col gap-6 md:gap-8">
-      <div className="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-4">
-        <div>
-          <h2 className="text-xl md:text-3xl font-black text-white uppercase tracking-tight mb-1 md:mb-2">
-            Same Game Multi Builder
-          </h2>
-          <div className="text-[10px] md:text-sm font-bold text-[#FFEA00] uppercase tracking-widest">
-            Pick a match — high probability team + try scorer combinations
-          </div>
+      <ResponsibleGamblingNotice />
+      {cards.length ? (
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+          {cards.map((card) => (
+            <SameGameMultiCard
+              key={card.key}
+              card={card}
+              priceResult={priceResults[card.key]}
+              isPremium={isPremium}
+              onRequestAccess={onRequestAccess}
+            />
+          ))}
         </div>
-      </div>
-
-      {groups.length === 0 ? (
-        <GlassCard className="p-8 text-center border-l-4 border-l-white/20">
-          <div className="text-white/50 font-bold uppercase tracking-widest text-sm">
-            No same game multi combos qualify yet.
-          </div>
-        </GlassCard>
       ) : (
-        <div className="grid grid-cols-1 xl:grid-cols-[300px_minmax(0,1fr)] gap-6">
-          <div className="flex xl:flex-col gap-3 overflow-x-auto xl:overflow-visible pb-2 xl:pb-0">
-            {groups.map((group) => (
-              <button
-                key={group.key}
-                type="button"
-                onClick={() => setSelectedMatchKey(group.key)}
-                className={`min-w-[240px] xl:min-w-0 text-left p-4 border-2 transition-colors ${
-                  selectedGroup?.key === group.key
-                    ? "border-[#FFEA00] bg-[#1E232B] shadow-[4px_4px_0_0_#FF2E63]"
-                    : "border-white/10 bg-[#111317] hover:border-white/30"
-                }`}
-              >
-                <div className="flex items-center gap-2 mb-3">
-                  <TeamLogo teamName={group.homeTeam} className="w-7 h-7 text-[10px]" />
-                  <TeamLogo teamName={group.awayTeam} className="w-7 h-7 text-[10px]" />
-                </div>
-                <div className="text-sm font-black text-white uppercase tracking-tight">
-                  {group.match}
-                </div>
-                <div className="text-[10px] text-white/40 font-black uppercase tracking-widest mt-2">
-                  {group.combos.length} combos
-                </div>
-              </button>
-            ))}
-          </div>
-
-          <div className="min-w-0">
-            {selectedGroup && (
-              <div className="space-y-5">
-                <GlassCard className="p-5 border-l-4 border-l-[#FFEA00]">
-                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                    <div>
-                      <div className="text-2xl font-black text-white uppercase tracking-tight">
-                        {selectedGroup.match}
-                      </div>
-                      <div className="text-xs font-black text-[#FFEA00] uppercase tracking-widest mt-2">
-                        Highest probability side: {selectedGroup.selectedTeam}
-                      </div>
-                    </div>
-                    <div className="text-[10px] font-black text-white/40 uppercase tracking-widest">
-                      Projected margin {selectedGroup.projectedMargin.toFixed(0)}
-                    </div>
-                  </div>
-                </GlassCard>
-
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-                  {selectedGroup.combos.map((combo) => (
-                    <SgmComboCard key={combo.id} combo={combo} />
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
+        <div className="border border-[#1E1E2E] bg-[#111116] p-8 text-center text-xs font-black uppercase tracking-widest text-[#9CA3AF]">
+          No qualifying combinations for this round.
         </div>
       )}
-
-      <div className="border-t border-white/10 pt-4 text-[10px] font-black uppercase tracking-widest text-white/30 leading-relaxed">
-        SGM prices can move inside bookmaker apps. Estimated odds use the listed bookmaker where available.
-      </div>
     </div>
   );
 }
@@ -12971,7 +12740,7 @@ function AppDashboard({
   const [page, setPage] = useState(() => {
     const hash = window.location.hash.replace("#", "");
     if (
-      ["matches", "best-bets", "try-scorers", "performance", "admin", "admin-results"].includes(
+      ["matches", "best-bets", "same-game-multi", "try-scorers", "performance", "admin", "admin-results"].includes(
         hash,
       )
     ) {
@@ -13045,6 +12814,7 @@ function AppDashboard({
         [
           "matches",
           "best-bets",
+          "same-game-multi",
           "try-scorers",
           "performance",
           "admin",
@@ -13137,6 +12907,11 @@ function AppDashboard({
           title: "Premium",
           subtitle: "Premium Plays",
         };
+      case "same-game-multi":
+        return {
+          title: "Same Game Multi",
+          subtitle: "Model-aligned leg combinations by match",
+        };
       case "try-scorers":
         return {
           title: "Premium",
@@ -13186,7 +12961,7 @@ function AppDashboard({
                 active={page === item.id}
                 icon={item.icon}
                 label={item.label}
-                premium={item.id === "best-bets" || item.id === "try-scorers"}
+                premium={item.id === "best-bets" || item.id === "same-game-multi" || item.id === "try-scorers"}
                 onClick={() => {
                   handlePageChange(item.id);
                   window.scrollTo({
@@ -13303,14 +13078,25 @@ function AppDashboard({
           </div>
           <div className="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-4 md:gap-6 pb-4 md:pb-6 border-b border-[#1E1E2E]">
             <div className="flex justify-between items-start xl:block">
-              <div>
-                <div className="text-[10px] md:text-xs uppercase tracking-widest text-[#9CA3AF] font-medium mb-1 md:mb-2">
-                  {pageTitle.title}
+              {page === "same-game-multi" ? (
+                <div>
+                  <h1 className="text-[18px] font-black uppercase leading-none tracking-tight text-white md:text-4xl">
+                    {pageTitle.title}
+                  </h1>
+                  <div className="mt-2 text-[10px] font-black uppercase tracking-widest text-[#9CA3AF] md:text-sm">
+                    {pageTitle.subtitle}
+                  </div>
                 </div>
-                <h1 className="text-[18px] md:text-4xl font-semibold tracking-tight text-white uppercase leading-none">
-                  {pageTitle.subtitle}
-                </h1>
-              </div>
+              ) : (
+                <div>
+                  <div className="text-[10px] md:text-xs uppercase tracking-widest text-[#9CA3AF] font-medium mb-1 md:mb-2">
+                    {pageTitle.title}
+                  </div>
+                  <h1 className="text-[18px] md:text-4xl font-semibold tracking-tight text-white uppercase leading-none">
+                    {pageTitle.subtitle}
+                  </h1>
+                </div>
+              )}
               <button
                 onClick={() => loadData(true)}
                 className="xl:hidden bg-[#16161D] p-2 border border-[#1E1E2E] text-white shrink-0 ml-4 mt-1"
@@ -13411,6 +13197,13 @@ function AppDashboard({
                   onRequestAccess={onRequestAccess}
                   isPremium={isPremium}
                   isAdmin={isAdmin}
+                />
+              )}
+              {page === "same-game-multi" && (
+                <SameGameMultiPage
+                  data={data}
+                  onRequestAccess={onRequestAccess}
+                  isPremium={isPremium || isAdmin}
                 />
               )}
               {page === "admin" && (
@@ -13932,7 +13725,7 @@ export default function App() {
     const analyticsName = rawHash.replace(/-/g, "_");
     (window as any).trackAnalyticsEvent?.(`${analyticsName}_view`, {
       section: rawHash,
-      app_section: ["matches", "best-bets", "try-scorers", "performance", "admin", "admin-results"].includes(rawHash),
+      app_section: ["matches", "best-bets", "same-game-multi", "try-scorers", "performance", "admin", "admin-results"].includes(rawHash),
     });
   };
 
@@ -13958,7 +13751,7 @@ export default function App() {
   };
 
   const requestPremiumAccess = (source: string = 'unknown') => {
-    let targetHash = ["matches", "best-bets", "try-scorers"].includes(source)
+    let targetHash = ["matches", "best-bets", "same-game-multi", "try-scorers"].includes(source)
       ? source
       : "best-bets";
     setSitePage("app");
@@ -13991,17 +13784,12 @@ export default function App() {
 
   const checkHash = () => {
     const hash = window.location.hash.replace("#", "");
-    const appHashes = ["matches", "best-bets", "try-scorers", "performance", "admin", "admin-results"];
+    const appHashes = ["matches", "best-bets", "same-game-multi", "try-scorers", "performance", "admin", "admin-results"];
     const premiumHashes = ["best-bets", "try-scorers"];
     const publicHashes = ["results", "methodology", "ad-studio", "articles", "article-round-5-2026", "article-methodology", "cricket"];
 
     if (hash === "origin") {
       window.location.hash = "matches";
-      return;
-    }
-
-    if (hash === "sgm-builder") {
-      window.location.hash = "best-bets";
       return;
     }
 
@@ -14075,7 +13863,7 @@ export default function App() {
 
       const sessionId = searchParams.get("session_id");
       const fallbackReturnHash = searchParams.get("return_hash") || window.location.hash.replace("#", "") || "best-bets";
-      let returnHash = ["matches", "best-bets", "try-scorers"].includes(fallbackReturnHash)
+      let returnHash = ["matches", "best-bets", "same-game-multi", "try-scorers"].includes(fallbackReturnHash)
         ? fallbackReturnHash
         : "best-bets";
 
@@ -14116,7 +13904,7 @@ export default function App() {
 
           setShowEmailGate(false);
 
-          let confirmedReturnHash = ["matches", "best-bets", "try-scorers"].includes(data.returnHash)
+          let confirmedReturnHash = ["matches", "best-bets", "same-game-multi", "try-scorers"].includes(data.returnHash)
             ? data.returnHash
             : returnHash;
 
@@ -14422,7 +14210,7 @@ export default function App() {
             setShowPaymentGate(false);
             setSitePage("app");
             const currentPremiumHash = window.location.hash.replace("#", "");
-            let returnHash = ["matches", "best-bets", "try-scorers"].includes(currentPremiumHash)
+            let returnHash = ["matches", "best-bets", "same-game-multi", "try-scorers"].includes(currentPremiumHash)
               ? currentPremiumHash
               : "best-bets";
             window.location.hash = returnHash;
