@@ -11904,6 +11904,8 @@ type SameGameMultiCardData = {
 };
 
 const SGM_CORRELATION_FACTOR = 0.83;
+const SGM_MINIMUM_ESTIMATED_PRICE = 2;
+const SGM_HIGH_MODEL_SCORER_FLOOR = 42;
 
 type SgmMarketBookmakerData = {
   h2h: Record<string, number>;
@@ -12247,12 +12249,13 @@ function buildSameGameMultiCards(
       const resultLeg = getSameGameMultiResultLeg(match, betrMarkets);
       if (!resultLeg) return null;
       const totalLeg = getSameGameMultiTotalLeg(match, betrMarkets);
-      const qualifyingScorers = getTryScorerPageRows(
+      const tryScorerPageRows = getTryScorerPageRows(
         data.tryScorers.filter((row) => {
           if (match.roundNumber && row.round && row.round !== match.roundNumber) return false;
           return getMatchPairKeyFromLabel(row.match) === getPredictionPairKey(match);
         }),
-      )
+      );
+      const qualifyingScorers = tryScorerPageRows
         .filter(
           (row) =>
             row.statsInsiderPct >= 25 &&
@@ -12279,7 +12282,7 @@ function buildSameGameMultiCards(
           odds: row.bestOdds,
         });
 
-      const legs: SameGameMultiLeg[] = anchorScorer && remainingScorer
+      let legs: SameGameMultiLeg[] = anchorScorer && remainingScorer
         ? [resultLeg, toScorerLeg(anchorScorer), toScorerLeg(remainingScorer)]
         : anchorScorer && totalLeg
           ? [resultLeg, toScorerLeg(anchorScorer), totalLeg]
@@ -12287,6 +12290,21 @@ function buildSameGameMultiCards(
             ? [resultLeg, toScorerLeg(anchorScorer)]
             : [];
       if (legs.length < 2 || legs.length > 3) return null;
+
+      const initialPrice = getEstimatedSgmPrice(legs);
+      if (legs.length === 2 && initialPrice !== null && initialPrice < SGM_MINIMUM_ESTIMATED_PRICE) {
+        const highModelScorer = tryScorerPageRows
+          .filter(
+            (row) =>
+              row !== anchorScorer &&
+              row.statsInsiderPct >= SGM_HIGH_MODEL_SCORER_FLOOR,
+          )
+          .sort((a, b) => b.statsInsiderPct - a.statsInsiderPct)[0];
+        if (highModelScorer) legs = [...legs, toScorerLeg(highModelScorer)];
+      }
+
+      const finalPrice = getEstimatedSgmPrice(legs);
+      if (finalPrice !== null && finalPrice < SGM_MINIMUM_ESTIMATED_PRICE) return null;
 
       return {
         key,
@@ -12365,16 +12383,13 @@ function SameGameMultiCard({
       <div className="px-4 md:px-6">
         {card.legs.map((leg, index) => {
           const locked = !isPremium && index > 0;
-          const marketValue = leg.valueKind === "points"
-            ? leg.marketPct.toFixed(1)
-            : formatPercent(leg.marketPct, 1);
           const modelValue = leg.valueKind === "points"
             ? leg.modelPct.toFixed(1)
             : formatPercent(leg.modelPct, 1);
           return (
             <div
               key={`${card.key}-${leg.kind}-${leg.label}`}
-              className={`grid min-h-[58px] grid-cols-[22px_22px_minmax(0,1fr)_minmax(76px,auto)_minmax(82px,auto)] items-center gap-2 border-b border-[#1E1E2E] py-3 whitespace-nowrap ${locked ? "text-[#4B5563]" : ""}`}
+              className={`grid min-h-[58px] grid-cols-[22px_22px_minmax(0,1fr)_minmax(82px,auto)] items-center gap-2 border-b border-[#1E1E2E] py-3 whitespace-nowrap ${locked ? "text-[#4B5563]" : ""}`}
             >
               {locked ? (
                 <>
@@ -12383,7 +12398,6 @@ function SameGameMultiCard({
                   </span>
                   <span className="h-[22px] w-[22px]" aria-hidden="true" />
                   <div aria-label="Premium leg hidden" className="h-2.5 w-2/3 max-w-[240px] bg-[#25252E]" />
-                  <div className="h-2.5 w-10 bg-[#25252E]" aria-hidden="true" />
                   <div className="h-3 w-12 justify-self-end bg-[#25252E]" aria-hidden="true" />
                 </>
               ) : (
@@ -12407,15 +12421,8 @@ function SameGameMultiCard({
                     ) : null}
                   </span>
                   <span
-                    aria-label={`Market ${marketValue}`}
-                    className="text-right text-[13px] font-medium tabular-nums text-[#9CA3AF]"
-                    style={{ fontVariantNumeric: "tabular-nums" }}
-                  >
-                    Market {marketValue}
-                  </span>
-                  <span
                     aria-label={`Model ${modelValue}`}
-                    className="min-w-[82px] text-right text-[15px] font-medium tabular-nums text-[#147A42]"
+                    className="min-w-[82px] text-right text-[15px] font-medium tabular-nums text-[#9CA3AF]"
                     style={{ fontVariantNumeric: "tabular-nums" }}
                   >
                     Model {modelValue}
