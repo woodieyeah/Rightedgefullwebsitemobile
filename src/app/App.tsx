@@ -11889,6 +11889,7 @@ type SameGameMultiLeg = {
   kind: "result" | "total" | "try-scorer";
   label: string;
   suffix?: string;
+  valueKind?: "percent" | "points";
   marketPct: number;
   modelPct: number;
   odds: number;
@@ -12167,7 +12168,7 @@ function getSameGameMultiResultLeg(
         modelPct: probabilityFromEdge(lineEdge, RIGHTEDGE_TUNING.lineScale),
         odds: line.odds,
       } as SameGameMultiLeg;
-      if (leg.modelPct > leg.marketPct) return leg;
+      return leg;
     }
   }
 
@@ -12182,7 +12183,7 @@ function getSameGameMultiResultLeg(
     modelPct: h2hModelPct,
     odds: h2hOdds,
   } as SameGameMultiLeg;
-  return leg.modelPct > leg.marketPct ? leg : null;
+  return leg;
 }
 
 function getSameGameMultiTotalLeg(
@@ -12198,7 +12199,7 @@ function getSameGameMultiTotalLeg(
   if (!Number.isFinite(closestPoint)) return null;
 
   const totalGap = Math.abs(projectedTotal - closestPoint);
-  if (totalGap >= 3) return null;
+  if (totalGap < 1.5 || totalGap >= 3) return null;
 
   const side: "Over" | "Under" = projectedTotal >= closestPoint ? "Over" : "Under";
   const offer = betrMarkets.totals.find(
@@ -12209,11 +12210,12 @@ function getSameGameMultiTotalLeg(
   const leg = {
     kind: "total",
     label: `${side} ${offer.point}`,
-    marketPct: getImpliedWinPctFromOdds(offer.odds),
-    modelPct: probabilityFromEdge(totalGap, RIGHTEDGE_TUNING.totalScale),
+    valueKind: "points",
+    marketPct: offer.point,
+    modelPct: projectedTotal,
     odds: offer.odds,
   } as SameGameMultiLeg;
-  return leg.modelPct > leg.marketPct ? leg : null;
+  return leg;
 }
 
 function buildSameGameMultiCards(
@@ -12243,6 +12245,7 @@ function buildSameGameMultiCards(
       if (!betrMarkets) return null;
 
       const resultLeg = getSameGameMultiResultLeg(match, betrMarkets);
+      if (!resultLeg) return null;
       const totalLeg = getSameGameMultiTotalLeg(match, betrMarkets);
       const qualifyingScorers = getTryScorerPageRows(
         data.tryScorers.filter((row) => {
@@ -12262,35 +12265,11 @@ function buildSameGameMultiCards(
             b.statsInsiderPct - a.statsInsiderPct,
         );
 
-      const scorerRows = resultLeg
-        ? qualifyingScorers.filter(
-            (row) => normalizeTeamName(row.team) === normalizeTeamName(resultLeg.team || ""),
-          )
-        : Object.values(
-            qualifyingScorers.reduce((groups, row) => {
-              const teamKey = normalizeTeamName(row.team);
-              if (!groups[teamKey]) groups[teamKey] = [];
-              groups[teamKey].push(row);
-              return groups;
-            }, {} as Record<string, TryScorerRow[]>),
-          ).sort((a, b) => {
-            const aCardSize = Math.min(3, a.length + (totalLeg ? 1 : 0));
-            const bCardSize = Math.min(3, b.length + (totalLeg ? 1 : 0));
-            if (aCardSize !== bCardSize) return bCardSize - aCardSize;
-            const topEdge = (rows: TryScorerRow[]) =>
-              rows
-                .slice(0, 3)
-                .reduce(
-                  (sum, row) => sum + row.statsInsiderPct - row.marketImpliedPct,
-                  0,
-                );
-            return topEdge(b) - topEdge(a);
-          })[0] || [];
-
-      const scorerLimit = resultLeg ? 2 : 3;
-      const scorerLegs = scorerRows
-        .slice(0, scorerLimit)
-        .map<SameGameMultiLeg>((row) => ({
+      const anchorScorer = qualifyingScorers.find(
+        (row) => normalizeTeamName(row.team) === normalizeTeamName(resultLeg.team || ""),
+      );
+      const remainingScorer = qualifyingScorers.find((row) => row !== anchorScorer);
+      const toScorerLeg = (row: TryScorerRow): SameGameMultiLeg => ({
           kind: "try-scorer",
           label: row.player,
           suffix: "ANYTIME",
@@ -12298,14 +12277,16 @@ function buildSameGameMultiCards(
           marketPct: row.marketImpliedPct,
           modelPct: row.statsInsiderPct,
           odds: row.bestOdds,
-        }));
+        });
 
-      const legs = [
-        ...(resultLeg ? [resultLeg] : []),
-        ...scorerLegs,
-        ...(totalLeg ? [totalLeg] : []),
-      ].slice(0, 3);
-      if (legs.length < 2) return null;
+      const legs: SameGameMultiLeg[] = anchorScorer && remainingScorer
+        ? [resultLeg, toScorerLeg(anchorScorer), toScorerLeg(remainingScorer)]
+        : anchorScorer && totalLeg
+          ? [resultLeg, toScorerLeg(anchorScorer), totalLeg]
+          : anchorScorer
+            ? [resultLeg, toScorerLeg(anchorScorer)]
+            : [];
+      if (legs.length < 2 || legs.length > 3) return null;
 
       return {
         key,
@@ -12323,11 +12304,7 @@ function buildSameGameMultiCards(
 }
 
 function getEstimatedSgmPrice(legs: SameGameMultiLeg[]) {
-  if (
-    legs.length < 2 ||
-    legs.length > 3 ||
-    legs.some((leg) => !Number.isFinite(leg.odds) || leg.odds <= 1)
-  ) {
+  if (legs.length !== 3 || legs.some((leg) => !Number.isFinite(leg.odds) || leg.odds <= 1)) {
     return null;
   }
   const rawPrice = legs.reduce((product, leg) => product * leg.odds, 1);
@@ -12352,7 +12329,7 @@ function SameGameMultiCard({
     <article className="border border-[#1E1E2E] bg-[#111116]">
       <div className="flex items-start justify-between gap-4 border-b border-[#1E1E2E] px-4 py-5 md:px-6">
         <div className="min-w-0">
-          <div className="mb-3 inline-flex bg-[#4ADE80]/10 px-2 py-1 text-[9px] font-black uppercase tracking-[0.18em] text-[#4ADE80]">
+          <div className="mb-3 inline-flex bg-[#147A42]/10 px-2 py-1 text-[9px] font-black uppercase tracking-[0.18em] text-[#147A42]">
             Model Multi
           </div>
           <h2 className="truncate text-[22px] font-black uppercase leading-none tracking-tight text-white">
@@ -12384,6 +12361,12 @@ function SameGameMultiCard({
       <div className="px-4 md:px-6">
         {card.legs.map((leg, index) => {
           const locked = !isPremium && index > 0;
+          const marketValue = leg.valueKind === "points"
+            ? leg.marketPct.toFixed(1)
+            : formatPercent(leg.marketPct, 1);
+          const modelValue = leg.valueKind === "points"
+            ? leg.modelPct.toFixed(1)
+            : formatPercent(leg.modelPct, 1);
           return (
             <div
               key={`${card.key}-${leg.kind}-${leg.label}`}
@@ -12420,18 +12403,18 @@ function SameGameMultiCard({
                     ) : null}
                   </span>
                   <span
-                    aria-label={`Market ${formatPercent(leg.marketPct, 1)}`}
+                    aria-label={`Market ${marketValue}`}
                     className="text-right text-[13px] font-medium tabular-nums text-[#9CA3AF]"
                     style={{ fontVariantNumeric: "tabular-nums" }}
                   >
-                    {formatPercent(leg.marketPct, 1)}
+                    Market {marketValue}
                   </span>
                   <span
-                    aria-label={`Model ${formatPercent(leg.modelPct, 1)}`}
-                    className="min-w-[56px] text-right text-[15px] font-medium tabular-nums text-[#4ADE80]"
+                    aria-label={`Model ${modelValue}`}
+                    className="min-w-[56px] text-right text-[15px] font-medium tabular-nums text-[#147A42]"
                     style={{ fontVariantNumeric: "tabular-nums" }}
                   >
-                    {formatPercent(leg.modelPct, 1)}
+                    Model {modelValue}
                   </span>
                 </>
               )}
@@ -13141,7 +13124,7 @@ function AppDashboard({
                     {pageTitle.subtitle}
                   </div>
                   <div className="mt-2 whitespace-nowrap text-xs font-medium text-[#9CA3AF]">
-                    Every leg carries a model probability above the market's.
+                    Leg one is the model's read on the match. The rest are markets the model prices ahead of the book.
                   </div>
                 </div>
               ) : (
