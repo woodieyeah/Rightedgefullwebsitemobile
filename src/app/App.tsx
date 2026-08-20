@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { HelmetProvider, Helmet } from "react-helmet-async";
+import { SpeedInsights } from "@vercel/speed-insights/react";
 import {
   projectId,
   publicAnonKey,
@@ -14327,6 +14328,7 @@ export default function App() {
         </div>
       </div>
     </div>
+    <SpeedInsights />
     </HelmetProvider>
   );
 }
