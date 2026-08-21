@@ -12530,10 +12530,15 @@ function RoundMultiCard({
           const modelValue = leg.valueKind === "points"
             ? leg.modelPct.toFixed(1)
             : formatPercent(leg.modelPct, 1);
+          const legType = leg.kind === "try-scorer"
+            ? "Anytime"
+            : leg.key.endsWith("-line")
+              ? "Line"
+              : "H2H";
           return (
             <div
               key={leg.key}
-              className="grid min-h-[64px] grid-cols-[22px_22px_minmax(0,1fr)_auto_auto] items-center gap-2 border-b border-[#1E1E2E] py-3 whitespace-nowrap"
+              className="grid min-h-[64px] grid-cols-[22px_22px_minmax(0,1fr)_auto] items-center gap-2 border-b border-[#1E1E2E] py-3 whitespace-nowrap"
             >
               <span className="text-[11px] font-medium tabular-nums text-[#9CA3AF]">
                 {String(index + 1).padStart(2, "0")}
@@ -12542,8 +12547,10 @@ function RoundMultiCard({
                 <>
                   <span className="h-[22px] w-[22px] bg-[#25252E]" />
                   <span className="h-3 w-3/5 bg-[#25252E]" />
-                  <span className="h-3 w-12 bg-[#25252E]" />
-                  <span className="h-3 w-12 bg-[#25252E]" />
+                  <span className="flex flex-col items-end gap-2">
+                    <span className="h-2 w-8 bg-[#25252E]" />
+                    <span className="h-3 w-24 bg-[#25252E]" />
+                  </span>
                 </>
               ) : (
                 <>
@@ -12555,14 +12562,18 @@ function RoundMultiCard({
                   <span className="min-w-0 overflow-hidden">
                     <span className="block truncate text-sm font-black uppercase text-white">
                       {leg.label}
-                      {leg.suffix ? (
-                        <span className="ml-2 text-[11px] font-medium text-[#9CA3AF]">{leg.suffix}</span>
-                      ) : null}
                     </span>
                     <span className="block truncate text-[9px] font-medium uppercase tracking-wider text-[#9CA3AF]">{leg.match}</span>
                   </span>
-                  <span className="text-[11px] font-medium tabular-nums text-[#9CA3AF]">Market {marketValue}</span>
-                  <span className="text-[15px] font-medium tabular-nums text-[#147A42]">Model {modelValue}</span>
+                  <span className="flex shrink-0 flex-col items-end gap-1">
+                    <span className="text-[9px] font-black uppercase tracking-[0.16em] text-[#9CA3AF]">
+                      {legType}
+                    </span>
+                    <span className="flex items-baseline gap-3">
+                      <span className="text-[11px] font-medium tabular-nums text-[#9CA3AF]">Market {marketValue}</span>
+                      <span className="text-[15px] font-medium tabular-nums text-[#147A42]">Model {modelValue}</span>
+                    </span>
+                  </span>
                 </>
               )}
             </div>
