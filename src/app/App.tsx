@@ -8363,29 +8363,20 @@ function PredictionsPage({
           const liveH2hPlay = selectedArchive
             ? null
             : getBestPremiumMarketPlayForMatch(row, marketMap, "h2h");
-          const liveHighVariancePlay = selectedArchive
-            ? null
-            : getBestPremiumMarketPlayForMatch(row, marketMap, "highvariance");
           const frozenCorePlay = frozenSnapshot
             ? reconstructFrozenPlayForMode(frozenSnapshot, row, "bestbet")
             : null;
           const frozenH2hPlay = frozenSnapshot
             ? reconstructFrozenPlayForMode(frozenSnapshot, row, "h2h")
             : null;
-          const frozenHighVariancePlay = frozenSnapshot
-            ? reconstructFrozenPlayForMode(frozenSnapshot, row, "highvariance")
-            : null;
           // From T-24h onward the per-match snapshot always wins over live
           // recalculation, even while the market feed continues to move.
           const premiumMarketPlay =
             frozenCorePlay || livePlay;
           const premiumH2hPlay = frozenH2hPlay || liveH2hPlay;
-          const premiumHighVariancePlay =
-            frozenHighVariancePlay || liveHighVariancePlay;
           const premiumPlayReveals = buildPremiumPlayReveals([
             { play: premiumMarketPlay, label: "Core Play" },
             { play: premiumH2hPlay, label: "Best H2H" },
-            { play: premiumHighVariancePlay, label: "High Variance" },
           ]);
           const settledPremiumBet = selectedArchive ? null : getSettledBetForPrediction(data, row);
           const liveTryScorerSignals = selectedArchive ? [] : getTryScorerSignalsForPrediction(data, row);
@@ -10488,22 +10479,6 @@ function BestBetsPage({
       .slice(0, isAdmin ? 50 : 8);
   }, [data, marketMap, now, canViewStartedPremiumPlays, isAdmin, frozen.snapshots, predictionByPairKey, archivedMatchKeys, matchReads, bestH2hPlays]);
 
-  const highVariancePlays = useMemo(() => {
-    const selectedKeys = new Set(
-      [...matchReads, ...bestH2hPlays, ...valuePlays].map(getPremiumPlayKey),
-    );
-    return overlayFrozenPremiumPlaysForMode(
-      buildPremiumMarketPlays(data, marketMap, now, canViewStartedPremiumPlays, "highvariance"),
-      frozen.snapshots,
-      predictionByPairKey,
-      archivedMatchKeys,
-      "highvariance",
-    )
-      .filter((play) => !selectedKeys.has(getPremiumPlayKey(play)))
-      .sort(comparePremiumPlaysByFixture)
-      .slice(0, isAdmin ? 50 : 8);
-  }, [data, marketMap, now, canViewStartedPremiumPlays, isAdmin, frozen.snapshots, predictionByPairKey, archivedMatchKeys, matchReads, bestH2hPlays, valuePlays]);
-
   // Per-card settled overlay context (results entry now lives in the Results tab).
   const cardPropsForPlay = (play: PremiumMarketPlay) => {
     const matchKey = getPredictionPairKey(play.row);
@@ -10625,30 +10600,6 @@ function BestBetsPage({
                 play={play}
                 now={now}
                 labels={["Value Play"]}
-                {...cardPropsForPlay(play)}
-              />
-            ))}
-          </div>
-        </div>
-      ) : null}
-
-      {!isLoadingMarkets && highVariancePlays.length > 0 ? (
-        <div className="flex flex-col gap-4">
-          <div>
-            <h3 className="text-lg md:text-2xl font-black text-white uppercase tracking-tight">
-              High-Risk Plays
-            </h3>
-            <div className="text-[10px] md:text-xs font-black text-white/45 uppercase tracking-widest mt-1">
-              Large raw model gaps that are deliberately down-ranked as less calibrated
-            </div>
-          </div>
-          <div className="grid grid-cols-1 gap-5 md:gap-6">
-            {highVariancePlays.map((play) => (
-              <PremiumMarketPlayCard
-                key={play.id}
-                play={play}
-                now={now}
-                labels={["High Variance"]}
                 {...cardPropsForPlay(play)}
               />
             ))}
