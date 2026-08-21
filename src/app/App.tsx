@@ -1396,9 +1396,9 @@ const appPages = [
     icon: <Flame className="w-5 h-5" />,
   },
   {
-    id: "same-game-multi",
-    label: "Same Game Multi",
-    mobileLabel: "SGM",
+    id: "multi",
+    label: "Multi",
+    mobileLabel: "Multi",
     icon: <BadgeCheck className="w-5 h-5" />,
   },
   {
@@ -4081,7 +4081,7 @@ function PaymentGateModal({
   useEffect(() => {
     if (!open) return;
     const currentPremiumHash = window.location.hash.replace("#", "");
-    const section = ["matches", "best-bets", "same-game-multi", "try-scorers"].includes(currentPremiumHash)
+    const section = ["matches", "best-bets", "multi", "try-scorers"].includes(currentPremiumHash)
       ? currentPremiumHash
       : "best-bets";
     (window as any).trackAnalyticsEvent?.("premium_paywall_view", {
@@ -4137,7 +4137,7 @@ function PaymentGateModal({
 
       setStep("processing");
       const currentPremiumHash = window.location.hash.replace("#", "");
-      let returnHash = ["matches", "best-bets", "same-game-multi", "try-scorers"].includes(currentPremiumHash)
+      let returnHash = ["matches", "best-bets", "multi", "try-scorers"].includes(currentPremiumHash)
         ? currentPremiumHash
         : "best-bets";
       const returnUrl = `${window.location.origin}${window.location.pathname}`;
@@ -11906,6 +11906,8 @@ type SameGameMultiCardData = {
 const SGM_CORRELATION_FACTOR = 0.83;
 const SGM_MINIMUM_ESTIMATED_PRICE = 2;
 const SGM_HIGH_MODEL_SCORER_FLOOR = 42;
+const ROUND_MULTI_SHORT_H2H_ODDS_CUTOFF = 1.5;
+const ROUND_MULTI_HIGH_MODEL_SCORER_FLOOR = 42;
 
 type SgmMarketBookmakerData = {
   h2h: Record<string, number>;
@@ -12292,7 +12294,7 @@ function buildSameGameMultiCards(
       if (legs.length < 2 || legs.length > 3) return null;
 
       const initialPrice = getEstimatedSgmPrice(legs);
-      if (legs.length === 2 && initialPrice !== null && initialPrice < SGM_MINIMUM_ESTIMATED_PRICE) {
+      if (legs.length === 2 && initialPrice !== null && initialPrice <= SGM_MINIMUM_ESTIMATED_PRICE) {
         const highModelScorer = tryScorerPageRows
           .filter(
             (row) =>
@@ -12304,7 +12306,7 @@ function buildSameGameMultiCards(
       }
 
       const finalPrice = getEstimatedSgmPrice(legs);
-      if (finalPrice !== null && finalPrice < SGM_MINIMUM_ESTIMATED_PRICE) return null;
+      if (finalPrice === null || finalPrice <= SGM_MINIMUM_ESTIMATED_PRICE) return null;
 
       return {
         key,
@@ -12331,6 +12333,318 @@ function getEstimatedSgmPrice(legs: SameGameMultiLeg[]) {
   }
   const rawPrice = legs.reduce((product, leg) => product * leg.odds, 1);
   return Math.floor((rawPrice * SGM_CORRELATION_FACTOR) / 0.05) * 0.05;
+}
+
+type RoundMultiLeg = SameGameMultiLeg & {
+  key: string;
+  match: string;
+};
+
+type RoundMultiData = {
+  roundNumber: number;
+  legs: RoundMultiLeg[];
+  price: number;
+};
+
+function getRoundMultiPrice(legs: RoundMultiLeg[]) {
+  if (!legs.length || legs.some((leg) => !Number.isFinite(leg.odds) || leg.odds <= 1)) {
+    return null;
+  }
+  const rawPrice = legs.reduce((product, leg) => product * leg.odds, 1);
+  return Math.floor(rawPrice / 0.05) * 0.05;
+}
+
+function getRoundMultiLeg(
+  match: PredictionRow,
+  betrMarkets: SgmMarketBookmakerData,
+  tryScorerRows: TryScorerRow[],
+): RoundMultiLeg | null {
+  const winner = getSameGameMultiWinner(match);
+  const winnerKey = normalizeTeamName(winner);
+  const projectedMargin = getSelectedTeamProjectedMargin(match, winner);
+  const line = betrMarkets.spreads.find(
+    (offer) => normalizeTeamName(offer.team) === winnerKey,
+  );
+
+  if (line) {
+    const lineEdge = projectedMargin + line.point;
+    if (lineEdge >= RIGHTEDGE_TUNING.minLineEdgePts) {
+      return {
+        key: `${buildMatchLabelKey(match.match)}-line`,
+        match: `${match.homeTeam} V ${match.awayTeam}`,
+        kind: "result",
+        label: `${winner} ${formatSgmLine(line.point)}`,
+        team: winner,
+        marketPct: getImpliedWinPctFromOdds(line.odds),
+        modelPct: probabilityFromEdge(lineEdge, RIGHTEDGE_TUNING.lineScale),
+        odds: line.odds,
+      };
+    }
+  }
+
+  const candidates: RoundMultiLeg[] = [];
+  const addH2hCandidate = (team: string, modelOdds: number) => {
+    const teamKey = normalizeTeamName(team);
+    const marketOdds = betrMarkets.h2h[teamKey];
+    const modelPct = getImpliedWinPctFromOdds(modelOdds);
+    if (!Number.isFinite(marketOdds) || marketOdds <= 1 || modelPct <= 0) return;
+    candidates.push({
+      key: `${buildMatchLabelKey(match.match)}-h2h-${teamKey}`,
+      match: `${match.homeTeam} V ${match.awayTeam}`,
+      kind: "result",
+      label: team,
+      team,
+      marketPct: getImpliedWinPctFromOdds(marketOdds),
+      modelPct,
+      odds: marketOdds,
+    });
+  };
+
+  addH2hCandidate(match.homeTeam, match.modelHomeOdds);
+  addH2hCandidate(match.awayTeam, match.modelAwayOdds);
+
+  for (const row of tryScorerRows) {
+    candidates.push({
+      key: `${buildMatchLabelKey(match.match)}-scorer-${getTryScorerKey(row)}`,
+      match: `${match.homeTeam} V ${match.awayTeam}`,
+      kind: "try-scorer",
+      label: row.player,
+      suffix: "ANYTIME",
+      team: row.team,
+      marketPct: row.marketImpliedPct,
+      modelPct: row.statsInsiderPct,
+      odds: row.bestOdds,
+    });
+  }
+
+  const rankedCandidates = candidates.sort(
+    (a, b) => b.modelPct - a.modelPct || b.odds - a.odds,
+  );
+  const selected = rankedCandidates[0] || null;
+  if (
+    selected?.kind === "result" &&
+    selected.odds < ROUND_MULTI_SHORT_H2H_ODDS_CUTOFF
+  ) {
+    const highModelScorer = rankedCandidates
+      .filter(
+        (candidate) =>
+          candidate.kind === "try-scorer" &&
+          candidate.modelPct >= ROUND_MULTI_HIGH_MODEL_SCORER_FLOOR &&
+          Number.isFinite(candidate.odds) &&
+          candidate.odds > 1,
+      )
+      .sort((a, b) => b.modelPct - a.modelPct || b.odds - a.odds)[0];
+    if (highModelScorer) return highModelScorer;
+  }
+  return selected;
+}
+
+function buildRoundMultiData(
+  data: DashboardData,
+  marketMap: SgmMarketMap,
+): RoundMultiData | null {
+  const roundNumber =
+    toRoundNumber(data.currentRoundLabel) ||
+    Math.max(0, ...data.predictions.map((row) => row.roundNumber || 0));
+  const fixtureOrder = new Map(
+    data.fixtures.map((fixture, index) => [
+      buildMatchKey(fixture.homeTeam, fixture.awayTeam),
+      index,
+    ]),
+  );
+  const settledMatchKeys = new Set(
+    data.betLog
+      .filter((bet) => bet.result === "W" || bet.result === "L")
+      .map((bet) => `${bet.round}:${buildMatchLabelKey(bet.match)}`),
+  );
+  const matches = data.predictions
+    .filter(
+      (match) =>
+        (!roundNumber || match.roundNumber === roundNumber) &&
+        !settledMatchKeys.has(`${match.roundNumber}:${buildMatchLabelKey(match.match)}`),
+    )
+    .sort((a, b) => {
+      const aOrder = fixtureOrder.get(buildMatchLabelKey(a.match)) ?? 999;
+      const bOrder = fixtureOrder.get(buildMatchLabelKey(b.match)) ?? 999;
+      return aOrder - bOrder;
+    });
+
+  const legs = matches
+    .map((match) => {
+      const betrMarkets = getSgmMatchMarkets(marketMap, match).betr;
+      if (!betrMarkets) return null;
+      const tryScorerRows = getTryScorerPageRows(
+        data.tryScorers.filter((row) => {
+          if (match.roundNumber && row.round && row.round !== match.roundNumber) return false;
+          return getMatchPairKeyFromLabel(row.match) === getPredictionPairKey(match);
+        }),
+      );
+      return getRoundMultiLeg(match, betrMarkets, tryScorerRows);
+    })
+    .filter((leg): leg is RoundMultiLeg => Boolean(leg));
+
+  const price = getRoundMultiPrice(legs);
+  if (!legs.length || price === null) return null;
+  return { roundNumber, legs, price };
+}
+
+function RoundMultiCard({
+  multi,
+  isPremium,
+  onRequestAccess,
+}: {
+  multi: RoundMultiData;
+  isPremium: boolean;
+  onRequestAccess: (targetHash?: string) => void;
+}) {
+  return (
+    <article className="border border-[#1E1E2E] bg-[#0D0F0E]">
+      <div className="flex items-start justify-between gap-4 border-b border-[#1E1E2E] px-4 py-5 md:px-6">
+        <div className="flex min-w-0 flex-col items-start gap-2 min-[900px]:flex-row min-[900px]:items-center">
+          <span className="inline-flex shrink-0 bg-[#147A42]/10 px-2 py-1 text-[9px] font-black uppercase tracking-[0.18em] text-[#147A42]">
+            Round Multi
+          </span>
+          <h2 className="text-[22px] font-black uppercase leading-none tracking-tight text-white">
+            Round {multi.roundNumber} Multi
+          </h2>
+        </div>
+        <div className="shrink-0 text-right">
+          <div className="text-[9px] font-black uppercase tracking-[0.16em] text-[#9CA3AF]">
+            Price · {multi.legs.length} Legs
+          </div>
+          <div
+            className="mt-1 text-[32px] font-black leading-none tabular-nums text-white"
+            style={{ fontVariantNumeric: "tabular-nums" }}
+          >
+            {isPremium ? `$${multi.price.toFixed(2)}` : "—"}
+          </div>
+        </div>
+      </div>
+
+      <div className="hidden overflow-x-auto min-[900px]:flex">
+        {multi.legs.map((leg, index) => {
+          const locked = !isPremium && index > 0;
+          const marketValue = leg.valueKind === "points"
+            ? leg.marketPct.toFixed(1)
+            : formatPercent(leg.marketPct, 1);
+          const modelValue = leg.valueKind === "points"
+            ? leg.modelPct.toFixed(1)
+            : formatPercent(leg.modelPct, 1);
+          return (
+            <div
+              key={leg.key}
+              className="flex min-h-[168px] w-[190px] shrink-0 flex-col border-r border-[#1E1E2E] px-4 py-4 last:border-r-0"
+            >
+              <div className="truncate text-[10px] font-medium uppercase tracking-wider text-[#9CA3AF]">
+                {leg.match}
+              </div>
+              {locked ? (
+                <div className="mt-5 flex flex-col gap-4">
+                  <div className="h-[22px] w-[22px] bg-[#25252E]" />
+                  <div className="h-3 w-4/5 bg-[#25252E]" />
+                  <div className="h-3 w-3/5 bg-[#25252E]" />
+                </div>
+              ) : (
+                <>
+                  <div className="mt-3">
+                    {leg.team ? (
+                      <TeamLogo teamName={leg.team} className="h-[22px] w-[22px] rounded-[4px] text-[8px]" />
+                    ) : (
+                      <span className="block h-[22px] w-[22px]" aria-hidden="true" />
+                    )}
+                  </div>
+                  <div className="mt-3 line-clamp-2 text-sm font-black uppercase leading-snug text-white">
+                    {leg.label}
+                    {leg.suffix ? (
+                      <span className="ml-1 text-[11px] font-medium text-[#9CA3AF]">{leg.suffix}</span>
+                    ) : null}
+                  </div>
+                  <div className="mt-auto pt-3 text-[11px] font-medium tabular-nums text-[#9CA3AF]">
+                    Market {marketValue}
+                  </div>
+                  <div className="mt-1 text-[15px] font-medium tabular-nums text-[#147A42]">
+                    Model {modelValue}
+                  </div>
+                </>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="min-[900px]:hidden">
+        {multi.legs.map((leg, index) => {
+          const locked = !isPremium && index > 0;
+          const marketValue = leg.valueKind === "points"
+            ? leg.marketPct.toFixed(1)
+            : formatPercent(leg.marketPct, 1);
+          const modelValue = leg.valueKind === "points"
+            ? leg.modelPct.toFixed(1)
+            : formatPercent(leg.modelPct, 1);
+          return (
+            <div
+              key={`${leg.key}-mobile`}
+              className="grid min-h-[64px] grid-cols-[22px_22px_minmax(0,1fr)_auto_auto] items-center gap-2 border-b border-[#1E1E2E] px-4 py-3 whitespace-nowrap"
+            >
+              <span className="text-[11px] font-medium tabular-nums text-[#9CA3AF]">
+                {String(index + 1).padStart(2, "0")}
+              </span>
+              {locked ? (
+                <>
+                  <span className="h-[22px] w-[22px] bg-[#25252E]" />
+                  <span className="h-3 w-3/5 bg-[#25252E]" />
+                  <span className="h-3 w-12 bg-[#25252E]" />
+                  <span className="h-3 w-12 bg-[#25252E]" />
+                </>
+              ) : (
+                <>
+                  {leg.team ? (
+                    <TeamLogo teamName={leg.team} className="h-[22px] w-[22px] rounded-[4px] text-[8px]" />
+                  ) : (
+                    <span className="h-[22px] w-[22px]" aria-hidden="true" />
+                  )}
+                  <span className="min-w-0 overflow-hidden">
+                    <span className="block truncate text-sm font-black uppercase text-white">{leg.label}</span>
+                    <span className="block truncate text-[9px] font-medium uppercase tracking-wider text-[#9CA3AF]">{leg.match}</span>
+                  </span>
+                  <span className="text-[11px] font-medium tabular-nums text-[#9CA3AF]">Market {marketValue}</span>
+                  <span className="text-[15px] font-medium tabular-nums text-[#147A42]">Model {modelValue}</span>
+                </>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="px-4 pb-4 pt-4 md:px-6 md:pb-5">
+        {isPremium ? (
+          <BetrAffiliateLink
+            payload={`rightedge_round_multi_${multi.roundNumber}`}
+            className="re-betr-button flex min-h-[48px] w-full items-center justify-start gap-3 border border-[#093AD3] bg-[#093AD3] px-4 text-xs font-black uppercase tracking-widest text-white transition hover:opacity-90"
+          >
+            <img
+              src="/betr-square.png"
+              alt=""
+              aria-hidden="true"
+              className="h-6 w-6 shrink-0 rounded-[4px] border border-[#093AD3] bg-[#093AD3] object-contain"
+            />
+            <span>Build This Multi</span>
+          </BetrAffiliateLink>
+        ) : (
+          <button
+            type="button"
+            onClick={() => onRequestAccess("multi")}
+            className="re-primary-cta flex min-h-[48px] w-full items-center justify-center border px-5 text-xs font-medium uppercase tracking-widest transition hover:opacity-90"
+          >
+            Unlock Premium Plays — $14/week
+          </button>
+        )}
+        <div className="mt-3 text-[11px] font-medium leading-relaxed text-[#9CA3AF]">
+          Legs are from separate matches, so the price is the legs multiplied. Confirm the live price before you bet.
+        </div>
+      </div>
+    </article>
+  );
 }
 
 function SameGameMultiCard({
@@ -12451,7 +12765,7 @@ function SameGameMultiCard({
         ) : (
           <button
             type="button"
-            onClick={() => onRequestAccess("same-game-multi")}
+            onClick={() => onRequestAccess("multi")}
             className="re-primary-cta flex min-h-[48px] w-full items-center justify-center border px-5 text-xs font-medium uppercase tracking-widest transition hover:opacity-90"
           >
             Unlock Premium Plays — $14/week
@@ -12465,7 +12779,7 @@ function SameGameMultiCard({
   );
 }
 
-function SameGameMultiPage({
+function MultiPage({
   data,
   onRequestAccess,
   isPremium,
@@ -12476,6 +12790,7 @@ function SameGameMultiPage({
 }) {
   const [marketMap, setMarketMap] = useState<SgmMarketMap>({});
   const cards = useMemo(() => buildSameGameMultiCards(data, marketMap), [data, marketMap]);
+  const roundMulti = useMemo(() => buildRoundMultiData(data, marketMap), [data, marketMap]);
 
   useEffect(() => {
     let mounted = true;
@@ -12494,22 +12809,39 @@ function SameGameMultiPage({
   return (
     <div className="flex flex-col gap-6 md:gap-8">
       <ResponsibleGamblingNotice />
-      {cards.length ? (
-        <div className="flex flex-col gap-5">
-          {cards.map((card) => (
-            <SameGameMultiCard
-              key={card.key}
-              card={card}
-              isPremium={isPremium}
-              onRequestAccess={onRequestAccess}
-            />
-          ))}
+      {roundMulti ? (
+        <RoundMultiCard
+          multi={roundMulti}
+          isPremium={isPremium}
+          onRequestAccess={onRequestAccess}
+        />
+      ) : null}
+      <section className="flex flex-col gap-5">
+        <div>
+          <h2 className="text-[22px] font-black uppercase leading-none tracking-tight text-white">
+            Same Game Multis
+          </h2>
+          <p className="mt-2 text-xs font-medium text-[#9CA3AF]">
+            Leg one is the model's read on the match. The rest are markets the model prices ahead of the book.
+          </p>
         </div>
-      ) : (
-        <div className="border border-[#1E1E2E] bg-[#111116] p-8 text-center text-xs font-black uppercase tracking-widest text-[#9CA3AF]">
-          No qualifying combinations for this round.
-        </div>
-      )}
+        {cards.length ? (
+          <div className="flex flex-col gap-5">
+            {cards.map((card) => (
+              <SameGameMultiCard
+                key={card.key}
+                card={card}
+                isPremium={isPremium}
+                onRequestAccess={onRequestAccess}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="border border-[#1E1E2E] bg-[#111116] p-8 text-center text-xs font-black uppercase tracking-widest text-[#9CA3AF]">
+            No qualifying combinations for this round.
+          </div>
+        )}
+      </section>
     </div>
   );
 }
@@ -12788,7 +13120,7 @@ function AppDashboard({
   const [page, setPage] = useState(() => {
     const hash = window.location.hash.replace("#", "");
     if (
-      ["matches", "best-bets", "same-game-multi", "try-scorers", "performance", "admin", "admin-results"].includes(
+      ["matches", "best-bets", "multi", "try-scorers", "performance", "admin", "admin-results"].includes(
         hash,
       )
     ) {
@@ -12862,7 +13194,7 @@ function AppDashboard({
         [
           "matches",
           "best-bets",
-          "same-game-multi",
+          "multi",
           "try-scorers",
           "performance",
           "admin",
@@ -12955,10 +13287,10 @@ function AppDashboard({
           title: "Premium",
           subtitle: "Premium Plays",
         };
-      case "same-game-multi":
+      case "multi":
         return {
-          title: "Same Game Multi",
-          subtitle: "Three-leg combinations from the model's read on each match",
+          title: "Multi",
+          subtitle: `Model-selected combinations for ${data?.currentRoundLabel || "the current round"}`,
         };
       case "try-scorers":
         return {
@@ -12980,7 +13312,7 @@ function AppDashboard({
           subtitle: "Model predictions and pricing",
         };
     }
-  }, [page]);
+  }, [page, data?.currentRoundLabel]);
 
   return (
     <>
@@ -13009,7 +13341,7 @@ function AppDashboard({
                 active={page === item.id}
                 icon={item.icon}
                 label={item.label}
-                premium={item.id === "best-bets" || item.id === "same-game-multi" || item.id === "try-scorers"}
+                premium={item.id === "best-bets" || item.id === "multi" || item.id === "try-scorers"}
                 onClick={() => {
                   handlePageChange(item.id);
                   window.scrollTo({
@@ -13126,7 +13458,7 @@ function AppDashboard({
           </div>
           <div className="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-4 md:gap-6 pb-4 md:pb-6 border-b border-[#1E1E2E]">
             <div className="flex justify-between items-start xl:block">
-              {page === "same-game-multi" ? (
+              {page === "multi" ? (
                 <div>
                   <h1 className="text-[18px] font-black uppercase leading-none tracking-tight text-white md:text-4xl">
                     {pageTitle.title}
@@ -13134,8 +13466,8 @@ function AppDashboard({
                   <div className="mt-2 text-[10px] font-black uppercase tracking-widest text-[#9CA3AF] md:text-sm">
                     {pageTitle.subtitle}
                   </div>
-                  <div className="mt-2 whitespace-nowrap text-xs font-medium text-[#9CA3AF]">
-                    Leg one is the model's read on the match. The rest are markets the model prices ahead of the book.
+                  <div className="mt-2 text-xs font-medium text-[#9CA3AF]">
+                    One multi across the round, plus a same game multi for each match.
                   </div>
                 </div>
               ) : (
@@ -13250,8 +13582,8 @@ function AppDashboard({
                   isAdmin={isAdmin}
                 />
               )}
-              {page === "same-game-multi" && (
-                <SameGameMultiPage
+              {page === "multi" && (
+                <MultiPage
                   data={data}
                   onRequestAccess={onRequestAccess}
                   isPremium={isPremium || isAdmin}
@@ -13776,7 +14108,7 @@ export default function App() {
     const analyticsName = rawHash.replace(/-/g, "_");
     (window as any).trackAnalyticsEvent?.(`${analyticsName}_view`, {
       section: rawHash,
-      app_section: ["matches", "best-bets", "same-game-multi", "try-scorers", "performance", "admin", "admin-results"].includes(rawHash),
+      app_section: ["matches", "best-bets", "multi", "try-scorers", "performance", "admin", "admin-results"].includes(rawHash),
     });
   };
 
@@ -13802,7 +14134,7 @@ export default function App() {
   };
 
   const requestPremiumAccess = (source: string = 'unknown') => {
-    let targetHash = ["matches", "best-bets", "same-game-multi", "try-scorers"].includes(source)
+    let targetHash = ["matches", "best-bets", "multi", "try-scorers"].includes(source)
       ? source
       : "best-bets";
     setSitePage("app");
@@ -13835,7 +14167,7 @@ export default function App() {
 
   const checkHash = () => {
     const hash = window.location.hash.replace("#", "");
-    const appHashes = ["matches", "best-bets", "same-game-multi", "try-scorers", "performance", "admin", "admin-results"];
+    const appHashes = ["matches", "best-bets", "multi", "try-scorers", "performance", "admin", "admin-results"];
     const premiumHashes = ["best-bets", "try-scorers"];
     const publicHashes = ["results", "methodology", "ad-studio", "articles", "article-round-5-2026", "article-methodology", "cricket"];
 
@@ -13914,7 +14246,7 @@ export default function App() {
 
       const sessionId = searchParams.get("session_id");
       const fallbackReturnHash = searchParams.get("return_hash") || window.location.hash.replace("#", "") || "best-bets";
-      let returnHash = ["matches", "best-bets", "same-game-multi", "try-scorers"].includes(fallbackReturnHash)
+      let returnHash = ["matches", "best-bets", "multi", "try-scorers"].includes(fallbackReturnHash)
         ? fallbackReturnHash
         : "best-bets";
 
@@ -13955,7 +14287,7 @@ export default function App() {
 
           setShowEmailGate(false);
 
-          let confirmedReturnHash = ["matches", "best-bets", "same-game-multi", "try-scorers"].includes(data.returnHash)
+          let confirmedReturnHash = ["matches", "best-bets", "multi", "try-scorers"].includes(data.returnHash)
             ? data.returnHash
             : returnHash;
 
@@ -14261,7 +14593,7 @@ export default function App() {
             setShowPaymentGate(false);
             setSitePage("app");
             const currentPremiumHash = window.location.hash.replace("#", "");
-            let returnHash = ["matches", "best-bets", "same-game-multi", "try-scorers"].includes(currentPremiumHash)
+            let returnHash = ["matches", "best-bets", "multi", "try-scorers"].includes(currentPremiumHash)
               ? currentPremiumHash
               : "best-bets";
             window.location.hash = returnHash;
