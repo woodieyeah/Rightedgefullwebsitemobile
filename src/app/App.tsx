@@ -12498,10 +12498,10 @@ function RoundMultiCard({
   onRequestAccess: (targetHash?: string) => void;
 }) {
   return (
-    <article className="border border-[#1E1E2E] bg-[#0D0F0E]">
+    <article className="border border-[#1E1E2E] bg-[#111116]">
       <div className="flex items-start justify-between gap-4 border-b border-[#1E1E2E] px-4 py-5 md:px-6">
-        <div className="flex min-w-0 flex-col items-start gap-2 min-[900px]:flex-row min-[900px]:items-center">
-          <span className="inline-flex shrink-0 bg-[#147A42]/10 px-2 py-1 text-[9px] font-black uppercase tracking-[0.18em] text-[#147A42]">
+        <div className="min-w-0">
+          <span className="mb-3 inline-flex shrink-0 bg-[#147A42]/10 px-2 py-1 text-[9px] font-black uppercase tracking-[0.18em] text-[#147A42]">
             Round Multi
           </span>
           <h2 className="text-[22px] font-black uppercase leading-none tracking-tight text-white">
@@ -12521,7 +12521,7 @@ function RoundMultiCard({
         </div>
       </div>
 
-      <div className="hidden overflow-x-auto min-[900px]:flex">
+      <div className="px-4 md:px-6">
         {multi.legs.map((leg, index) => {
           const locked = !isPremium && index > 0;
           const marketValue = leg.valueKind === "points"
@@ -12533,58 +12533,7 @@ function RoundMultiCard({
           return (
             <div
               key={leg.key}
-              className="flex min-h-[168px] w-[190px] shrink-0 flex-col border-r border-[#1E1E2E] px-4 py-4 last:border-r-0"
-            >
-              <div className="truncate text-[10px] font-medium uppercase tracking-wider text-[#9CA3AF]">
-                {leg.match}
-              </div>
-              {locked ? (
-                <div className="mt-5 flex flex-col gap-4">
-                  <div className="h-[22px] w-[22px] bg-[#25252E]" />
-                  <div className="h-3 w-4/5 bg-[#25252E]" />
-                  <div className="h-3 w-3/5 bg-[#25252E]" />
-                </div>
-              ) : (
-                <>
-                  <div className="mt-3">
-                    {leg.team ? (
-                      <TeamLogo teamName={leg.team} className="h-[22px] w-[22px] rounded-[4px] text-[8px]" />
-                    ) : (
-                      <span className="block h-[22px] w-[22px]" aria-hidden="true" />
-                    )}
-                  </div>
-                  <div className="mt-3 line-clamp-2 text-sm font-black uppercase leading-snug text-white">
-                    {leg.label}
-                    {leg.suffix ? (
-                      <span className="ml-1 text-[11px] font-medium text-[#9CA3AF]">{leg.suffix}</span>
-                    ) : null}
-                  </div>
-                  <div className="mt-auto pt-3 text-[11px] font-medium tabular-nums text-[#9CA3AF]">
-                    Market {marketValue}
-                  </div>
-                  <div className="mt-1 text-[15px] font-medium tabular-nums text-[#147A42]">
-                    Model {modelValue}
-                  </div>
-                </>
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      <div className="min-[900px]:hidden">
-        {multi.legs.map((leg, index) => {
-          const locked = !isPremium && index > 0;
-          const marketValue = leg.valueKind === "points"
-            ? leg.marketPct.toFixed(1)
-            : formatPercent(leg.marketPct, 1);
-          const modelValue = leg.valueKind === "points"
-            ? leg.modelPct.toFixed(1)
-            : formatPercent(leg.modelPct, 1);
-          return (
-            <div
-              key={`${leg.key}-mobile`}
-              className="grid min-h-[64px] grid-cols-[22px_22px_minmax(0,1fr)_auto_auto] items-center gap-2 border-b border-[#1E1E2E] px-4 py-3 whitespace-nowrap"
+              className="grid min-h-[64px] grid-cols-[22px_22px_minmax(0,1fr)_auto_auto] items-center gap-2 border-b border-[#1E1E2E] py-3 whitespace-nowrap"
             >
               <span className="text-[11px] font-medium tabular-nums text-[#9CA3AF]">
                 {String(index + 1).padStart(2, "0")}
@@ -12604,7 +12553,12 @@ function RoundMultiCard({
                     <span className="h-[22px] w-[22px]" aria-hidden="true" />
                   )}
                   <span className="min-w-0 overflow-hidden">
-                    <span className="block truncate text-sm font-black uppercase text-white">{leg.label}</span>
+                    <span className="block truncate text-sm font-black uppercase text-white">
+                      {leg.label}
+                      {leg.suffix ? (
+                        <span className="ml-2 text-[11px] font-medium text-[#9CA3AF]">{leg.suffix}</span>
+                      ) : null}
+                    </span>
                     <span className="block truncate text-[9px] font-medium uppercase tracking-wider text-[#9CA3AF]">{leg.match}</span>
                   </span>
                   <span className="text-[11px] font-medium tabular-nums text-[#9CA3AF]">Market {marketValue}</span>
