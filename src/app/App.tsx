@@ -5,6 +5,7 @@ import {
   publicAnonKey,
 } from "../../utils/supabase/info";
 import { AdminDashboard } from "./components/AdminDashboard";
+import { failClosedAuthState, isVerifiedAdminSession } from "./auth-session";
 import { trackLinkedInConversion } from "../lib/linkedin";
 import { capturePostHogEvent, identifyPostHogUser } from "../lib/posthog";
 import {
@@ -2963,20 +2964,45 @@ async function fetchRoundResults(round: number): Promise<SavedRoundResult[]> {
   }
 }
 
+async function protectedAdminFetch(
+  input: RequestInfo | URL,
+  init: RequestInit = {},
+): Promise<Response> {
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  if (init.signal?.aborted) controller.abort();
+  else init.signal?.addEventListener("abort", abort, { once: true });
+  window.addEventListener('adminAuthCleared', abort, { once: true });
+  try {
+    const response = await fetch(input, {
+      ...init,
+      credentials: "include",
+      signal: controller.signal,
+    });
+    if (response.status === 401) {
+      window.dispatchEvent(new Event('adminAuthCleared'));
+    }
+    return response;
+  } finally {
+    init.signal?.removeEventListener("abort", abort);
+    window.removeEventListener('adminAuthCleared', abort);
+  }
+}
+
 async function postRoundSnapshot(body: {
   round: number;
   match: string;
   matchKey: string;
   payload: FrozenPlayPayload;
-}): Promise<FrozenSnapshot | null> {
+}, signal?: AbortSignal): Promise<FrozenSnapshot | null> {
   try {
-    const res = await fetch(`/api/round-snapshot`, {
+    const res = await protectedAdminFetch(`/api/admin/round-snapshot`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${publicAnonKey}`,
       },
       credentials: "include",
+      signal,
       body: JSON.stringify(body),
     });
     if (!res.ok) return null;
@@ -2997,11 +3023,10 @@ async function postAdminRoundResult(body: {
   tryScorerHits: Record<string, boolean>;
 }): Promise<SavedRoundResult | null> {
   try {
-    const res = await fetch(`/api/admin/round-results`, {
+    const res = await protectedAdminFetch(`/api/admin/round-results`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${publicAnonKey}`,
       },
       credentials: "include",
       body: JSON.stringify(body),
@@ -3039,6 +3064,7 @@ function useFrozenRoundData(
   const [results, setResults] = useState<SavedRoundResult[]>([]);
   const [refreshTick, setRefreshTick] = useState(0);
   const postedKeysRef = useRef<Set<string>>(new Set());
+  const postingKeysRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     if (!round) return;
@@ -3090,7 +3116,7 @@ function useFrozenRoundData(
     for (const row of data.predictions) {
       if (!isWithinPremiumMatchFreezeWindow(row, now)) continue;
       const matchKey = getPredictionPairKey(row);
-      if (postedKeysRef.current.has(matchKey)) continue;
+      if (postedKeysRef.current.has(matchKey) || postingKeysRef.current.has(matchKey)) continue;
       if (snapshotByKey.has(matchKey)) {
         postedKeysRef.current.add(matchKey);
         continue;
@@ -3128,7 +3154,7 @@ function useFrozenRoundData(
         odds: ts.bestOdds,
         bookmaker: ts.bookmaker,
       }));
-      postedKeysRef.current.add(matchKey);
+      postingKeysRef.current.add(matchKey);
       toPost.push({
         round: row.roundNumber,
         match: `${row.homeTeam} v ${row.awayTeam}`,
@@ -3148,13 +3174,19 @@ function useFrozenRoundData(
 
     if (toPost.length === 0) return;
     let mounted = true;
-    Promise.all(toPost.map((b) => postRoundSnapshot(b))).then((saved) => {
+    const snapshotController = new AbortController();
+    Promise.all(toPost.map((b) => postRoundSnapshot(b, snapshotController.signal))).then((saved) => {
+      saved.forEach((snapshot, index) => {
+        postingKeysRef.current.delete(toPost[index].matchKey);
+        if (snapshot) postedKeysRef.current.add(toPost[index].matchKey);
+      });
       if (!mounted) return;
       const added = saved.filter(Boolean) as FrozenSnapshot[];
       if (added.length) setSnapshots((prev) => [...prev, ...added]);
     });
     return () => {
       mounted = false;
+      snapshotController.abort();
     };
   }, [enableFreeze, round, data, marketMap, now, snapshotByKey]);
 
@@ -3825,7 +3857,6 @@ function ConfidenceBadge({
   );
 }
 
-const ADMIN_EMAILS = ["elliott@woodbry.com", "ewoodbry@gmail.com", "elliott@rightedge.com.au"];
 const ORIGIN_PREVIEW_EMAIL = "elliott@woodbry.com";
 const CRICKET_PROTOTYPE_EMAILS = ["elliott@woodbry.com"];
 type AuthTier = "none" | "free" | "premium";
@@ -3833,16 +3864,18 @@ type RuntimeAuthState = {
   checked: boolean;
   email: string | null;
   tier: AuthTier;
+  admin: boolean;
 };
 
 let runtimeAuthState: RuntimeAuthState = {
   checked: false,
   email: null,
   tier: "none",
+  admin: false,
 };
 
 type AuthSessionCheckResult =
-  | { status: "authenticated"; email: string; tier: Exclude<AuthTier, "none"> }
+  | { status: "authenticated"; email: string; tier: Exclude<AuthTier, "none">; admin: boolean }
   | { status: "unauthenticated" }
   | { status: "failed" };
 
@@ -3872,6 +3905,7 @@ function requestAuthSession(): Promise<AuthSessionCheckResult> {
           status: "authenticated",
           email: String(data.email).trim().toLowerCase(),
           tier: data.tier === "premium" ? "premium" : "free",
+          admin: isVerifiedAdminSession(data),
         };
       }
 
@@ -4030,11 +4064,7 @@ function BookmakerName({
 }
 
 function isUserAdmin(): boolean {
-  try {
-    return localStorage.getItem("rightedge_admin_auth") === "true";
-  } catch {
-    return false;
-  }
+  return runtimeAuthState.admin;
 }
 
 function setEmailAccess(email: string) {
@@ -4043,6 +4073,7 @@ function setEmailAccess(email: string) {
     checked: true,
     email: normalizedEmail,
     tier: runtimeAuthState.tier === "premium" ? "premium" : "free",
+    admin: runtimeAuthState.admin,
   });
 }
 
@@ -4060,6 +4091,7 @@ function setPaidAccess(email: string) {
     checked: true,
     email: normalizedEmail,
     tier: "premium",
+    admin: runtimeAuthState.admin,
   });
 }
 
@@ -4593,15 +4625,6 @@ function EmailGateModal({
   const trimmed = email.trim().toLowerCase();
   if (!trimmed || !trimmed.includes("@") || !trimmed.includes(".")) {
     setErrorMsg("Enter a valid email address.");
-    return;
-  }
-
-  // Admin bypass
-  const BYPASS_EMAILS = [...ADMIN_EMAILS, "test@rightedge.com.au"];
-  if (localStorage.getItem('rightedge_admin_auth') === 'true' && BYPASS_EMAILS.includes(trimmed)) {
-    setEmailAccess(trimmed);
-    window.dispatchEvent(new Event('adminAuthChanged'));
-    onSuccess();
     return;
   }
 
@@ -8331,7 +8354,7 @@ function PredictionsPage({
   const [marketMap, setMarketMap] = useState<SgmMarketMap>({});
   // Freeze + results data for the live page (disabled in archive view).
   const frozen = useFrozenRoundData(data, marketMap, now, {
-    enableFreeze: !selectedArchive,
+    enableFreeze: isAdmin && !selectedArchive,
   });
 
   useEffect(() => {
@@ -13441,6 +13464,7 @@ function AppDashboard({
   onExit,
   onRequestAccess,
   isPremium,
+  isAdmin,
 }: {
   data: DashboardData | null;
   loading: boolean;
@@ -13450,18 +13474,8 @@ function AppDashboard({
   onExit: () => void;
   onRequestAccess: (targetHash?: string) => void;
   isPremium: boolean;
+  isAdmin: boolean;
 }) {
-  const [isAdmin, setIsAdmin] = useState(() => isUserAdmin());
-  useEffect(() => {
-    const handleAdminAuth = () => {
-      setIsAdmin(isUserAdmin());
-      setAuthState({ ...runtimeAuthState });
-      setPaidAccessState(hasPaidAccess());
-    };
-    window.addEventListener('adminAuthChanged', handleAdminAuth);
-    return () => window.removeEventListener('adminAuthChanged', handleAdminAuth);
-  }, []);
-
   const [page, setPage] = useState(() => {
     const hash = window.location.hash.replace("#", "");
     if (
@@ -14272,26 +14286,32 @@ export default function App() {
   const [authSessionCheckFailed, setAuthSessionCheckFailed] = useState(false);
   const [paidAccessState, setPaidAccessState] = useState(() => hasPaidAccess());
   const [isAdmin, setIsAdmin] = useState(() => isUserAdmin());
+  const authSessionGenerationRef = useRef(0);
 
   const applyAuthState = (nextState: RuntimeAuthState) => {
     updateRuntimeAuthState(nextState);
     setAuthState(nextState);
     setPaidAccessState(nextState.tier === "premium");
-    setIsAdmin(isUserAdmin());
+    setIsAdmin(nextState.admin);
 
-    if (nextState.email && ADMIN_EMAILS.includes(nextState.email)) {
+    if (nextState.admin) {
       localStorage.setItem("rightedge_internal_visitor", "true");
     }
   };
 
   const refreshAuthSession = async (): Promise<RuntimeAuthState> => {
+    const generation = ++authSessionGenerationRef.current;
     const result = await requestAuthSession();
+    if (generation !== authSessionGenerationRef.current) {
+      return runtimeAuthState;
+    }
 
     if (result.status === "authenticated") {
       const nextState: RuntimeAuthState = {
         checked: true,
         email: result.email,
         tier: result.tier,
+        admin: result.admin,
       };
       setAuthSessionCheckFailed(false);
       applyAuthState(nextState);
@@ -14303,6 +14323,7 @@ export default function App() {
         checked: true,
         email: null,
         tier: "none",
+        admin: false,
       };
       setAuthSessionCheckFailed(false);
       applyAuthState(nextState);
@@ -14310,7 +14331,32 @@ export default function App() {
     }
 
     setAuthSessionCheckFailed(true);
-    return runtimeAuthState;
+    const nextState = failClosedAuthState(runtimeAuthState);
+    applyAuthState(nextState);
+    return nextState;
+  };
+
+  const handleResetAccess = async () => {
+    authSessionGenerationRef.current += 1;
+    applyAuthState(failClosedAuthState(runtimeAuthState));
+    window.dispatchEvent(new Event('adminAuthCleared'));
+    const resetController = new AbortController();
+    const resetTimeout = window.setTimeout(() => resetController.abort(), 10_000);
+    try {
+      const response = await fetch('/api/auth/logout', {
+        method: 'POST',
+        credentials: 'include',
+        signal: resetController.signal,
+      });
+      if (!response.ok) {
+        throw new Error('Server logout failed');
+      }
+      window.location.reload();
+    } catch {
+      setAuthSessionCheckFailed(true);
+    } finally {
+      window.clearTimeout(resetTimeout);
+    }
   };
 
   // Setup Analytics Tracking (meta tags now handled by <Helmet> — rendered synchronously)
@@ -14365,8 +14411,8 @@ export default function App() {
       // 1. Manual override flag
       if (localStorage.getItem('rightedge_internal_traffic') === 'true') isInternal = true;
 
-      // 2. Admin panel authenticated (current or past session this visit)
-      if (localStorage.getItem('rightedge_admin_auth') === 'true') isInternal = true;
+      // 2. Server-verified administrator session
+      if (isUserAdmin()) isInternal = true;
 
       const visitorEmail = getUserEmail();
 
@@ -14438,14 +14484,22 @@ export default function App() {
 
     // Expose globally for other components to track events like clicks/conversions
     (window as any).trackAnalyticsEvent = trackAnalyticsEvent;
-  }, [sitePage, authState.email, authState.tier]);
+  }, [sitePage, authState.email, authState.tier, authState.admin]);
 
   useEffect(() => {
     const handleAdminAuth = () => {
-      setIsAdmin(isUserAdmin());
+      void refreshAuthSession();
+    };
+    const handleAdminCleared = () => {
+      authSessionGenerationRef.current += 1;
+      applyAuthState(failClosedAuthState(runtimeAuthState));
     };
     window.addEventListener('adminAuthChanged', handleAdminAuth);
-    return () => window.removeEventListener('adminAuthChanged', handleAdminAuth);
+    window.addEventListener('adminAuthCleared', handleAdminCleared);
+    return () => {
+      window.removeEventListener('adminAuthChanged', handleAdminAuth);
+      window.removeEventListener('adminAuthCleared', handleAdminCleared);
+    };
   }, []);
 
   const trackHashPageView = (hashValue?: string) => {
@@ -14874,13 +14928,14 @@ export default function App() {
         )}
         {sitePage === "app" && (
           <AppDashboard
-            key={paidAccessState ? "paid" : "unpaid"}
+            key={`${paidAccessState ? "paid" : "unpaid"}-${isAdmin ? "admin" : "member"}`}
             data={data}
             loading={loading}
             error={error}
             refreshing={refreshing}
             loadData={loadData}
             isPremium={paidAccessState || isAdmin}
+            isAdmin={isAdmin}
             onRequestAccess={(targetHash = "best-bets") => {
               setSitePage("app");
               window.location.hash = targetHash;
@@ -14952,20 +15007,9 @@ export default function App() {
               <div className="text-white font-black text-2xl uppercase tracking-tighter mb-2">
                 RightEdge
                 <button
-                  onClick={async () => {
-                    try {
-                      await fetch(`/api/auth/logout`, {
-                        method: "POST",
-                        headers: {
-                          Authorization: `Bearer ${publicAnonKey}`,
-                        },
-                        credentials: "include",
-                      });
-                    } catch {}
-                    window.location.reload();
-                  }}
+                  onClick={handleResetAccess}
                   className="ml-4 text-[10px] text-white/20 hover:text-[#FF2E63] transition-colors"
-                  title="Debug: Reset Email Access"
+                  title="Reset Email Access"
                 >
                   [RESET ACCESS]
                 </button>

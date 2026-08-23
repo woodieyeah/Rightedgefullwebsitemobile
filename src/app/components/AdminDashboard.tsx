@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { projectId, publicAnonKey } from '../../../utils/supabase/info';
 import { Mail, Users, Send, AlertTriangle, CheckCircle, RefreshCw, Eye, Lock, LogIn, Activity, TrendingUp, BarChart3, Clock, Globe, Unlock, CreditCard } from 'lucide-react';
+import { normalizeAdminCodeInput } from '../auth-session';
 
 const NRL_TEAMS = [
   'Brisbane Broncos',
@@ -330,8 +331,12 @@ function getBestBetrPlayForTeam(row: any, selectedTeam: string, rawOdds: any[]) 
 export function AdminDashboard({ data, onNavigateAdStudio }: { data?: any, onNavigateAdStudio?: () => void }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [code, setCode] = useState('');
+  const [loginStep, setLoginStep] = useState<'email' | 'code'>('email');
   const [loginError, setLoginError] = useState('');
+  const [authChecking, setAuthChecking] = useState(true);
+  const [authSubmitting, setAuthSubmitting] = useState(false);
+  const [logoutPending, setLogoutPending] = useState(false);
 
   const [subscribers, setSubscribers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -349,31 +354,144 @@ export function AdminDashboard({ data, onNavigateAdStudio }: { data?: any, onNav
   const [checkoutLeads, setCheckoutLeads] = useState<any[]>([]);
   const [broadcastAudience, setBroadcastAudience] = useState<'premium' | 'free' | 'all'>('premium');
   const [broadcastTeam, setBroadcastTeam] = useState('');
+  const adminGenerationRef = useRef(0);
+  const adminRequestControllerRef = useRef(new AbortController());
+
+  const clearAdminAccess = () => {
+    adminGenerationRef.current += 1;
+    adminRequestControllerRef.current.abort();
+    adminRequestControllerRef.current = new AbortController();
+    setIsAuthenticated(false);
+    setSubscribers([]);
+    setBroadcasts([]);
+    setAnalyticsEvents([]);
+    setKvNamespaceScan(null);
+    setFreeLeads([]);
+    setCheckoutLeads([]);
+    setResult(null);
+    setSubject('');
+    setBody('');
+    setCode('');
+    setSending(false);
+    setLoading(false);
+    window.dispatchEvent(new Event('adminAuthCleared'));
+  };
+
+  const adminFetch = async (input: RequestInfo | URL, init: RequestInit = {}) => {
+    const generation = adminGenerationRef.current;
+    const response = await fetch(input, {
+      ...init,
+      credentials: 'include',
+      signal: init.signal ?? adminRequestControllerRef.current.signal,
+    });
+    if (generation !== adminGenerationRef.current) {
+      throw new Error('Administrator request was invalidated');
+    }
+    if (response.status === 401) {
+      clearAdminAccess();
+      setLoginError('Your administrator session has expired. Request a new code to continue.');
+      throw new Error('Administrator session expired');
+    }
+    return response;
+  };
 
   useEffect(() => {
-    // Check if previously logged in
-    if (localStorage.getItem('rightedge_admin_auth') === 'true') {
-      setIsAuthenticated(true);
-    }
+    let active = true;
+    (async () => {
+      try {
+        const res = await fetch('/api/auth/session', {
+          credentials: 'include',
+        });
+        const session = await res.json().catch(() => ({}));
+        if (active) setIsAuthenticated(res.ok && session?.admin === true);
+      } catch {
+        if (active) setIsAuthenticated(false);
+      } finally {
+        if (active) setAuthChecking(false);
+      }
+    })();
+    return () => {
+      active = false;
+    };
   }, []);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleRequestCode = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (email === 'elliott@woodbry.com' && password === 'Freshjive01@') {
-      setIsAuthenticated(true);
-      setLoginError('');
-      localStorage.setItem('rightedge_admin_auth', 'true');
-      window.dispatchEvent(new Event('adminAuthChanged'));
-    } else {
-      setLoginError('Invalid credentials');
+    if (logoutPending) return;
+    setAuthSubmitting(true);
+    setLoginError('');
+    try {
+      const res = await fetch('/api/auth/admin/request', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email }),
+      });
+      const response = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(response?.error || 'Could not send login code');
+      setLoginStep('code');
+    } catch (error: any) {
+      setLoginError(error?.message || 'Could not send login code');
+    } finally {
+      setAuthSubmitting(false);
     }
   };
 
-  const handleLogout = () => {
-    setIsAuthenticated(false);
-    localStorage.removeItem('rightedge_admin_auth');
-    window.dispatchEvent(new Event('adminAuthChanged'));
-    window.location.hash = "matches";
+  const handleVerifyCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (logoutPending) return;
+    setAuthSubmitting(true);
+    setLoginError('');
+    try {
+      const res = await fetch('/api/auth/admin/verify', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, code }),
+      });
+      const response = await res.json().catch(() => ({}));
+      if (!res.ok || response?.admin !== true) {
+        throw new Error(response?.error || 'Invalid or expired code');
+      }
+      setIsAuthenticated(true);
+      adminGenerationRef.current += 1;
+      adminRequestControllerRef.current.abort();
+      adminRequestControllerRef.current = new AbortController();
+      setCode('');
+      window.dispatchEvent(new Event('adminAuthChanged'));
+    } catch (error: any) {
+      setLoginError(error?.message || 'Invalid or expired code');
+    } finally {
+      setAuthSubmitting(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    if (logoutPending) return;
+    setLogoutPending(true);
+    clearAdminAccess();
+    const logoutController = new AbortController();
+    const logoutTimeout = window.setTimeout(() => logoutController.abort(), 10_000);
+    try {
+      const response = await fetch('/api/auth/logout', {
+        method: 'POST',
+        credentials: 'include',
+        signal: logoutController.signal,
+      });
+      if (!response.ok) {
+        throw new Error('Server logout failed');
+      }
+      window.location.hash = "matches";
+    } catch {
+      setLoginError('Could not confirm server logout. Local administrator data was cleared.');
+    } finally {
+      window.clearTimeout(logoutTimeout);
+      setLogoutPending(false);
+    }
   };
 
   const generateReviewEmail = () => {
@@ -656,43 +774,51 @@ export function AdminDashboard({ data, onNavigateAdStudio }: { data?: any, onNav
   };
 
   const fetchData = async () => {
+    const generation = adminGenerationRef.current;
+    const commitIfCurrent = (update: () => void) => {
+      if (generation !== adminGenerationRef.current) return false;
+      update();
+      return true;
+    };
     try {
       setLoading(true);
       // Fetch subscribers
-      const subRes = await fetch(`/api/admin/subscribers`, {
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      const subRes = await adminFetch(`/api/admin/subscribers`, {
+        credentials: 'include',
       });
       if (subRes.ok) {
-        setSubscribers(await subRes.json());
+        const data = await subRes.json();
+        if (!commitIfCurrent(() => setSubscribers(data))) return;
       }
       
       // Fetch broadcast history
-      const broadRes = await fetch(`/api/admin/broadcasts`, {
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      const broadRes = await adminFetch(`/api/admin/broadcasts`, {
+        credentials: 'include',
       });
       if (broadRes.ok) {
-        setBroadcasts(await broadRes.json());
+        const data = await broadRes.json();
+        if (!commitIfCurrent(() => setBroadcasts(data))) return;
       }
       
       // Fetch advanced analytics data — server now returns up to 30 days of
       // events with a 10 000-row limit so client-side time filters have a
       // full dataset to work against.
-      const analyticsRes = await fetch(`/api/analytics-events`, {
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      const analyticsRes = await adminFetch(`/api/admin/analytics-events`, {
+        credentials: 'include',
       });
       if (analyticsRes.ok) {
         const raw = await analyticsRes.json();
         // Guard: the endpoint may return an error object instead of an array
         if (Array.isArray(raw)) {
           console.log(`[AdminDashboard] Loaded ${raw.length} analytics events (30-day window)`);
-          setAnalyticsEvents(raw);
+          if (!commitIfCurrent(() => setAnalyticsEvents(raw))) return;
         } else {
           console.error('[AdminDashboard] analytics-events returned non-array:', raw);
-          setAnalyticsEvents([]);
+          if (!commitIfCurrent(() => setAnalyticsEvents([]))) return;
         }
       } else {
         console.error('[AdminDashboard] analytics-events request failed:', analyticsRes.status, await analyticsRes.text());
-        setAnalyticsEvents([]);
+        if (!commitIfCurrent(() => setAnalyticsEvents([]))) return;
       }
 
       // ── Full KV namespace scan: reveals ALL key prefixes in the table ──────
@@ -700,61 +826,65 @@ export function AdminDashboard({ data, onNavigateAdStudio }: { data?: any, onNav
       // pattern (e.g. traffic:, pageview:, visit:) before the analytics:event:
       // system was introduced.
       try {
-        const nsRes = await fetch(`/api/kv-namespace-scan`, {
-          headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        const nsRes = await adminFetch(`/api/admin/kv-namespace-scan`, {
+          credentials: 'include',
         });
         if (nsRes.ok) {
           const nsData = await nsRes.json();
           console.log('[AdminDashboard] KV namespace scan:', nsData);
-          setKvNamespaceScan(nsData);
+          if (!commitIfCurrent(() => setKvNamespaceScan(nsData))) return;
         } else {
           console.error('[AdminDashboard] kv-namespace-scan failed:', nsRes.status);
         }
       } catch (nsErr) {
+        if (generation !== adminGenerationRef.current) return;
         console.error('[AdminDashboard] kv-namespace-scan error:', nsErr);
       }
 
       // ── Free Leads ───��──────────────────────────��─────────────────────────
       try {
-        const leadsRes = await fetch(`/api/admin/free-access`, {
-          headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        const leadsRes = await adminFetch(`/api/admin/free-access`, {
+          credentials: 'include',
         });
         if (leadsRes.ok) {
           const leadsData = await leadsRes.json();
           console.log('[AdminDashboard] Free leads:', leadsData);
-          setFreeLeads(leadsData);
+          if (!commitIfCurrent(() => setFreeLeads(leadsData))) return;
         } else {
           console.error('[AdminDashboard] free-leads failed:', leadsRes.status);
         }
       } catch (leadsErr) {
+        if (generation !== adminGenerationRef.current) return;
         console.error('[AdminDashboard] free-leads error:', leadsErr);
       }
 
       // ── Checkout Leads ─────────────────────────────────────────────────────
       try {
-        const clRes = await fetch(`/api/admin/checkout-leads`, {
-          headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        const clRes = await adminFetch(`/api/admin/checkout-leads`, {
+          credentials: 'include',
         });
         if (clRes.ok) {
           const clData = await clRes.json();
           console.log('[AdminDashboard] Checkout leads:', clData);
-          setCheckoutLeads(clData);
+          if (!commitIfCurrent(() => setCheckoutLeads(clData))) return;
         } else {
           console.error('[AdminDashboard] checkout-leads failed:', clRes.status);
         }
       } catch (clErr) {
+        if (generation !== adminGenerationRef.current) return;
         console.error('[AdminDashboard] checkout-leads error:', clErr);
       }
     } catch (err) {
+      if (generation !== adminGenerationRef.current) return;
       console.error('Failed to fetch admin data', err);
     } finally {
-      setLoading(false);
+      if (generation === adminGenerationRef.current) setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    if (isAuthenticated) fetchData();
+  }, [isAuthenticated]);
 
   // ── Client-side time filter ────────────────────────────────────────────────
   // analyticsEvents already contains up to 30 days of raw data fetched on
@@ -940,6 +1070,7 @@ export function AdminDashboard({ data, onNavigateAdStudio }: { data?: any, onNav
 
   const handleSendEmail = async () => {
     if (!subject || !body) return;
+    const generation = adminGenerationRef.current;
     
     const audienceLabel = broadcastAudience === 'premium'
       ? 'premium subscribers'
@@ -966,15 +1097,16 @@ export function AdminDashboard({ data, onNavigateAdStudio }: { data?: any, onNav
       };
 
       if (!testMode) {
-        const validationRes = await fetch(`/api/admin/broadcast/validate-recipients`, {
+        const validationRes = await adminFetch(`/api/admin/broadcast/validate-recipients`, {
           method: 'POST',
+          credentials: 'include',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${publicAnonKey}`
           },
           body: JSON.stringify(guardedPayload)
         });
         const validationData = await validationRes.json().catch(() => ({}));
+        if (generation !== adminGenerationRef.current) return;
 
         if (!validationRes.ok || validationData?.guardVersion !== 1) {
           setResult({
@@ -984,11 +1116,11 @@ export function AdminDashboard({ data, onNavigateAdStudio }: { data?: any, onNav
         }
       }
 
-      const res = await fetch(`/api/admin/broadcast`, {
+      const res = await adminFetch(`/api/admin/broadcast`, {
         method: 'POST',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${publicAnonKey}`
         },
         body: JSON.stringify({
           subject,
@@ -998,6 +1130,7 @@ export function AdminDashboard({ data, onNavigateAdStudio }: { data?: any, onNav
         })
       });
       const data = await res.json();
+      if (generation !== adminGenerationRef.current) return;
       setResult(data);
       if (res.ok) {
         setSubject('');
@@ -1005,11 +1138,20 @@ export function AdminDashboard({ data, onNavigateAdStudio }: { data?: any, onNav
         fetchData();
       }
     } catch (err: any) {
+      if (generation !== adminGenerationRef.current) return;
       setResult({ error: err.message || 'Network error' });
     } finally {
-      setSending(false);
+      if (generation === adminGenerationRef.current) setSending(false);
     }
   };
+
+  if (authChecking) {
+    return (
+      <div className="flex min-h-[50vh] items-center justify-center text-white/60">
+        <RefreshCw className="h-6 w-6 animate-spin" />
+      </div>
+    );
+  }
 
   if (!isAuthenticated) {
     return (
@@ -1020,43 +1162,74 @@ export function AdminDashboard({ data, onNavigateAdStudio }: { data?: any, onNav
               <Lock className="w-6 h-6 text-[#00E676]" />
             </div>
           </div>
-          <h2 className="text-2xl font-black text-white text-center uppercase tracking-tighter mb-6">Admin Access</h2>
-          
-          <form onSubmit={handleLogin} className="space-y-4">
+          <h2 className="text-2xl font-black text-white text-center uppercase tracking-tighter mb-2">Admin Access</h2>
+          <p className="mb-6 text-center text-xs font-mono text-white/50">
+            Sign in with a one-time code sent to an approved admin address.
+          </p>
+
+          <form
+            onSubmit={loginStep === 'email' ? handleRequestCode : handleVerifyCode}
+            className="space-y-4"
+          >
             <div>
               <label className="block text-xs font-bold text-white/50 uppercase tracking-widest mb-2">Email</label>
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full bg-black/40 border border-white/10 p-3 text-white focus:outline-none focus:border-[#00E676] font-mono text-sm"
+                disabled={loginStep === 'code' || authSubmitting || logoutPending}
+                autoComplete="email"
+                className="w-full bg-black/40 border border-white/10 p-3 text-white focus:outline-none focus:border-[#00E676] font-mono text-sm disabled:opacity-60"
                 placeholder="Admin Email"
                 required
               />
             </div>
-            <div>
-              <label className="block text-xs font-bold text-white/50 uppercase tracking-widest mb-2">Password</label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-black/40 border border-white/10 p-3 text-white focus:outline-none focus:border-[#00E676] font-mono text-sm"
-                placeholder="••••••••"
-                required
-              />
-            </div>
-            
+
+            {loginStep === 'code' && (
+              <div>
+                <label className="block text-xs font-bold text-white/50 uppercase tracking-widest mb-2">Eight-character code</label>
+                <input
+                  type="text"
+                  pattern="[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{8}"
+                  maxLength={8}
+                  value={code}
+                  onChange={(e) => setCode(normalizeAdminCodeInput(e.target.value))}
+                  disabled={authSubmitting || logoutPending}
+                  autoComplete="one-time-code"
+                  className="w-full bg-black/40 border border-white/10 p-3 text-white focus:outline-none focus:border-[#00E676] font-mono text-lg tracking-[0.35em] disabled:opacity-60"
+                  placeholder="AB3D9K7P"
+                  required
+                  autoFocus
+                />
+              </div>
+            )}
+
             {loginError && (
               <div className="text-[#FF3366] text-xs font-bold font-mono">{loginError}</div>
             )}
-            
+
             <button
               type="submit"
-              className="w-full bg-[#00E676] text-black py-4 font-black uppercase tracking-widest hover:bg-[#00E676]/90 transition-colors flex items-center justify-center gap-2 mt-4"
+              disabled={authSubmitting || logoutPending || (loginStep === 'code' && code.length !== 8)}
+              className="w-full bg-[#00E676] text-black py-4 font-black uppercase tracking-widest hover:bg-[#00E676]/90 transition-colors flex items-center justify-center gap-2 mt-4 disabled:cursor-wait disabled:opacity-60"
             >
-              <LogIn className="w-5 h-5" />
-              Login
+              {authSubmitting ? <RefreshCw className="w-5 h-5 animate-spin" /> : <LogIn className="w-5 h-5" />}
+              {loginStep === 'email' ? 'Send code' : 'Verify code'}
             </button>
+
+            {loginStep === 'code' && (
+              <button
+                type="button"
+                onClick={() => {
+                  setLoginStep('email');
+                  setCode('');
+                  setLoginError('');
+                }}
+                className="w-full text-xs font-bold uppercase tracking-widest text-white/50 hover:text-white"
+              >
+                Use another email
+              </button>
+            )}
           </form>
         </div>
       </div>
