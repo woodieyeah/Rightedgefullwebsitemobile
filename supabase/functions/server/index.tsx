@@ -5,6 +5,25 @@ import { Resend } from "npm:resend";
 import Stripe from "npm:stripe";
 import { createClient } from "jsr:@supabase/supabase-js@2.49.8";
 import * as kv from "./kv_store.tsx";
+import {
+  ADMIN_SESSION_MAX_AGE_SECONDS,
+  createAdminChallenge,
+  generateAdminCode,
+  getAdminCodeHash,
+  getAdminSessionAbsoluteExpiry,
+  getAdminSessionRemainingMaxAge,
+  isAllowedAdminEmail,
+  isVerifiedAdminSession,
+  normalizeAdminCode,
+  normalizeAdminEmail,
+  requireAdminCodeHmacSecret,
+} from "./admin_auth.ts";
+import {
+  cancelAdminChallenge,
+  issueAdminChallenge,
+  verifyAndConsumeAdminChallenge,
+  type SupabaseRpc,
+} from "./admin_challenge_store.ts";
 const app = new Hono().basePath('/make-server-3b84b96c');
 const MATCH_ODDS_CACHE_MS = 2 * 60 * 60 * 1000;
 const NRL_EVENTS_CACHE_MS = 6 * 60 * 60 * 1000;
@@ -30,6 +49,7 @@ type StoredAuthSession = {
   tier: AuthSessionTier;
   createdAt: string;
   expiresAt: string;
+  adminVerified?: boolean;
 };
 
 const PREMIUM_ACTIVE_STRIPE_STATUSES = new Set(["active", "trialing"]);
@@ -247,10 +267,17 @@ function serializeCookie(name: string, value: string, options: {
   return parts.join("; ");
 }
 
-async function createAuthSession(email: string, tier: AuthSessionTier) {
+async function createAuthSession(
+  email: string,
+  tier: AuthSessionTier,
+  adminVerified = false,
+) {
   const token = createAuthSessionToken();
   const createdAt = new Date();
-  const expiresAt = new Date(createdAt.getTime() + AUTH_SESSION_MAX_AGE_SECONDS * 1000);
+  const maxAgeSeconds = adminVerified
+    ? ADMIN_SESSION_MAX_AGE_SECONDS
+    : AUTH_SESSION_MAX_AGE_SECONDS;
+  const expiresAt = new Date(createdAt.getTime() + maxAgeSeconds * 1000);
 
   const session: StoredAuthSession = {
     token,
@@ -258,13 +285,18 @@ async function createAuthSession(email: string, tier: AuthSessionTier) {
     tier,
     createdAt: createdAt.toISOString(),
     expiresAt: expiresAt.toISOString(),
+    adminVerified,
   };
 
   await kv.set(buildAuthSessionKey(token), JSON.stringify(session));
   return session;
 }
 
-function writeAuthSessionCookie(c: any, token: string) {
+function writeAuthSessionCookie(
+  c: any,
+  token: string,
+  maxAge = AUTH_SESSION_MAX_AGE_SECONDS,
+) {
   const secure = shouldUseSecureCookie(
     c.req.url,
     c.req.header("host"),
@@ -274,7 +306,7 @@ function writeAuthSessionCookie(c: any, token: string) {
   c.header(
     "Set-Cookie",
     serializeCookie(AUTH_SESSION_COOKIE, token, {
-      maxAge: AUTH_SESSION_MAX_AGE_SECONDS,
+      maxAge,
       path: "/",
       httpOnly: true,
       secure,
@@ -325,14 +357,22 @@ async function getAuthSessionFromRequest(
   const expiresAt = session?.expiresAt
     ? new Date(session.expiresAt).getTime()
     : Number.NaN;
+  const createdAt = session?.createdAt
+    ? new Date(session.createdAt).getTime()
+    : Number.NaN;
   const isValidTier = session?.tier === "free" || session?.tier === "premium";
+  const adminAbsoluteExpiry = session?.adminVerified === true
+    ? getAdminSessionAbsoluteExpiry(createdAt)
+    : Number.POSITIVE_INFINITY;
+  const effectiveExpiresAt = Math.min(expiresAt, adminAbsoluteExpiry);
 
   if (
     !session?.token ||
     session.token !== token ||
     !session.email ||
     !isValidTier ||
-    !Number.isFinite(expiresAt)
+    !Number.isFinite(expiresAt) ||
+    (session.adminVerified === true && !Number.isFinite(createdAt))
   ) {
     try {
       await kv.del(buildAuthSessionKey(token));
@@ -344,7 +384,7 @@ async function getAuthSessionFromRequest(
     return null;
   }
 
-  if (Date.now() >= expiresAt) {
+  if (Date.now() >= effectiveExpiresAt) {
     try {
       await kv.del(buildAuthSessionKey(token));
     } catch (error) {
@@ -363,19 +403,25 @@ async function renewAuthSession(
   session: StoredAuthSession,
   tier: AuthSessionTier = session.tier,
 ) {
+  const nowMs = Date.now();
+  const createdAtMs = new Date(session.createdAt).getTime();
+  const maxAgeSeconds = session.adminVerified === true
+    ? getAdminSessionRemainingMaxAge(createdAtMs, nowMs)
+    : AUTH_SESSION_MAX_AGE_SECONDS;
+  const expiresAtMs = session.adminVerified === true
+    ? getAdminSessionAbsoluteExpiry(createdAtMs)
+    : nowMs + maxAgeSeconds * 1000;
   const renewedSession: StoredAuthSession = {
     ...session,
     tier,
-    expiresAt: new Date(
-      Date.now() + AUTH_SESSION_MAX_AGE_SECONDS * 1000,
-    ).toISOString(),
+    expiresAt: new Date(expiresAtMs).toISOString(),
   };
 
   await kv.set(
     buildAuthSessionKey(renewedSession.token),
     JSON.stringify(renewedSession),
   );
-  writeAuthSessionCookie(c, renewedSession.token);
+  writeAuthSessionCookie(c, renewedSession.token, maxAgeSeconds);
   return renewedSession;
 }
 
@@ -391,20 +437,11 @@ async function clearAuthSession(c: any) {
   }
 }
 
-// Mirrors the frontend ADMIN_EMAILS list (App.tsx). Server-side guard for
-// admin-only write endpoints (results entry).
-const ADMIN_EMAILS = [
-  "elliott@woodbry.com",
-  "ewoodbry@gmail.com",
-  "elliott@rightedge.com.au",
-];
-
-// Returns the session only if the logged-in user is an admin, else null.
+// Returns the session only when an allowlisted administrator completed the
+// dedicated email-code challenge. Ordinary free/premium sessions never qualify.
 async function requireAdmin(c: any): Promise<StoredAuthSession | null> {
   const session = await getAuthSessionFromRequest(c);
-  if (!session?.email) return null;
-  if (!ADMIN_EMAILS.includes(session.email.toLowerCase())) return null;
-  return session;
+  return isVerifiedAdminSession(session) ? session : null;
 }
 
 // Normalize a free-text match label into a stable key. Mirrors the frontend
@@ -484,6 +521,15 @@ app.options("/*", (c) => {
   return c.body(null, 204);
 });
 
+app.use("/admin/*", async (c, next) => {
+  const session = await requireAdmin(c);
+  if (!session) {
+    c.header("Cache-Control", "private, no-store");
+    return c.json({ error: "Unauthorized" }, 401);
+  }
+  await next();
+});
+
 app.get("/og-image.svg",async (c) => {
   const svg = `<svg width="1200" height="630" viewBox="0 0 1200 630" xmlns="http://www.w3.org/2000/svg">
     <rect width="1200" height="630" fill="#111317"/>
@@ -552,6 +598,7 @@ app.get("/auth/session", async (c) => {
         tier: "none",
         free: false,
         premium: false,
+        admin: false,
       });
     }
 
@@ -568,6 +615,7 @@ app.get("/auth/session", async (c) => {
       tier: responseTier,
       free: true,
       premium: responseTier === "premium" && premium,
+      admin: isVerifiedAdminSession(renewedSession),
       expiresAt: renewedSession.expiresAt,
     });
   } catch (error) {
@@ -580,6 +628,100 @@ app.post("/auth/logout", async (c) => {
   c.header("Cache-Control", "private, no-store");
   await clearAuthSession(c);
   return c.json({ success: true });
+});
+
+function getAdminCodeHmacSecret(): string {
+  return requireAdminCodeHmacSecret(Deno.env.get("ADMIN_CODE_HMAC_SECRET"));
+}
+
+function getAdminChallengeRpc(): SupabaseRpc {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!supabaseUrl || !serviceKey) {
+    throw new Error("Supabase service role is not configured for atomic admin challenges");
+  }
+  const supabase = createClient(supabaseUrl, serviceKey);
+  return async (name, args) => {
+    const { data, error } = await supabase.rpc(name, args);
+    return { data, error: error ? { message: error.message } : null };
+  };
+}
+
+app.post("/auth/admin/request", async (c) => {
+  c.header("Cache-Control", "private, no-store");
+  const genericResponse = { success: true, message: "If authorized, a code has been sent." };
+
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const email = normalizeAdminEmail(body?.email);
+    if (!isAllowedAdminEmail(email)) {
+      return c.json(genericResponse, 202);
+    }
+
+    const challengeKey = `admin_auth_challenge:${email}`;
+    const code = generateAdminCode();
+    const challenge = await createAdminChallenge(email, code, Date.now(), getAdminCodeHmacSecret());
+    const rpc = getAdminChallengeRpc();
+    const issued = await issueAdminChallenge(rpc, challengeKey, challenge);
+    if (!issued) {
+      return c.json(genericResponse, 202);
+    }
+
+    try {
+      const resend = getResendClient();
+      const { error } = await resend.emails.send({
+        from: getFromEmail(),
+        to: [email],
+        subject: "Your RightEdge admin login code",
+        text: `Your RightEdge admin login code is ${code}. It expires in 10 minutes.`,
+        html: `<div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;background:#0A0A0F;color:#fff"><h1 style="font-size:22px">RightEdge admin login</h1><p style="color:#c5c7ce">Use this one-time code. It expires in 10 minutes.</p><div style="font-size:34px;font-weight:700;letter-spacing:8px;margin:24px 0">${code}</div><p style="color:#8b8e98;font-size:13px">If you did not request this code, you can ignore this email.</p></div>`,
+      });
+      if (error) throw error;
+    } catch (deliveryError) {
+      // Delete only the challenge this request issued. If another challenge has
+      // since replaced it, the hash predicate leaves that newer challenge intact.
+      await cancelAdminChallenge(rpc, challengeKey, challenge.codeHash);
+      console.error("[admin/auth/request] Resend failed", deliveryError);
+      return c.json({ error: "Unable to send an admin login code." }, 503);
+    }
+
+    return c.json(genericResponse, 202);
+  } catch (error) {
+    console.error("[admin/auth/request] Failed", error);
+    return c.json({ error: "Unable to send an admin login code." }, 503);
+  }
+});
+
+app.post("/auth/admin/verify", async (c) => {
+  c.header("Cache-Control", "private, no-store");
+
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const email = normalizeAdminEmail(body?.email);
+    const code = normalizeAdminCode(body?.code);
+    if (!isAllowedAdminEmail(email) || !code) {
+      return c.json({ error: "Invalid or expired code." }, 401);
+    }
+
+    const challengeKey = `admin_auth_challenge:${email}`;
+    const codeHash = await getAdminCodeHash(email, code, getAdminCodeHmacSecret());
+    const result = await verifyAndConsumeAdminChallenge(
+      getAdminChallengeRpc(),
+      challengeKey,
+      email,
+      codeHash,
+    );
+    if (result !== "success") {
+      return c.json({ error: "Invalid or expired code." }, 401);
+    }
+
+    const authSession = await createAuthSession(email, "free", true);
+    writeAuthSessionCookie(c, authSession.token, ADMIN_SESSION_MAX_AGE_SECONDS);
+    return c.json({ success: true, admin: true, email });
+  } catch (error) {
+    console.error("[admin/auth/verify] Failed", error);
+    return c.json({ error: "Unable to verify the admin login code." }, 503);
+  }
 });
 
 
@@ -1936,7 +2078,7 @@ app.post("/register-checkout-lead", async (c) => {
   }
 });
 
-app.get("/analytics-events", async (c) => {
+app.get("/admin/analytics-events", async (c) => {
   try {
     // Build a Supabase client with service role key so we can bypass PostgREST
     // row-limit defaults and apply a proper 30-day date-range filter directly
@@ -1986,7 +2128,7 @@ app.get("/analytics-events", async (c) => {
 // Returns metadata about every analytics event in the KV table so the admin
 // dashboard can distinguish "no older data in storage" from "older data was
 // fetched but filtered away".
-app.get("/analytics-debug", async (c) => {
+app.get("/admin/analytics-debug", async (c) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
     const serviceKey  = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -2065,7 +2207,7 @@ app.get("/analytics-debug", async (c) => {
 // Reads ALL keys in the table (no prefix filter) and groups them by their
 // leading namespace (everything before the first colon).
 // This answers: "is older traffic stored under a different key name?"
-app.get("/kv-namespace-scan", async (c) => {
+app.get("/admin/kv-namespace-scan", async (c) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
     const serviceKey  = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -4527,11 +4669,6 @@ app.post("/subscribe", async (c) => {
 
 app.post("/admin/broadcast/validate-recipients", async (c) => {
   try {
-    const authHeader = c.req.header('Authorization');
-    if (!authHeader) {
-       return c.json({ error: "Unauthorized" }, 401);
-    }
-
     const body = await c.req.json();
     const resolved = await resolveGuardedBroadcastRecipients(body);
 
@@ -4560,12 +4697,6 @@ app.post("/admin/broadcast/validate-recipients", async (c) => {
 // Admin endpoint to send mass emails
 app.post("/admin/broadcast", async (c) => {
   try {
-    const authHeader = c.req.header('Authorization');
-    // Basic protection - should use proper auth in production
-    if (!authHeader) {
-       return c.json({ error: "Unauthorized" }, 401);
-    }
-
     const body = await c.req.json();
     const { subject, htmlContent, testMode = true } = body;
 
@@ -4654,11 +4785,6 @@ app.post("/admin/broadcast", async (c) => {
 
 app.post("/admin/premium-best-bet-alerts", async (c) => {
   try {
-    const authHeader = c.req.header("Authorization");
-    if (!authHeader) {
-      return c.json({ error: "Unauthorized" }, 401);
-    }
-
     const body = await c.req.json().catch(() => ({}));
     const dryRun = body?.dryRun !== false;
     const testMode = body?.testMode !== false;
@@ -4752,11 +4878,6 @@ app.get("/admin/broadcasts", async (c) => {
 
 app.post("/admin/run-lead-nurture", async (c) => {
   try {
-    const authHeader = c.req.header("Authorization");
-    if (!authHeader) {
-      return c.json({ error: "Unauthorized" }, 401);
-    }
-
     const body = await c.req.json().catch(() => ({}));
     const dryRun = body?.dryRun !== false;
     const limit = Math.max(1, Math.min(Number(body?.limit) || 250, 1000));
@@ -4770,11 +4891,6 @@ app.post("/admin/run-lead-nurture", async (c) => {
 
 app.post("/admin/send-lead-nurture-tests", async (c) => {
   try {
-    const authHeader = c.req.header("Authorization");
-    if (!authHeader) {
-      return c.json({ error: "Unauthorized" }, 401);
-    }
-
     const body = await c.req.json().catch(() => ({}));
     if (body?.confirm !== "SEND_NURTURE_TESTS_TO_ELLIOTT_ONLY") {
       return c.json({ error: "Confirmation phrase required." }, 400);
@@ -4786,45 +4902,6 @@ app.post("/admin/send-lead-nurture-tests", async (c) => {
   } catch (err: any) {
     console.error("[admin/send-lead-nurture-tests] error:", err);
     return c.json({ error: "Internal server error", message: err?.message }, 500);
-  }
-});
-
-// Debug endpoint: test KV write and read
-app.get("/test-kv", async (c) => {
-  try {
-    const testKey = "subscriber:test@debug.com";
-    const testVal = { email: "test@debug.com", subscribedAt: new Date().toISOString(), source: "debug_test" };
-    console.log("[TestKV] Writing test entry...");
-    await kv.set(testKey, JSON.stringify(testVal));
-    
-    // Specifically save Round 2 Review into DB based on user request
-    await kv.set(`broadcast:${Date.now()}`, JSON.stringify({
-      subject: "RightEdge: Round 2 Ledger Review 📊",
-      htmlContent: `<div style="font-family: monospace; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #111317; color: #fff;">
-        <h1 style="color: #00E676; text-transform: uppercase;">ROUND 2 LEDGER REVIEW</h1>
-        <p>The round is over. Here is the fully transparent breakdown of how the model performed against the closing line in Round 2.</p>
-        <div style="background-color: rgba(255,255,255,0.05); padding: 15px; border-left: 4px solid #00E676; margin: 20px 0;">
-          <h3 style="margin-top: 0; color: #fff;">Round 2 Recap</h3>
-          <p style="color: #ccc; font-size: 14px;">The model found significant closing line value in 5 of 8 matches, resulting in +3.2 units of profit.</p>
-          <a href="https://rightedge.app" style="display: inline-block; background-color: #00E676; color: #000; padding: 10px 20px; text-decoration: none; font-weight: bold; margin-top: 10px;">VIEW RESULTS</a>
-        </div>
-        <br/>
-        <p style="color: #00E676; font-weight: bold;">- The RightEdge Team</p>
-      </div>`,
-      sentAt: new Date().toISOString(),
-      recipients: 15,
-      source: 'manual_round2_trigger'
-    }));
-
-    console.log("[TestKV] Reading back...");
-    const readBack = await kv.get(testKey);
-    console.log("[TestKV] Read result:", readBack);
-    // Clean up
-    await kv.del(testKey);
-    return c.json({ success: true, message: "Round 2 review saved to database!" });
-  } catch (err: any) {
-    console.error("[TestKV] ERROR:", err?.message);
-    return c.json({ error: err.message }, 500);
   }
 });
 
@@ -5021,8 +5098,9 @@ Deno.cron("Sunday Ledger Review", "0 8 * * 0", async () => {
 
 // First-write-wins snapshot of a match's selected chooser buckets + try scorer
 // signals once that individual match enters its 24-hour kickoff window.
-// Public + idempotent: once a snapshot exists it is never overwritten.
-app.post("/round-snapshot", async (c) => {
+// Admin-only, idempotent first-write-wins snapshot: once a snapshot exists it
+// is never overwritten.
+app.post("/admin/round-snapshot", async (c) => {
   try {
     const body = await c.req.json().catch(() => null);
     if (!body || typeof body !== "object") {
