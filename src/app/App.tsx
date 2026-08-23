@@ -11847,10 +11847,13 @@ type SameGameMultiLeg = {
   team?: string;
 };
 
+type MultiCardStatus = "upcoming" | "live" | "completed";
+
 type SameGameMultiCardData = {
   key: string;
   match: string;
   fixture?: FixtureRow | null;
+  status: MultiCardStatus;
   legs: SameGameMultiLeg[];
 };
 
@@ -11859,6 +11862,26 @@ const SGM_MINIMUM_ESTIMATED_PRICE = 2;
 const SGM_HIGH_MODEL_SCORER_FLOOR = 42;
 const ROUND_MULTI_SHORT_H2H_ODDS_CUTOFF = 1.5;
 const ROUND_MULTI_HIGH_MODEL_SCORER_FLOOR = 42;
+
+function getMultiMatchStatus(
+  match: PredictionRow,
+  settledMatchKeys: Set<string>,
+  now: number,
+): MultiCardStatus {
+  const settledKey = `${match.roundNumber}:${buildMatchLabelKey(match.match)}`;
+  if (settledMatchKeys.has(settledKey) || isFixtureCompleted(match.fixture, now)) {
+    return "completed";
+  }
+  return hasPredictionKickedOff(match, now) ? "live" : "upcoming";
+}
+
+function getMultiStatusClass(status: MultiCardStatus) {
+  return status === "live"
+    ? "border-[#00E676]/60 bg-[#00E676]/14 text-[#00E676]"
+    : status === "completed"
+      ? "border-white/10 bg-white/[0.04] text-white/45"
+      : "border-[#093AD3]/50 bg-[#093AD3]/10 text-[#6FEBDD]";
+}
 
 type SgmMarketBookmakerData = {
   h2h: Record<string, number>;
@@ -12176,6 +12199,7 @@ function getSameGameMultiTotalLeg(
 function buildSameGameMultiCards(
   data: DashboardData,
   marketMap: SgmMarketMap,
+  now: number,
 ): SameGameMultiCardData[] {
   const settledMatchKeys = new Set(
     data.betLog
@@ -12190,10 +12214,6 @@ function buildSameGameMultiCards(
   );
 
   return data.predictions
-    .filter(
-      (match) =>
-        !settledMatchKeys.has(`${match.roundNumber}:${buildMatchLabelKey(match.match)}`),
-    )
     .map((match): SameGameMultiCardData | null => {
       const key = buildMatchLabelKey(match.match);
       const betrMarkets = getSgmMatchMarkets(marketMap, match).betr;
@@ -12263,6 +12283,7 @@ function buildSameGameMultiCards(
         key,
         match: `${match.homeTeam} V ${match.awayTeam}`,
         fixture: match.fixture,
+        status: getMultiMatchStatus(match, settledMatchKeys, now),
         legs,
       };
     })
@@ -12289,12 +12310,14 @@ function getEstimatedSgmPrice(legs: SameGameMultiLeg[]) {
 type RoundMultiLeg = SameGameMultiLeg & {
   key: string;
   match: string;
+  status: MultiCardStatus;
 };
 
 type RoundMultiData = {
   roundNumber: number;
   legs: RoundMultiLeg[];
   price: number;
+  status: MultiCardStatus;
 };
 
 function getRoundMultiPrice(legs: RoundMultiLeg[]) {
@@ -12309,6 +12332,7 @@ function getRoundMultiLeg(
   match: PredictionRow,
   betrMarkets: SgmMarketBookmakerData,
   tryScorerRows: TryScorerRow[],
+  status: MultiCardStatus,
 ): RoundMultiLeg | null {
   const winner = getSameGameMultiWinner(match);
   const winnerKey = normalizeTeamName(winner);
@@ -12326,6 +12350,7 @@ function getRoundMultiLeg(
         kind: "result",
         label: `${winner} ${formatSgmLine(line.point)}`,
         team: winner,
+        status,
         marketPct: getImpliedWinPctFromOdds(line.odds),
         modelPct: probabilityFromEdge(lineEdge, RIGHTEDGE_TUNING.lineScale),
         odds: line.odds,
@@ -12345,6 +12370,7 @@ function getRoundMultiLeg(
       kind: "result",
       label: team,
       team,
+      status,
       marketPct: getImpliedWinPctFromOdds(marketOdds),
       modelPct,
       odds: marketOdds,
@@ -12362,6 +12388,7 @@ function getRoundMultiLeg(
       label: row.player,
       suffix: "ANYTIME",
       team: row.team,
+      status,
       marketPct: row.marketImpliedPct,
       modelPct: row.statsInsiderPct,
       odds: row.bestOdds,
@@ -12393,6 +12420,7 @@ function getRoundMultiLeg(
 function buildRoundMultiData(
   data: DashboardData,
   marketMap: SgmMarketMap,
+  now: number,
 ): RoundMultiData | null {
   const roundNumber =
     toRoundNumber(data.currentRoundLabel) ||
@@ -12411,8 +12439,7 @@ function buildRoundMultiData(
   const matches = data.predictions
     .filter(
       (match) =>
-        (!roundNumber || match.roundNumber === roundNumber) &&
-        !settledMatchKeys.has(`${match.roundNumber}:${buildMatchLabelKey(match.match)}`),
+        !roundNumber || match.roundNumber === roundNumber,
     )
     .sort((a, b) => {
       const aOrder = fixtureOrder.get(buildMatchLabelKey(a.match)) ?? 999;
@@ -12430,13 +12457,23 @@ function buildRoundMultiData(
           return getMatchPairKeyFromLabel(row.match) === getPredictionPairKey(match);
         }),
       );
-      return getRoundMultiLeg(match, betrMarkets, tryScorerRows);
+      return getRoundMultiLeg(
+        match,
+        betrMarkets,
+        tryScorerRows,
+        getMultiMatchStatus(match, settledMatchKeys, now),
+      );
     })
     .filter((leg): leg is RoundMultiLeg => Boolean(leg));
 
   const price = getRoundMultiPrice(legs);
   if (!legs.length || price === null) return null;
-  return { roundNumber, legs, price };
+  const status: MultiCardStatus = legs.every((leg) => leg.status === "completed")
+    ? "completed"
+    : legs.some((leg) => leg.status !== "upcoming")
+      ? "live"
+      : "upcoming";
+  return { roundNumber, legs, price, status };
 }
 
 function RoundMultiCard({
@@ -12452,9 +12489,16 @@ function RoundMultiCard({
     <article className="border border-[#1E1E2E] bg-[#111116]">
       <div className="flex items-start justify-between gap-4 border-b border-[#1E1E2E] px-4 py-5 md:px-6">
         <div className="min-w-0">
-          <span className="mb-3 inline-flex shrink-0 bg-[#147A42]/10 px-2 py-1 text-[9px] font-black uppercase tracking-[0.18em] text-[#147A42]">
-            Round Multi
-          </span>
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <span className="inline-flex shrink-0 bg-[#147A42]/10 px-2 py-1 text-[9px] font-black uppercase tracking-[0.18em] text-[#147A42]">
+              Round Multi
+            </span>
+            {multi.status !== "upcoming" ? (
+              <span className={`inline-flex border px-2 py-1 text-[9px] font-black uppercase tracking-[0.18em] ${getMultiStatusClass(multi.status)}`}>
+                {multi.status}
+              </span>
+            ) : null}
+          </div>
           <h2 className="text-[22px] font-black uppercase leading-none tracking-tight text-white">
             Round {multi.roundNumber} Multi
           </h2>
@@ -12518,7 +12562,7 @@ function RoundMultiCard({
                   </span>
                   <span className="flex shrink-0 flex-col items-end gap-1">
                     <span className="text-[9px] font-black uppercase tracking-[0.16em] text-[#9CA3AF]">
-                      {legType}
+                      {legType}{leg.status !== "upcoming" ? ` · ${leg.status}` : ""}
                     </span>
                     <span className="flex items-baseline gap-3">
                       <span className="text-[11px] font-medium tabular-nums text-[#9CA3AF]">Market {marketValue}</span>
@@ -12533,7 +12577,11 @@ function RoundMultiCard({
       </div>
 
       <div className="px-4 pb-4 pt-4 md:px-6 md:pb-5">
-        {isPremium ? (
+        {multi.status !== "upcoming" ? (
+          <div className={`flex min-h-[48px] w-full items-center justify-center border px-5 text-xs font-black uppercase tracking-widest ${getMultiStatusClass(multi.status)}`}>
+            {multi.status}
+          </div>
+        ) : isPremium ? (
           <BetrAffiliateLink
             payload={`rightedge_round_multi_${multi.roundNumber}`}
             className="re-betr-button flex min-h-[48px] w-full items-center justify-start gap-3 border border-[#093AD3] bg-[#093AD3] px-4 text-xs font-black uppercase tracking-widest text-white transition hover:opacity-90"
@@ -12581,8 +12629,15 @@ function SameGameMultiCard({
     <article className="border border-[#1E1E2E] bg-[#111116]">
       <div className="flex items-start justify-between gap-4 border-b border-[#1E1E2E] px-4 py-5 md:px-6">
         <div className="min-w-0">
-          <div className="mb-3 inline-flex bg-[#147A42]/10 px-2 py-1 text-[9px] font-black uppercase tracking-[0.18em] text-[#147A42]">
-            Model Multi
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <div className="inline-flex bg-[#147A42]/10 px-2 py-1 text-[9px] font-black uppercase tracking-[0.18em] text-[#147A42]">
+              Model Multi
+            </div>
+            {card.status !== "upcoming" ? (
+              <div className={`inline-flex border px-2 py-1 text-[9px] font-black uppercase tracking-[0.18em] ${getMultiStatusClass(card.status)}`}>
+                {card.status}
+              </div>
+            ) : null}
           </div>
           <h2 className="truncate text-[22px] font-black uppercase leading-none tracking-tight text-white">
             {card.match}
@@ -12665,7 +12720,11 @@ function SameGameMultiCard({
       </div>
 
       <div className="px-4 pb-4 pt-4 md:px-6 md:pb-5">
-        {isPremium ? (
+        {card.status !== "upcoming" ? (
+          <div className={`flex min-h-[48px] w-full items-center justify-center border px-5 text-xs font-black uppercase tracking-widest ${getMultiStatusClass(card.status)}`}>
+            {card.status}
+          </div>
+        ) : isPremium ? (
           <BetrAffiliateLink
             payload={`rightedge_sgm_${slugifyPayloadPart(card.match)}`}
             className="re-betr-button flex min-h-[48px] w-full items-center justify-start gap-3 border border-[#093AD3] bg-[#093AD3] px-4 text-xs font-black uppercase tracking-widest text-white transition hover:opacity-90"
@@ -12705,8 +12764,15 @@ function MultiPage({
   isPremium: boolean;
 }) {
   const [marketMap, setMarketMap] = useState<SgmMarketMap>({});
-  const cards = useMemo(() => buildSameGameMultiCards(data, marketMap), [data, marketMap]);
-  const roundMulti = useMemo(() => buildRoundMultiData(data, marketMap), [data, marketMap]);
+  const now = useMinuteNow();
+  const cards = useMemo(
+    () => buildSameGameMultiCards(data, marketMap, now),
+    [data, marketMap, now],
+  );
+  const roundMulti = useMemo(
+    () => buildRoundMultiData(data, marketMap, now),
+    [data, marketMap, now],
+  );
 
   useEffect(() => {
     let mounted = true;
