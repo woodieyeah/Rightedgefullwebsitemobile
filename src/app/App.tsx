@@ -2407,6 +2407,7 @@ type FrozenChooserPlayPayload = {
 };
 
 type FrozenPlayPayload = {
+  multiOnly?: boolean;
   selection: string;
   type: PremiumMarketPlay["type"];
   odds: number;
@@ -2434,6 +2435,7 @@ type FrozenPlayPayload = {
     tz?: string;
   } | null;
   premiumPlays?: FrozenChooserPlayPayload[];
+  sgmMarkets?: SgmMarketBookmakerData;
   freezeWindowHours?: number;
   tryScorers: FrozenTryScorer[];
 };
@@ -2546,12 +2548,48 @@ function buildFrozenPayloadFromPlay(
   };
 }
 
+function buildMultiOnlyFrozenPayload(
+  row: PredictionRow,
+  tryScorers: FrozenTryScorer[],
+  sgmMarkets: SgmMarketBookmakerData,
+): FrozenPlayPayload {
+  return {
+    multiOnly: true,
+    selection: "",
+    type: "Head 2 Head",
+    odds: 0,
+    bookmaker: "",
+    modelPct: 0,
+    modelEdge: 0,
+    predictedScore: `${Math.round(row.predictedHomeScore)}-${Math.round(row.predictedAwayScore)}`,
+    homeTeam: row.homeTeam,
+    awayTeam: row.awayTeam,
+    round: row.roundNumber,
+    fixture: row.fixture
+      ? {
+          match: `${row.homeTeam} v ${row.awayTeam}`,
+          day: row.fixture.day,
+          dateISO: row.fixture.dateISO,
+          dateLabel: row.fixture.dateLabel,
+          aedt: row.fixture.aedt,
+          stadium: row.fixture.stadium,
+          tz: row.fixture.tz,
+        }
+      : null,
+    premiumPlays: [],
+    sgmMarkets,
+    freezeWindowHours: 24,
+    tryScorers,
+  };
+}
+
 function reconstructFrozenPlayForMode(
   snapshot: FrozenSnapshot,
   row: PredictionRow | null,
   mode: PremiumPlayMode,
 ): PremiumMarketPlay | null {
   const payload = snapshot.payload;
+  if (payload.multiOnly) return null;
   const hasChooserBundle = Boolean(payload.premiumPlays?.length);
   const frozenPlay = payload.premiumPlays?.find((play) => play.mode === mode) ||
     (!hasChooserBundle && mode === "bestbet" ? payload : null);
@@ -2631,6 +2669,7 @@ function reconstructFrozenPlay(
 type FrozenArchivePlay = FrozenChooserPlayPayload | FrozenPlayPayload;
 
 function getFrozenArchivePlays(snapshot: FrozenSnapshot): FrozenArchivePlay[] {
+  if (snapshot.payload.multiOnly) return [];
   const bundled = snapshot.payload.premiumPlays || [];
   return bundled.length > 0 ? bundled : [snapshot.payload];
 }
@@ -3076,7 +3115,8 @@ function useFrozenRoundData(
       const primaryPlay =
         selectedPlays.find((entry) => entry.mode === "bestbet")?.play ||
         selectedPlays[0]?.play;
-      if (!primaryPlay) continue;
+      const sgmMarkets = getSgmMatchMarkets(marketMap, row).betr;
+      if (!primaryPlay && !sgmMarkets) continue;
       const frozenPremiumPlays = selectedPlays.map(({ mode, play }) =>
         buildFrozenChooserPlay(play, mode)
       );
@@ -3093,11 +3133,16 @@ function useFrozenRoundData(
         round: row.roundNumber,
         match: `${row.homeTeam} v ${row.awayTeam}`,
         matchKey,
-        payload: buildFrozenPayloadFromPlay(
-          primaryPlay,
-          frozenScorers,
-          frozenPremiumPlays,
-        ),
+        payload: primaryPlay
+          ? {
+              ...buildFrozenPayloadFromPlay(
+                primaryPlay,
+                frozenScorers,
+                frozenPremiumPlays,
+              ),
+              sgmMarkets,
+            }
+          : buildMultiOnlyFrozenPayload(row, frozenScorers, sgmMarkets!),
       });
     }
 
@@ -11899,6 +11944,72 @@ type SgmMarketBookmakerData = {
 
 type SgmMarketMap = Record<string, Record<string, SgmMarketBookmakerData>>;
 
+function makeArchivedSgmMarkets(
+  h2h: Record<string, number> = {},
+  spreads: SgmMarketBookmakerData["spreads"] = [],
+): SgmMarketBookmakerData {
+  return {
+    h2h: Object.fromEntries(
+      Object.entries(h2h).map(([team, odds]) => [normalizeTeamName(team), odds]),
+    ),
+    spreads,
+    totals: [],
+  };
+}
+
+// Round 25 was already in progress when persistent multi snapshots were added.
+// Preserve the Betr markets that had rendered on the page so those cards can
+// be reconstructed after the live feed removes completed events.
+const ROUND_25_ARCHIVED_SGM_MARKETS: SgmMarketMap = {
+  [buildMatchKey("Storm", "Panthers")]: {
+    betr: makeArchivedSgmMarkets(),
+  },
+  [buildMatchKey("Raiders", "Broncos")]: {
+    betr: makeArchivedSgmMarkets({ Raiders: 1.27 }),
+  },
+  [buildMatchKey("Dolphins", "Eels")]: {
+    betr: makeArchivedSgmMarkets({ Dolphins: 1.23 }),
+  },
+  [buildMatchKey("Knights", "Sea Eagles")]: {
+    betr: makeArchivedSgmMarkets({ Knights: 1.4 }),
+  },
+  [buildMatchKey("Rabbitohs", "Warriors")]: {
+    betr: makeArchivedSgmMarkets({ Warriors: 1.57 }),
+  },
+  [buildMatchKey("Dragons", "Bulldogs")]: {
+    betr: makeArchivedSgmMarkets({ Bulldogs: 1.47 }),
+  },
+  [buildMatchKey("Titans", "Sharks")]: {
+    betr: makeArchivedSgmMarkets(
+      { Sharks: 1.42 },
+      [{ team: "Sharks", point: -7.5, odds: 1.9 }],
+    ),
+  },
+  [buildMatchKey("Roosters", "Tigers")]: {
+    betr: makeArchivedSgmMarkets({ Roosters: 1.05 }),
+  },
+};
+
+function buildFrozenSgmMarketMap(snapshots: FrozenSnapshot[]): SgmMarketMap {
+  const frozenMap: SgmMarketMap = {};
+  for (const snapshot of snapshots) {
+    const markets = snapshot.payload?.sgmMarkets;
+    if (!markets) continue;
+    frozenMap[snapshot.matchKey] = { betr: markets };
+  }
+  return frozenMap;
+}
+
+function mergeSgmMarketMaps(...maps: SgmMarketMap[]): SgmMarketMap {
+  const merged: SgmMarketMap = {};
+  for (const map of maps) {
+    for (const [matchKey, bookmakers] of Object.entries(map)) {
+      merged[matchKey] = { ...(merged[matchKey] || {}), ...bookmakers };
+    }
+  }
+  return merged;
+}
+
 function normalizeBookmakerName(name: string) {
   const key = String(name || "").toLowerCase().replace(/[^a-z0-9]/g, "");
   if (!key || key.includes("multiple")) return "";
@@ -12293,6 +12404,240 @@ function buildSameGameMultiCards(
       const bOrder = fixtureOrder.get(b.key) ?? 999;
       return aOrder - bOrder;
     });
+}
+
+function getRound25ArchivedSameGameMultiCards(
+  data: DashboardData,
+  settledMatchKeys: Set<string>,
+  now: number,
+): SameGameMultiCardData[] {
+  const archivedLegs: Record<string, SameGameMultiLeg[]> = {
+    [buildTeamPairKey("Storm", "Panthers")]: [
+      {
+        kind: "result",
+        label: "Panthers",
+        team: "Panthers",
+        marketPct: getImpliedWinPctFromOdds(1.38),
+        modelPct: 64.5,
+        odds: 1.38,
+      },
+      {
+        kind: "try-scorer",
+        label: "Dylan Edwards",
+        suffix: "ANYTIME",
+        team: "Panthers",
+        marketPct: 35.09,
+        modelPct: 35.19,
+        odds: 2.85,
+      },
+      {
+        kind: "try-scorer",
+        label: "Moses Leo",
+        suffix: "ANYTIME",
+        team: "Storm",
+        marketPct: 35.09,
+        modelPct: 37.09,
+        odds: 2.85,
+      },
+    ],
+    [buildTeamPairKey("Dolphins", "Eels")]: [
+      {
+        kind: "result",
+        label: "Dolphins",
+        team: "Dolphins",
+        marketPct: getImpliedWinPctFromOdds(1.22),
+        modelPct: 78.1,
+        odds: 1.22,
+      },
+      {
+        kind: "try-scorer",
+        label: "Selwyn Cobbo",
+        suffix: "ANYTIME",
+        team: "Dolphins",
+        marketPct: 63.29,
+        modelPct: 65.21,
+        odds: 1.58,
+      },
+      {
+        kind: "try-scorer",
+        label: "Jamayne Isaako",
+        suffix: "ANYTIME",
+        team: "Dolphins",
+        marketPct: 59.88,
+        modelPct: 61,
+        odds: 1.67,
+      },
+    ],
+    [buildTeamPairKey("Knights", "Sea Eagles")]: [
+      {
+        kind: "result",
+        label: "Knights",
+        team: "Knights",
+        marketPct: getImpliedWinPctFromOdds(1.4),
+        modelPct: 60.6,
+        odds: 1.4,
+      },
+      {
+        kind: "try-scorer",
+        label: "Fletcher Sharpe",
+        suffix: "ANYTIME",
+        team: "Knights",
+        marketPct: 43.48,
+        modelPct: 42,
+        odds: 2.3,
+      },
+      {
+        kind: "try-scorer",
+        label: "Tolutau Koula",
+        suffix: "ANYTIME",
+        team: "Sea Eagles",
+        marketPct: 33.9,
+        modelPct: 37.15,
+        odds: 2.95,
+      },
+    ],
+    [buildTeamPairKey("Rabbitohs", "Warriors")]: [
+      {
+        kind: "result",
+        label: "Warriors",
+        team: "Warriors",
+        marketPct: getImpliedWinPctFromOdds(1.6),
+        modelPct: 54.9,
+        odds: 1.6,
+      },
+      {
+        kind: "try-scorer",
+        label: "Leka Halasima",
+        suffix: "ANYTIME",
+        team: "Warriors",
+        marketPct: 37.04,
+        modelPct: 38.12,
+        odds: 2.7,
+      },
+      {
+        kind: "try-scorer",
+        label: "Alofiana Khan-Pereira",
+        suffix: "ANYTIME",
+        team: "Warriors",
+        marketPct: 54.64,
+        modelPct: 54.93,
+        odds: 1.83,
+      },
+    ],
+    [buildTeamPairKey("Dragons", "Bulldogs")]: [
+      {
+        kind: "result",
+        label: "Bulldogs",
+        team: "Bulldogs",
+        marketPct: getImpliedWinPctFromOdds(1.48),
+        modelPct: 62.1,
+        odds: 1.48,
+      },
+      {
+        kind: "try-scorer",
+        label: "Bronson Xerri",
+        suffix: "ANYTIME",
+        team: "Bulldogs",
+        marketPct: 34.48,
+        modelPct: 35.6,
+        odds: 2.9,
+      },
+      {
+        kind: "try-scorer",
+        label: "Jacob Preston",
+        suffix: "ANYTIME",
+        team: "Bulldogs",
+        marketPct: 28.57,
+        modelPct: 29.25,
+        odds: 3.5,
+      },
+    ],
+    [buildTeamPairKey("Titans", "Sharks")]: [
+      {
+        kind: "result",
+        label: "Sharks -6.5",
+        team: "Sharks",
+        marketPct: getImpliedWinPctFromOdds(1.89),
+        modelPct: 58.3,
+        odds: 1.89,
+      },
+      {
+        kind: "try-scorer",
+        label: "William Kennedy",
+        suffix: "ANYTIME",
+        team: "Sharks",
+        marketPct: getImpliedWinPctFromOdds(2.6),
+        modelPct: 38.6,
+        odds: 2.6,
+      },
+      {
+        kind: "try-scorer",
+        label: "Arama Hau",
+        suffix: "ANYTIME",
+        team: "Titans",
+        marketPct: 23.81,
+        modelPct: 25.6,
+        odds: 4.2,
+      },
+    ],
+    [buildTeamPairKey("Roosters", "Tigers")]: [
+      {
+        kind: "result",
+        label: "Roosters",
+        team: "Roosters",
+        marketPct: getImpliedWinPctFromOdds(1.05),
+        modelPct: 84,
+        odds: 1.05,
+      },
+      {
+        kind: "try-scorer",
+        label: "Billy Smith",
+        suffix: "ANYTIME",
+        team: "Roosters",
+        marketPct: 62.5,
+        modelPct: 63.8,
+        odds: 1.6,
+      },
+      {
+        kind: "try-scorer",
+        label: "Robert Toia",
+        suffix: "ANYTIME",
+        team: "Roosters",
+        marketPct: getImpliedWinPctFromOdds(2.05),
+        modelPct: 45.37,
+        odds: 2.05,
+      },
+    ],
+  };
+
+  return data.predictions
+    .filter((match) => match.roundNumber === 25)
+    .map((match): SameGameMultiCardData | null => {
+      const legs = archivedLegs[getPredictionPairKey(match)];
+      if (!legs) return null;
+      return {
+        key: buildMatchLabelKey(match.match),
+        match: `${match.homeTeam} V ${match.awayTeam}`,
+        fixture: match.fixture,
+        status: getMultiMatchStatus(match, settledMatchKeys, now),
+        legs,
+      };
+    })
+    .filter((card): card is SameGameMultiCardData => Boolean(card));
+}
+
+function mergeSameGameMultiCards(
+  generatedCards: SameGameMultiCardData[],
+  archivedCards: SameGameMultiCardData[],
+) {
+  const cardsByPair = new Map<string, SameGameMultiCardData>();
+  for (const card of generatedCards) cardsByPair.set(buildTeamPairKey(...card.match.split(/\s+V\s+/i) as [string, string]), card);
+  for (const card of archivedCards) cardsByPair.set(buildTeamPairKey(...card.match.split(/\s+V\s+/i) as [string, string]), card);
+  return Array.from(cardsByPair.values()).sort((a, b) => {
+    const aTime = getFixtureUtcKickoffMs(a.fixture);
+    const bTime = getFixtureUtcKickoffMs(b.fixture);
+    return aTime - bTime;
+  });
 }
 
 function getEstimatedSgmPrice(legs: SameGameMultiLeg[]) {
@@ -12765,13 +13110,31 @@ function MultiPage({
 }) {
   const [marketMap, setMarketMap] = useState<SgmMarketMap>({});
   const now = useMinuteNow();
-  const cards = useMemo(
-    () => buildSameGameMultiCards(data, marketMap, now),
-    [data, marketMap, now],
-  );
+  const frozen = useFrozenRoundData(data, marketMap, now);
+  const effectiveMarketMap = useMemo(() => {
+    const archivedMap = frozen.round === 25 ? ROUND_25_ARCHIVED_SGM_MARKETS : {};
+    return mergeSgmMarketMaps(
+      archivedMap,
+      buildFrozenSgmMarketMap(frozen.snapshots),
+      marketMap,
+    );
+  }, [frozen.round, frozen.snapshots, marketMap]);
+  const cards = useMemo(() => {
+    const generatedCards = buildSameGameMultiCards(data, effectiveMarketMap, now);
+    if (frozen.round !== 25) return generatedCards;
+    const settledMatchKeys = new Set(
+      data.betLog
+        .filter((bet) => bet.result === "W" || bet.result === "L")
+        .map((bet) => `${bet.round}:${buildMatchLabelKey(bet.match)}`),
+    );
+    return mergeSameGameMultiCards(
+      generatedCards,
+      getRound25ArchivedSameGameMultiCards(data, settledMatchKeys, now),
+    );
+  }, [data, effectiveMarketMap, frozen.round, now]);
   const roundMulti = useMemo(
-    () => buildRoundMultiData(data, marketMap, now),
-    [data, marketMap, now],
+    () => buildRoundMultiData(data, effectiveMarketMap, now),
+    [data, effectiveMarketMap, now],
   );
 
   useEffect(() => {
