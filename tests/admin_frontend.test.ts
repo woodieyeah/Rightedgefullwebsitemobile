@@ -75,3 +75,19 @@ test("reset access uses the same bounded fail-closed logout behavior", () => {
   assert.match(appSource, /if \(!response\.ok\)/);
   assert.doesNotMatch(appSource, /title="Debug: Reset Email Access"/);
 });
+
+test("administrator login route is reachable without existing member access", () => {
+  const checkHashSource = appSource.slice(
+    appSource.indexOf("const checkHash = () =>"),
+    appSource.indexOf("const confirmStripeSuccess"),
+  );
+  const adminRoute = checkHashSource.indexOf('if (hash === "admin")');
+  const memberAccessGate = checkHashSource.indexOf("if (appHashes.includes(hash))");
+
+  assert.ok(adminRoute >= 0, "admin must have an explicit public login route");
+  assert.ok(adminRoute < memberAccessGate, "admin login must be handled before the member access gate");
+  assert.match(
+    checkHashSource.slice(adminRoute, memberAccessGate),
+    /setSitePage\("admin"\)/,
+  );
+});

@@ -14575,6 +14575,14 @@ export default function App() {
       return;
     }
 
+    if (hash === "admin") {
+      trackHashPageView(hash);
+      setShowEmailGate(false);
+      setShowPaymentGate(false);
+      setSitePage("admin");
+      return;
+    }
+
     if (premiumHashes.includes(hash)) {
       trackHashPageView(hash);
       setSitePage("app");
