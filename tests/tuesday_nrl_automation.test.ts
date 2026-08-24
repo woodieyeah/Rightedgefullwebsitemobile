@@ -1836,3 +1836,38 @@ test('strict scorer sync throws on an empty price feed, manual sync does not', (
   const manual = loadOddsSync({ scorerRows: [] });
   assert.doesNotThrow(() => (manual.context.syncRightEdgeTryScorerOdds as () => void)());
 });
+
+test('each fresh Tuesday run starts with a full retry budget', () => {
+  const automationSource = readFileSync(AUTOMATION_FILE, 'utf8');
+
+  // A run that ends in Needs Check leaves the retry counter set. If the next
+  // scheduled Tuesday inherited that counter it would begin with zero retries,
+  // so the entry point must clear it before starting.
+  assert.match(
+    automationSource,
+    /function runRightEdgeTuesdayAutomation\(\)[\s\S]{0,600}?resetRightEdgeTuesdayRetries_\([\s\S]{0,200}?runRightEdgeTuesdayWorkflow_/,
+  );
+
+  // The retry entry point must NOT reset it, or retries would loop forever.
+  const retryFn = automationSource.slice(
+    automationSource.indexOf('function retryRightEdgeTuesdayAutomation'),
+  ).split('\n}')[0];
+  assert.doesNotMatch(retryFn, /deleteProperty\(RIGHTEDGE_TUESDAY_RETRY_COUNT_KEY\)/);
+});
+
+test('a stale retry counter cannot silently disable next week\'s retries', () => {
+  const automation = loadAutomation() as {
+    resetRightEdgeTuesdayRetries_: (properties: Record<string, unknown>) => void;
+  };
+  const store: Record<string, string> = { RIGHTEDGE_TUESDAY_RETRY_COUNT: '12' };
+  const properties = {
+    getProperty: (k: string) => store[k] ?? null,
+    setProperty: (k: string, v: string) => { store[k] = v; },
+    deleteProperty: (k: string) => { delete store[k]; },
+  };
+
+  automation.resetRightEdgeTuesdayRetries_(properties);
+
+  assert.equal(store.RIGHTEDGE_TUESDAY_RETRY_COUNT, undefined, 'exhausted counter must be cleared');
+});
+

@@ -1386,10 +1386,18 @@ function scheduleRightEdgeTuesdayRetry_() {
   ScriptApp.newTrigger('retryRightEdgeTuesdayAutomation').timeBased().after(10 * 60 * 1000).create();
 }
 
+function resetRightEdgeTuesdayRetries_(properties) {
+  properties.deleteProperty(RIGHTEDGE_TUESDAY_RETRY_COUNT_KEY);
+}
+
 function runRightEdgeTuesdayAutomation() {
   const lock = LockService.getDocumentLock();
   if (!lock.tryLock(30000)) throw rightEdgeTuesdayValidationError_('another Tuesday automation run is active');
   try {
+    // A previous run that ended in Needs Check leaves the retry counter set.
+    // Every fresh run must start from a full retry budget, otherwise a stalled
+    // week silently disables retries for the following week.
+    resetRightEdgeTuesdayRetries_(PropertiesService.getDocumentProperties());
     const result = runRightEdgeTuesdayWorkflow_(createRightEdgeTuesdayRuntime_());
     setRightEdgePreviewStatus_(result.status, result.planId);
     removeRightEdgeTuesdayTriggers_('retryRightEdgeTuesdayAutomation');
