@@ -9,6 +9,13 @@ import { failClosedAuthState, isVerifiedAdminSession } from "./auth-session";
 import { trackLinkedInConversion } from "../lib/linkedin";
 import { capturePostHogEvent, identifyPostHogUser } from "../lib/posthog";
 import {
+  ROUND_25_CORE_PLAYS,
+  ROUND_25_SAME_GAME_MULTIS,
+  ROUND_25_VERIFIED_RESULTS,
+  settleRound25CorePlay,
+  settleRound25SameGameMulti,
+} from "./round25-results";
+import {
   Activity,
   ArrowRight,
   ArrowUpRight,
@@ -399,6 +406,24 @@ type RoundProofTryScorer = {
   note: string;
 };
 
+type RoundProofSameGameMultiLeg = {
+  kind: "result" | "try-scorer";
+  label: string;
+  suffix?: string;
+  team: string;
+  marketPct: number;
+  modelPct: number;
+  odds: number;
+  result: ProofResult;
+};
+
+type RoundProofSameGameMulti = {
+  match: string;
+  bookmaker: string;
+  result: ProofResult;
+  legs: RoundProofSameGameMultiLeg[];
+};
+
 type RoundArchiveFixture = {
   match: string;
   day: string;
@@ -416,6 +441,38 @@ type RoundArchive = {
   fixtures: RoundArchiveFixture[];
   matchPlays: RoundProofMatchPlay[];
   tryScorers: RoundProofTryScorer[];
+  sameGameMultis?: RoundProofSameGameMulti[];
+};
+
+// Round 25 outcomes come from the independently cross-checked provider records
+// in round25-results.ts. Selections come from RightEdge's frozen production
+// snapshots and preserved Multi-page cards, never from post-match recomputation.
+const ROUND_25_PROOF: RoundArchive = {
+  round: 25,
+  label: "Round 25 Results",
+  status: "Results",
+  fixtures: ROUND_25_VERIFIED_RESULTS.map((match) => ({
+    match: match.match,
+    day: match.day,
+    dateISO: match.dateISO,
+    dateLabel: match.dateLabel,
+    aedt: match.aedt,
+    stadium: match.stadium,
+    finalScore: `${match.finalHome}-${match.finalAway}`,
+  })),
+  matchPlays: ROUND_25_CORE_PLAYS.map((play) => {
+    const verified = ROUND_25_VERIFIED_RESULTS.find((match) => match.match === play.match)!;
+    return {
+      ...play,
+      finalScore: `${verified.finalHome}-${verified.finalAway}`,
+      result: settleRound25CorePlay(play),
+      note: "Settled from the verified final score.",
+    };
+  }),
+  tryScorers: [],
+  sameGameMultis: ROUND_25_SAME_GAME_MULTIS.map((multi) =>
+    settleRound25SameGameMulti(multi),
+  ),
 };
 
 const ROUND_14_PROOF: RoundArchive = {
@@ -1188,12 +1245,14 @@ const ROUND_22_PROOF: RoundArchive = {
 // Hardcoded proof archives (kept working as-is). New rounds are derived from KV
 // at runtime and merged in via registerKvDerivedArchives() below.
 const HARDCODED_PROOF_ARCHIVES: RoundArchive[] = [
+  ROUND_25_PROOF,
   ROUND_23_PROOF,
   ROUND_22_PROOF,
   ROUND_15_LIVE_PROOF,
   ROUND_14_PROOF,
 ];
 const HARDCODED_ROUND_ARCHIVES: RoundArchive[] = [
+  ROUND_25_PROOF,
   ROUND_23_PROOF,
   ROUND_22_PROOF,
   ROUND_14_PROOF,
@@ -2287,20 +2346,32 @@ function getTryScorerSignalsForPrediction(data: DashboardData, row: PredictionRo
     .slice(0, limit);
 }
 
-function getRoundProofArchiveForPrediction(row: PredictionRow, archive: RoundArchive | null = null) {
+function getExactRoundProofArchiveForPrediction(
+  row: PredictionRow,
+  archive: RoundArchive | null = null,
+) {
   if (archive) return archive;
   const pairKey = getPredictionPairKey(row);
-
-  const sameRoundMatch =
+  return (
     ROUND_PROOF_ARCHIVES.find((candidate) =>
       candidate.round === row.roundNumber &&
       (
         candidate.fixtures.some((fixture) => getMatchPairKeyFromLabel(fixture.match) === pairKey) ||
         candidate.matchPlays.some((play) => getMatchPairKeyFromLabel(play.match) === pairKey) ||
-        candidate.tryScorers.some((scorer) => getMatchPairKeyFromLabel(scorer.match) === pairKey)
+        candidate.tryScorers.some((scorer) => getMatchPairKeyFromLabel(scorer.match) === pairKey) ||
+        candidate.sameGameMultis?.some((multi) => getMatchPairKeyFromLabel(multi.match) === pairKey)
       )
-    ) || null;
+    ) || null
+  );
+}
+
+function getRoundProofArchiveForPrediction(row: PredictionRow, archive: RoundArchive | null = null) {
+  const sameRoundMatch = getExactRoundProofArchiveForPrediction(row, archive);
   if (sameRoundMatch) return sameRoundMatch;
+
+  // Normal rows always carry a round number. If that exact round has no proof,
+  // fail closed rather than borrowing a score or play from an earlier meeting.
+  if (Number.isFinite(row.roundNumber) && row.roundNumber > 0) return null;
 
   // Cross-round, pair-only fallback is ONLY safe for matches that have already
   // been played. For an upcoming fixture it would wrongly inherit proof from a
@@ -8321,6 +8392,26 @@ function PredictionsPage({
   const frozen = useFrozenRoundData(data, marketMap, now, {
     enableFreeze: isAdmin && !selectedArchive,
   });
+  const sameGameMultiCards = useMemo(() => {
+    if (selectedArchive) return [];
+    const archivedMap = frozen.round === 25 ? ROUND_25_ARCHIVED_SGM_MARKETS : {};
+    const effectiveMarketMap = mergeSgmMarketMaps(
+      archivedMap,
+      buildFrozenSgmMarketMap(frozen.snapshots),
+      marketMap,
+    );
+    const generatedCards = buildSameGameMultiCards(data, effectiveMarketMap, now);
+    if (frozen.round !== 25) return generatedCards;
+    const settledMatchKeys = new Set(
+      data.betLog
+        .filter((bet) => bet.result === "W" || bet.result === "L")
+        .map((bet) => `${bet.round}:${buildMatchLabelKey(bet.match)}`),
+    );
+    return mergeSameGameMultiCards(
+      generatedCards,
+      getRound25ArchivedSameGameMultiCards(data, settledMatchKeys, now),
+    );
+  }, [data, frozen.round, frozen.snapshots, marketMap, now, selectedArchive]);
 
   useEffect(() => {
     if (selectedArchive) {
@@ -8389,6 +8480,14 @@ function PredictionsPage({
           const homeColors = getTeamColors(row.homeTeam);
           const awayColors = getTeamColors(row.awayTeam);
           const matchPairKey = getPredictionPairKey(row);
+          const resolvedProofArchive = getExactRoundProofArchiveForPrediction(row, selectedArchive);
+          const proofSameGameMulti = resolvedProofArchive?.sameGameMultis?.find(
+            (multi) => getMatchPairKeyFromLabel(multi.match) === matchPairKey,
+          ) || null;
+          const liveSameGameMulti = sameGameMultiCards.find(
+            (multi) => getMatchPairKeyFromLabel(multi.match) === matchPairKey,
+          ) || null;
+          const matchSameGameMultiCard = proofSameGameMulti || liveSameGameMulti;
           const frozenSnapshot = selectedArchive ? undefined : frozen.snapshotByKey.get(matchPairKey);
           const savedResult = selectedArchive ? null : frozen.resultByKey.get(matchPairKey) || null;
           const rowKickedOff = !selectedArchive && hasPredictionKickedOff(row, now);
@@ -8456,7 +8555,10 @@ function PredictionsPage({
           const matchesCardProofTryScorerHits = hideLegacySharksDragonsProof
             ? []
             : proofTryScorerHits;
-          const proofFinalScore = proofMatchPlays.find((play) => play.finalScore)?.finalScore || "";
+          const proofFixtureFinalScore = resolvedProofArchive?.fixtures.find(
+            (fixture) => getMatchPairKeyFromLabel(fixture.match) === matchPairKey,
+          )?.finalScore || "";
+          const proofFinalScore = proofMatchPlays.find((play) => play.finalScore)?.finalScore || proofFixtureFinalScore || "";
           const proofFinalScorePair = proofFinalScore ? parseScorePair(proofFinalScore) : null;
           // An admin-entered result (final score or HIT/MISS/PUSH) settles the card
           // immediately, even before the fixture's scheduled completion — so dummy
@@ -8569,6 +8671,11 @@ function PredictionsPage({
                       savedResult={hideLegacySharksDragonsProof ? null : savedResult}
                       frozenTryScorers={frozenScorerList}
                       publicRevealPlays={isPremium || rowKickedOff ? premiumPlayReveals : []}
+                    />
+                  )}
+                  {matchSameGameMultiCard && (isPremium || rowKickedOff || matchCompleted) && (
+                    <MatchSameGameMultiCard
+                      sameGameMultiCard={matchSameGameMultiCard}
                     />
                   )}
                 </div>
@@ -8684,6 +8791,11 @@ function PredictionsPage({
                       publicRevealPlays={isPremium || rowKickedOff ? premiumPlayReveals : []}
                     />
                     )}
+                    {matchSameGameMultiCard && (isPremium || rowKickedOff) && (
+                      <MatchSameGameMultiCard
+                        sameGameMultiCard={matchSameGameMultiCard}
+                      />
+                    )}
                     {!matchCompleted && !isPremium && (
                       <UpcomingPremiumUnlockCta onRequestAccess={onRequestAccess} />
                     )}
@@ -8764,6 +8876,72 @@ function getProofMarketLabel(market: RoundProofMatchPlay["market"] | PremiumMark
   if (market === "Head 2 Head") return "H2H";
   if (market === "Line") return "Line";
   return "Total";
+}
+
+function MatchSameGameMultiCard({
+  sameGameMultiCard,
+}: {
+  sameGameMultiCard: SameGameMultiCardData | RoundProofSameGameMulti;
+}) {
+  const isSettled = "result" in sameGameMultiCard;
+  const overallResult = isSettled ? sameGameMultiCard.result : null;
+  const statusLabel = isSettled
+    ? "Settled"
+    : sameGameMultiCard.status === "upcoming"
+      ? "Premium early access"
+      : "Revealed after kickoff";
+
+  return (
+    <div className="mt-3 border border-[#00E676]/30 border-l-4 border-l-[#00E676] bg-[#111116] px-3 py-3">
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <span className="inline-flex bg-[#00E676]/10 px-2 py-1 text-[8px] font-black uppercase tracking-widest text-[#00E676]">
+            SGM Multi
+          </span>
+          <span className="text-[8px] font-black uppercase tracking-widest text-[#6B7280]">
+            {sameGameMultiCard.bookmaker || "Betr"}
+          </span>
+        </div>
+        {overallResult ? (
+          <span className={`inline-flex border px-2 py-1 text-[8px] font-black uppercase tracking-widest ${getProofResultClass(overallResult)}`}>
+            {overallResult}
+          </span>
+        ) : (
+          <span className="text-[8px] font-black uppercase tracking-widest text-[#6B7280]">
+            {statusLabel}
+          </span>
+        )}
+      </div>
+      <div className="flex flex-col gap-1.5">
+        {sameGameMultiCard.legs.map((leg, index) => {
+          const legResult = "result" in leg ? leg.result : null;
+          return (
+            <div
+              key={`${sameGameMultiCard.match}-${leg.kind}-${leg.label}`}
+              className="grid grid-cols-[18px_22px_minmax(0,1fr)_auto] items-center gap-2 border border-[#1E1E2E] bg-[#16161D] px-2 py-2"
+            >
+              <span className="text-[9px] font-medium tabular-nums text-[#6B7280]">
+                {String(index + 1).padStart(2, "0")}
+              </span>
+              <TeamLogo teamName={leg.team} className="h-[22px] w-[22px] rounded-[4px] text-[8px]" />
+              <span className="min-w-0 truncate text-[11px] font-black uppercase tracking-wide text-white">
+                {leg.label}{leg.suffix ? ` · ${leg.suffix}` : ""}
+              </span>
+              {legResult ? (
+                <span className={`inline-flex border px-1.5 py-0.5 text-[7px] font-black uppercase tracking-widest ${getProofResultClass(legResult)}`}>
+                  {legResult}
+                </span>
+              ) : (
+                <span className="text-[9px] font-black tabular-nums text-white/45">
+                  ${leg.odds.toFixed(2)}
+                </span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 function PublicPremiumPlayRevealCard({
@@ -13000,7 +13178,7 @@ function SameGameMultiCard({
 
       <div className="px-4 md:px-6">
         {card.legs.map((leg, index) => {
-          const locked = !isPremium && index > 0;
+          const locked = !isPremium && card.status === "upcoming" && index > 0;
           const modelValue = leg.valueKind === "points"
             ? leg.modelPct.toFixed(1)
             : formatPercent(leg.modelPct, 1);
