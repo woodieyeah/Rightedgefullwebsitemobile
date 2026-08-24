@@ -4151,12 +4151,12 @@ function PaymentGateModal({
   const [errorMsg, setErrorMsg] = useState("");
 
   const storedEmail = getUserEmail();
-  const checkoutEmail = (storedEmail || email).trim().toLowerCase();
-  const trimmedEmail = email.trim().toLowerCase();
+  const checkoutEmail = email.trim().toLowerCase();
   const hasStoredEmail = Boolean(storedEmail);
 
   useEffect(() => {
     if (!open) return;
+    setEmail(storedEmail || "");
     const currentPremiumHash = window.location.hash.replace("#", "");
     const section = ["matches", "best-bets", "multi", "try-scorers"].includes(currentPremiumHash)
       ? currentPremiumHash
@@ -4321,7 +4321,7 @@ function PaymentGateModal({
 
         <p className="text-sm text-[#9CA3AF] font-normal leading-relaxed mb-6">
           {hasStoredEmail
-            ? "Unlock the premium read for this round. We’ll use your saved email and send you straight to secure Stripe checkout."
+            ? "Confirm or change your saved email. Existing subscribers unlock instantly; otherwise we’ll continue to secure Stripe checkout."
             : "Already Premium? Enter your subscriber email and we’ll unlock access instantly. New here? Use the same email to continue to secure Stripe checkout."}
         </p>
 
@@ -4335,41 +4335,6 @@ function PaymentGateModal({
               Secure checkout is opening now.
             </p>
           </div>
-        ) : hasStoredEmail ? (
-          <form
-            onSubmit={handleEmailSubmit}
-            className="flex flex-col gap-4"
-          >
-            <div className="bg-[#0A0A0F] border border-[#1E1E2E] px-4 py-3">
-              <div className="text-[10px] text-[#9CA3AF] font-medium uppercase tracking-widest mb-1">
-                Checkout email
-              </div>
-              <div className="text-white text-sm font-semibold truncate">
-                {storedEmail}
-              </div>
-            </div>
-
-            {errorMsg && (
-              <p className="text-[#F87171] text-xs font-medium uppercase tracking-wider">
-                {errorMsg}
-              </p>
-            )}
-
-            <button
-              type="submit"
-              disabled={submitting}
-              className="w-full re-primary-cta border py-4 text-base font-medium uppercase tracking-wider hover:opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-            >
-              {submitting ? (
-                <RefreshCw className="w-5 h-5 animate-spin" />
-              ) : (
-                <>
-                  Unlock Premium — $14/week
-                  <ArrowRight className="w-5 h-5 stroke-[3px]" />
-                </>
-              )}
-            </button>
-          </form>
         ) : (
           <form
             onSubmit={handleEmailSubmit}

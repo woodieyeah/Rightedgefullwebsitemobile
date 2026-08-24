@@ -91,3 +91,26 @@ test("administrator login route is reachable without existing member access", ()
     /setSitePage\("admin"\)/,
   );
 });
+
+test("premium login keeps a saved customer email editable", () => {
+  const paymentGateSource = appSource.slice(
+    appSource.indexOf("function PaymentGateModal"),
+    appSource.indexOf("function RetentionOfferModal"),
+  );
+
+  assert.match(paymentGateSource, /setEmail\(storedEmail \|\| ""\)/);
+  assert.match(paymentGateSource, /const checkoutEmail = email\.trim\(\)\.toLowerCase\(\)/);
+  assert.match(paymentGateSource, /<input[\s\S]*?type="email"[\s\S]*?value=\{email\}[\s\S]*?onChange=/);
+  assert.equal(
+    (paymentGateSource.match(/body: JSON\.stringify\(\{ email: checkoutEmail \}\)/g) || []).length,
+    1,
+  );
+  assert.match(
+    paymentGateSource,
+    /create-checkout-session[\s\S]*?body: JSON\.stringify\(\{[\s\S]*?email: checkoutEmail/,
+  );
+  assert.doesNotMatch(
+    paymentGateSource,
+    /hasStoredEmail \? \([\s\S]*?\{storedEmail\}[\s\S]*?\) : \(/,
+  );
+});
