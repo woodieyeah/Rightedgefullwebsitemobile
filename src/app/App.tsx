@@ -420,6 +420,7 @@ type RoundProofSameGameMultiLeg = {
 type RoundProofSameGameMulti = {
   match: string;
   bookmaker: string;
+  price: number;
   result: ProofResult;
   legs: RoundProofSameGameMultiLeg[];
 };
@@ -8890,6 +8891,10 @@ function MatchSameGameMultiCard({
     : sameGameMultiCard.status === "upcoming"
       ? "Premium early access"
       : "Revealed after kickoff";
+  const archivedPrice = "price" in sameGameMultiCard && Number.isFinite(sameGameMultiCard.price)
+    ? sameGameMultiCard.price
+    : null;
+  const sgmPrice = archivedPrice ?? getEstimatedSgmPrice(sameGameMultiCard.legs);
 
   return (
     <div className="mt-3 border border-[#00E676]/30 border-l-4 border-l-[#00E676] bg-[#111116] px-3 py-3">
@@ -8899,7 +8904,7 @@ function MatchSameGameMultiCard({
             SGM Multi
           </span>
           <span className="text-[8px] font-black uppercase tracking-widest text-[#6B7280]">
-            {sameGameMultiCard.bookmaker || "Betr"}
+            {sgmPrice !== null ? `$${sgmPrice.toFixed(2)}` : `${sameGameMultiCard.legs.length} legs`}
           </span>
         </div>
         {overallResult ? (
@@ -9157,13 +9162,15 @@ function MatchPremiumSignalStrip({
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <div className="mb-1 flex items-center gap-2">
-                  <Flame className="h-3.5 w-3.5 shrink-0 text-[#9CA3AF]" />
-                  <span className="text-[8px] font-black uppercase tracking-widest text-[#6B7280]">
-                    {getProofMarketLabel(proof.market)}
+                  <span className="inline-flex bg-[#00E676]/10 px-2 py-1 text-[8px] font-black uppercase tracking-widest text-[#00E676]">
+                    Core Play
                   </span>
                 </div>
                 <div className="truncate text-xs md:text-sm font-black uppercase tracking-wide text-white">
                   {proof.selection}
+                </div>
+                <div className="mt-1 text-[9px] font-bold uppercase tracking-widest text-[#6B7280]">
+                  {getProofMarketLabel(proof.market)} · {proof.bookmaker}
                 </div>
                 {(proof.finalScore || proof.modelScore) && (
                   <div className="mt-1 text-[9px] font-bold uppercase tracking-widest text-[#6B7280]">

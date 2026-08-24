@@ -41,6 +41,7 @@ export type Round25SameGameMultiLeg = {
 export type Round25SameGameMulti = {
   match: string;
   bookmaker: string;
+  price: number;
   legs: Round25SameGameMultiLeg[];
 };
 
@@ -249,6 +250,7 @@ export const ROUND_25_SAME_GAME_MULTIS: Round25SameGameMulti[] = [
   {
     match: "Storm v Panthers",
     bookmaker: "Betr",
+    price: 9.3,
     legs: [
       { kind: "result", label: "Panthers", team: "Panthers", market: "Head 2 Head", marketPct: 72.46, modelPct: 64.5, odds: 1.38 },
       { kind: "try-scorer", label: "Dylan Edwards", suffix: "ANYTIME", team: "Panthers", market: "Anytime Try Scorer", marketPct: 35.09, modelPct: 35.19, odds: 2.85 },
@@ -258,6 +260,7 @@ export const ROUND_25_SAME_GAME_MULTIS: Round25SameGameMulti[] = [
   {
     match: "Dolphins v Eels",
     bookmaker: "Betr",
+    price: 2.65,
     legs: [
       { kind: "result", label: "Dolphins", team: "Dolphins", market: "Head 2 Head", marketPct: 81.97, modelPct: 78.1, odds: 1.22 },
       { kind: "try-scorer", label: "Selwyn Cobbo", suffix: "ANYTIME", team: "Dolphins", market: "Anytime Try Scorer", marketPct: 63.29, modelPct: 65.21, odds: 1.58 },
@@ -267,6 +270,7 @@ export const ROUND_25_SAME_GAME_MULTIS: Round25SameGameMulti[] = [
   {
     match: "Knights v Sea Eagles",
     bookmaker: "Betr",
+    price: 7.85,
     legs: [
       { kind: "result", label: "Knights", team: "Knights", market: "Head 2 Head", marketPct: 71.43, modelPct: 60.6, odds: 1.4 },
       { kind: "try-scorer", label: "Fletcher Sharpe", suffix: "ANYTIME", team: "Knights", market: "Anytime Try Scorer", marketPct: 43.48, modelPct: 42, odds: 2.3 },
@@ -276,6 +280,7 @@ export const ROUND_25_SAME_GAME_MULTIS: Round25SameGameMulti[] = [
   {
     match: "Rabbitohs v Warriors",
     bookmaker: "Betr",
+    price: 6.55,
     legs: [
       { kind: "result", label: "Warriors", team: "Warriors", market: "Head 2 Head", marketPct: 62.5, modelPct: 54.9, odds: 1.6 },
       { kind: "try-scorer", label: "Leka Halasima", suffix: "ANYTIME", team: "Warriors", market: "Anytime Try Scorer", marketPct: 37.04, modelPct: 38.12, odds: 2.7 },
@@ -285,6 +290,7 @@ export const ROUND_25_SAME_GAME_MULTIS: Round25SameGameMulti[] = [
   {
     match: "Dragons v Bulldogs",
     bookmaker: "Betr",
+    price: 12.45,
     legs: [
       { kind: "result", label: "Bulldogs", team: "Bulldogs", market: "Head 2 Head", marketPct: 67.57, modelPct: 62.1, odds: 1.48 },
       { kind: "try-scorer", label: "Bronson Xerri", suffix: "ANYTIME", team: "Bulldogs", market: "Anytime Try Scorer", marketPct: 34.48, modelPct: 35.6, odds: 2.9 },
@@ -294,6 +300,7 @@ export const ROUND_25_SAME_GAME_MULTIS: Round25SameGameMulti[] = [
   {
     match: "Titans v Sharks",
     bookmaker: "Betr",
+    price: 17.1,
     legs: [
       { kind: "result", label: "Sharks -6.5", team: "Sharks", market: "Line", marketPct: 52.91, modelPct: 58.3, odds: 1.89 },
       { kind: "try-scorer", label: "William Kennedy", suffix: "ANYTIME", team: "Sharks", market: "Anytime Try Scorer", marketPct: 38.46, modelPct: 38.6, odds: 2.6 },
@@ -303,6 +310,7 @@ export const ROUND_25_SAME_GAME_MULTIS: Round25SameGameMulti[] = [
   {
     match: "Roosters v Tigers",
     bookmaker: "Betr",
+    price: 2.85,
     legs: [
       { kind: "result", label: "Roosters", team: "Roosters", market: "Head 2 Head", marketPct: 95.24, modelPct: 84, odds: 1.05 },
       { kind: "try-scorer", label: "Billy Smith", suffix: "ANYTIME", team: "Roosters", market: "Anytime Try Scorer", marketPct: 62.5, modelPct: 63.8, odds: 1.6 },

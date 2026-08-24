@@ -76,6 +76,18 @@ test("try-scorer records distinguish hits, verified misses, and missing data", (
 test("Round 25 SGMs settle every leg from verified scores and scorer stats", () => {
   assert.equal(ROUND_25_SAME_GAME_MULTIS.length, 7);
   assert.deepEqual(
+    ROUND_25_SAME_GAME_MULTIS.map((multi) => [multi.match, multi.price]),
+    [
+      ["Storm v Panthers", 9.3],
+      ["Dolphins v Eels", 2.65],
+      ["Knights v Sea Eagles", 7.85],
+      ["Rabbitohs v Warriors", 6.55],
+      ["Dragons v Bulldogs", 12.45],
+      ["Titans v Sharks", 17.1],
+      ["Roosters v Tigers", 2.85],
+    ],
+  );
+  assert.deepEqual(
     ROUND_25_SAME_GAME_MULTIS.map((multi) => [
       multi.match,
       settleRound25SameGameMulti(multi).result,
@@ -156,6 +168,10 @@ test("Round 25 is registered in results and match cards reveal SGMs at kickoff",
     appSource,
     /const locked = !isPremium && card\.status === "upcoming" && index > 0/,
   );
+  assert.match(appSource, />\s*Core Play\s*</);
+  assert.match(appSource, /\{getProofMarketLabel\(proof\.market\)\} · \{proof\.bookmaker\}/);
+  assert.match(appSource, /\$\{sgmPrice\.toFixed\(2\)\}/);
+  assert.doesNotMatch(appSource, /sameGameMultiCard\.bookmaker \|\| "Betr"/);
 });
 
 test("completed live cards use verified archive scores and settled SGM outcomes", () => {
