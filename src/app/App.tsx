@@ -8903,9 +8903,15 @@ function MatchSameGameMultiCard({
           <span className="inline-flex bg-[#00E676]/10 px-2 py-1 text-[8px] font-black uppercase tracking-widest text-[#00E676]">
             SGM Multi
           </span>
-          <span className="text-[8px] font-black uppercase tracking-widest text-[#6B7280]">
-            {sgmPrice !== null ? `$${sgmPrice.toFixed(2)}` : `${sameGameMultiCard.legs.length} legs`}
-          </span>
+          {sgmPrice !== null ? (
+            <span className="text-sm font-black tabular-nums text-white">
+              ${sgmPrice.toFixed(2)}
+            </span>
+          ) : (
+            <span className="text-[8px] font-black uppercase tracking-widest text-[#6B7280]">
+              {sameGameMultiCard.legs.length} legs
+            </span>
+          )}
         </div>
         {overallResult ? (
           <span className={`inline-flex border px-2 py-1 text-[8px] font-black uppercase tracking-widest ${getProofResultClass(overallResult)}`}>

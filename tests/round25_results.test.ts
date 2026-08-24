@@ -171,6 +171,10 @@ test("Round 25 is registered in results and match cards reveal SGMs at kickoff",
   assert.match(appSource, />\s*Core Play\s*</);
   assert.match(appSource, /\{getProofMarketLabel\(proof\.market\)\} · \{proof\.bookmaker\}/);
   assert.match(appSource, /\$\{sgmPrice\.toFixed\(2\)\}/);
+  assert.match(
+    appSource,
+    /text-sm font-black tabular-nums[\s\S]*?\$\{sgmPrice\.toFixed\(2\)\}/,
+  );
   assert.doesNotMatch(appSource, /sameGameMultiCard\.bookmaker \|\| "Betr"/);
 });
 
