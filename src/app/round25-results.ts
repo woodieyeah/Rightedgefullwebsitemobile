@@ -342,6 +342,7 @@ function settleMarketSelection(
   }
 
   const lineMatch = selection.match(/^(.*?)\s+([+-]\d+(?:\.\d+)?)$/);
+  if (market === "Line" && !lineMatch) return "Needs Check";
   const selectedTeam = lineMatch
     ? lineMatch[1]
     : selection.replace(/\s+head[- ]to[- ]head$/i, "").trim();
@@ -361,20 +362,33 @@ export function settleRound25CorePlay(play: Round25CorePlay): VerifiedProofResul
   return settleMarketSelection(play.selection, play.market, getVerifiedMatch(play.match));
 }
 
+export function settleVerifiedTryScorer(
+  tryScorers: Record<string, number>,
+  player: string,
+): VerifiedProofResult {
+  if (!Object.prototype.hasOwnProperty.call(tryScorers, player)) return "Needs Check";
+  return tryScorers[player] > 0 ? "Hit" : "Miss";
+}
+
+export function settleVerifiedMultiResult(
+  results: VerifiedProofResult[],
+): VerifiedProofResult {
+  if (results.length === 0) return "Needs Check";
+  if (results.some((result) => result === "Miss")) return "Miss";
+  if (results.some((result) => result === "Needs Check")) return "Needs Check";
+  return "Hit";
+}
+
 export function settleRound25SameGameMulti(
   multi: Round25SameGameMulti,
 ): SettledRound25SameGameMulti {
   const match = getVerifiedMatch(multi.match);
   const legs = multi.legs.map((leg) => {
     const result = leg.kind === "try-scorer"
-      ? (match.tryScorers[leg.label] || 0) > 0 ? "Hit" as const : "Miss" as const
+      ? settleVerifiedTryScorer(match.tryScorers, leg.label)
       : settleMarketSelection(leg.label, leg.market, match);
     return { ...leg, result };
   });
-  const result: VerifiedProofResult = legs.some((leg) => leg.result === "Miss")
-    ? "Miss"
-    : legs.some((leg) => leg.result === "Needs Check")
-      ? "Needs Check"
-      : "Hit";
+  const result = settleVerifiedMultiResult(legs.map((leg) => leg.result));
   return { ...multi, legs, result };
 }

@@ -7,6 +7,8 @@ import {
   ROUND_25_VERIFIED_RESULTS,
   settleRound25CorePlay,
   settleRound25SameGameMulti,
+  settleVerifiedMultiResult,
+  settleVerifiedTryScorer,
 } from "../src/app/round25-results.ts";
 
 const appSource = readFileSync(new URL("../src/app/App.tsx", import.meta.url), "utf8");
@@ -54,6 +56,23 @@ test("Round 25 core plays are settled from frozen selections and verified scores
   );
 });
 
+test("malformed line selections fail closed as Needs Check", () => {
+  const dolphinsLine = ROUND_25_CORE_PLAYS.find(
+    (play) => play.match === "Dolphins v Eels",
+  )!;
+
+  assert.equal(
+    settleRound25CorePlay({ ...dolphinsLine, selection: "Dolphins" }),
+    "Needs Check",
+  );
+});
+
+test("try-scorer records distinguish hits, verified misses, and missing data", () => {
+  assert.equal(settleVerifiedTryScorer({ Player: 1 }, "Player"), "Hit");
+  assert.equal(settleVerifiedTryScorer({ Player: 0 }, "Player"), "Miss");
+  assert.equal(settleVerifiedTryScorer({}, "Player"), "Needs Check");
+});
+
 test("Round 25 SGMs settle every leg from verified scores and scorer stats", () => {
   assert.equal(ROUND_25_SAME_GAME_MULTIS.length, 7);
   assert.deepEqual(
@@ -89,6 +108,40 @@ test("Round 25 SGMs settle every leg from verified scores and scorer stats", () 
     ["Dylan Edwards", "Miss"],
     ["Moses Leo", "Miss"],
   ]);
+
+  assert.deepEqual(
+    ROUND_25_SAME_GAME_MULTIS.map((multi) => [
+      multi.match,
+      settleRound25SameGameMulti(multi).legs.map((leg) => [leg.label, leg.result]),
+    ]),
+    [
+      ["Storm v Panthers", [["Panthers", "Hit"], ["Dylan Edwards", "Miss"], ["Moses Leo", "Miss"]]],
+      ["Dolphins v Eels", [["Dolphins", "Hit"], ["Selwyn Cobbo", "Hit"], ["Jamayne Isaako", "Hit"]]],
+      ["Knights v Sea Eagles", [["Knights", "Miss"], ["Fletcher Sharpe", "Miss"], ["Tolutau Koula", "Miss"]]],
+      ["Rabbitohs v Warriors", [["Warriors", "Hit"], ["Leka Halasima", "Hit"], ["Alofiana Khan-Pereira", "Hit"]]],
+      ["Dragons v Bulldogs", [["Bulldogs", "Hit"], ["Bronson Xerri", "Hit"], ["Jacob Preston", "Hit"]]],
+      ["Titans v Sharks", [["Sharks -6.5", "Hit"], ["William Kennedy", "Miss"], ["Arama Hau", "Miss"]]],
+      ["Roosters v Tigers", [["Roosters", "Miss"], ["Billy Smith", "Hit"], ["Robert Toia", "Hit"]]],
+    ],
+  );
+});
+
+test("multi outcomes fail closed and preserve definite misses", () => {
+  assert.equal(settleVerifiedMultiResult([]), "Needs Check");
+  assert.equal(settleVerifiedMultiResult(["Hit", "Needs Check"]), "Needs Check");
+  assert.equal(settleVerifiedMultiResult(["Hit", "Needs Check", "Miss"]), "Miss");
+  assert.equal(settleVerifiedMultiResult(["Hit", "Hit"]), "Hit");
+});
+
+test("an empty multi fails closed as Needs Check", () => {
+  const stormMulti = ROUND_25_SAME_GAME_MULTIS.find(
+    (multi) => multi.match === "Storm v Panthers",
+  )!;
+
+  assert.equal(
+    settleRound25SameGameMulti({ ...stormMulti, legs: [] }).result,
+    "Needs Check",
+  );
 });
 
 test("Round 25 is registered in results and match cards reveal SGMs at kickoff", () => {
