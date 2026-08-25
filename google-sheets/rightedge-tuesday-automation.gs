@@ -452,6 +452,30 @@ function parseRightEdgeStatsInsiderMatch_(payload, expectedMatchId, positionLook
   return { fixture: [home, away], scorerRows: scorerRows };
 }
 
+// Checks every scheduled Stats Insider match and only throws once every match
+// has been checked, so the operator sees the full state of the round (e.g.
+// "3 of 8 matches not yet published: X, Y, Z") instead of stopping on the
+// very first fixture in the list and hiding the rest.
+function collectRightEdgeStatsInsiderMatches_(statsMatchIds, statsMatchPayloads, positionLookup) {
+  const matches = [];
+  const failures = [];
+  statsMatchIds.forEach(function (matchId) {
+    try {
+      matches.push(parseRightEdgeStatsInsiderMatch_(statsMatchPayloads[matchId], matchId, positionLookup));
+    } catch (error) {
+      failures.push({ matchId: matchId, message: error && error.message ? error.message : String(error) });
+    }
+  });
+  if (failures.length) {
+    throw rightEdgeTuesdayValidationError_(
+      failures.length + ' of ' + statsMatchIds.length + ' matches are not ready: '
+      + failures.map(function (f) { return f.matchId; }).join(', ')
+      + ' (' + failures[0].message + ')'
+    );
+  }
+  return matches;
+}
+
 function parseRightEdgeStatsInsiderSchedule_(html, season, roundNumber, expectedMatchCount) {
   const expected = Number(expectedMatchCount);
   if (!Number.isInteger(expected) || expected < 1 || expected > 8) {
@@ -729,9 +753,7 @@ function collectRightEdgeTuesdayPlan_(services) {
     championMatchPayloads,
     snapshot.scorerHistory
   );
-  const statsMatches = statsMatchIds.map(function (matchId) {
-    return parseRightEdgeStatsInsiderMatch_(bundle.statsMatchPayloads[matchId], matchId, positions);
-  });
+  const statsMatches = collectRightEdgeStatsInsiderMatches_(statsMatchIds, bundle.statsMatchPayloads, positions);
   const fixtureRows = validateRightEdgeUpcomingFixtures_(upcomingFixtures, statsMatches);
   assertRightEdgeFixtureIntegrity_(fixtureRows);
   const scorerRows = [];

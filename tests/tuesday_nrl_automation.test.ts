@@ -596,6 +596,104 @@ test('builds player positions from verified Sheet history and latest Champion Da
   assert.equal(positions['melbourne|casey existing'], 'Centre');
 });
 
+test('the plan collector routes Stats Insider parsing through the multi-match reporter', () => {
+  // A direct unit test of collectRightEdgeStatsInsiderMatches_ cannot prove it
+  // is actually wired into the collector — only that it works in isolation.
+  // This pins the call site itself so reverting to the old statsMatchIds.map(...)
+  // (which stops at the first failing match and hides the rest) is caught.
+  const automationSource = readFileSync(AUTOMATION_FILE, 'utf8');
+
+  assert.match(
+    automationSource,
+    /const statsMatches = collectRightEdgeStatsInsiderMatches_\(statsMatchIds, bundle\.statsMatchPayloads, positions\);/,
+  );
+  assert.doesNotMatch(
+    automationSource,
+    /statsMatchIds\.map\(function \(matchId\) \{\s*return parseRightEdgeStatsInsiderMatch_/,
+  );
+});
+
+test('reports every unpublished Stats Insider match, not just the first one hit', () => {
+  const automation = loadAutomation() as {
+    collectRightEdgeStatsInsiderMatches_: (
+      statsMatchIds: string[],
+      statsMatchPayloads: Record<string, unknown>,
+      positions: Record<string, string>,
+    ) => Array<{ fixture: string[]; scorerRows: unknown[][] }>;
+  };
+
+  const populatedPayload = {
+    MatchData: {
+      SIMatchID: 'NRL_2026_26_PEN_CBY', Season: 2026, RoundNumber: 26,
+      HomeTeam: { Market: 'Penrith' }, AwayTeam: { Market: 'Canterbury' },
+    },
+    PreData: {
+      playerPropsData: {
+        home: Array.from({ length: 17 }, (_, i) => ({
+          first_name: 'Penrith', last_name: `Player ${i}`, anytimeTry: 0.2,
+        })),
+        away: Array.from({ length: 17 }, (_, i) => ({
+          first_name: 'Canterbury', last_name: `Player ${i}`, anytimeTry: 0.2,
+        })),
+      },
+    },
+  };
+  const positions: Record<string, string> = {};
+  ['Penrith', 'Canterbury'].forEach((team) => {
+    for (let i = 0; i < 17; i += 1) positions[`${team.toLowerCase()}|${team.toLowerCase()} player ${i}`] = 'Wing';
+  });
+
+  const statsMatchIds = ['NRL_2026_26_BRI_MEL', 'NRL_2026_26_MAN_SGI', 'NRL_2026_26_PEN_CBY'];
+  const statsMatchPayloads = {
+    NRL_2026_26_BRI_MEL: { MatchData: { SIMatchID: 'NRL_2026_26_BRI_MEL', Season: 2026, RoundNumber: 26 }, PreData: { playerPropsData: { home: [], away: [] } } },
+    NRL_2026_26_MAN_SGI: { MatchData: { SIMatchID: 'NRL_2026_26_MAN_SGI', Season: 2026, RoundNumber: 26 }, PreData: { playerPropsData: { home: [], away: [] } } },
+    NRL_2026_26_PEN_CBY: populatedPayload,
+  };
+
+  // Every unpublished match must be named, and the still-empty count must be
+  // clear, so the operator can tell "1 of 8 late" from "8 of 8 not started".
+  assert.throws(
+    () => automation.collectRightEdgeStatsInsiderMatches_(statsMatchIds, statsMatchPayloads, positions),
+    /Needs Check.*2 of 3 matches.*NRL_2026_26_BRI_MEL.*NRL_2026_26_MAN_SGI/s,
+  );
+});
+
+test('proceeds once every scheduled match is fully populated', () => {
+  const automation = loadAutomation() as {
+    collectRightEdgeStatsInsiderMatches_: (
+      statsMatchIds: string[],
+      statsMatchPayloads: Record<string, unknown>,
+      positions: Record<string, string>,
+    ) => Array<{ fixture: string[]; scorerRows: unknown[][] }>;
+  };
+
+  const makeMatch = (id: string, home: string, away: string) => ({
+    MatchData: {
+      SIMatchID: id, Season: 2026, RoundNumber: 26,
+      HomeTeam: { Market: home }, AwayTeam: { Market: away },
+    },
+    PreData: {
+      playerPropsData: {
+        home: Array.from({ length: 17 }, (_, i) => ({ first_name: home, last_name: `P${i}`, anytimeTry: 0.2 })),
+        away: Array.from({ length: 17 }, (_, i) => ({ first_name: away, last_name: `P${i}`, anytimeTry: 0.2 })),
+      },
+    },
+  });
+  const positions: Record<string, string> = {};
+  ['Brisbane', 'Melbourne', 'Manly', 'St Geo Illa'].forEach((team) => {
+    for (let i = 0; i < 17; i += 1) positions[`${team.toLowerCase()}|${team.toLowerCase()} p${i}`] = 'Wing';
+  });
+
+  const statsMatchIds = ['NRL_2026_26_BRI_MEL', 'NRL_2026_26_MAN_SGI'];
+  const statsMatchPayloads = {
+    NRL_2026_26_BRI_MEL: makeMatch('NRL_2026_26_BRI_MEL', 'Brisbane', 'Melbourne'),
+    NRL_2026_26_MAN_SGI: makeMatch('NRL_2026_26_MAN_SGI', 'Manly', 'St Geo Illa'),
+  };
+
+  const matches = automation.collectRightEdgeStatsInsiderMatches_(statsMatchIds, statsMatchPayloads, positions);
+  assert.equal(matches.length, 2);
+});
+
 test('reads all five live scorer-history columns for verified positions', () => {
   const automationSource = readFileSync(AUTOMATION_FILE, 'utf8');
 
