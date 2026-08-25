@@ -2302,59 +2302,60 @@ function getTryScorerCandidateRows(rows: TryScorerRow[]) {
 }
 
 // Builds the exact 3-play shortlist for one match: 1 Best Bet, 1 High Prob,
-// and 1 Value pick priced $4-$8 from the team predicted to win (falls back
-// to any team, then to any price range, only when nothing qualifies at the
-// stricter tier — so a genuinely thin market still returns real plays
-// instead of an empty slot).
+// and 1 Value pick priced $4-$8 from the team predicted to win.
+//
+// Each slot is filled by RANKING every remaining candidate, not by
+// requiring the row to already carry that exact signal label — a strict
+// "must already say High Prob" gate left some matches with only 1-2 plays
+// whenever nobody in that match happened to clear the label's threshold,
+// even though plenty of real candidates were sitting right there. Ranking
+// guarantees exactly 3 whenever the match has at least 3 real candidates.
 function getTryScorerMatchPlays(matchRows: TryScorerRow[], predictedWinner?: string) {
   const bestBetKeys = getMatchBestBetKeys(matchRows);
-  const withSignal = matchRows
-    .map((row) => ({ row, signal: getTryScorerSignal(row, bestBetKeys) }))
-    .filter((entry) => entry.signal !== null) as Array<{ row: TryScorerRow; signal: NonNullable<ReturnType<typeof getTryScorerSignal>> }>;
+  // Prefer real candidates (rows that clear some signal bar at all), but if
+  // a match genuinely has fewer than 3 of those, fall back to every row we
+  // have data for — 3 real plays beats 1-2 "clean" ones on a thin market.
+  const candidatePool = getTryScorerCandidateRows(matchRows);
+  const candidates = candidatePool.length >= 3 ? candidatePool : matchRows;
 
   const used = new Set<string>();
   const result: TryScorerRow[] = [];
+  const remaining = () => candidates.filter((row) => !used.has(getTryScorerKey(row)));
 
-  const take = (entry: { row: TryScorerRow } | undefined) => {
-    if (!entry || used.has(getTryScorerKey(entry.row))) return false;
-    used.add(getTryScorerKey(entry.row));
-    result.push(entry.row);
+  const take = (row: TryScorerRow | undefined) => {
+    if (!row || used.has(getTryScorerKey(row))) return false;
+    used.add(getTryScorerKey(row));
+    result.push(row);
     return true;
   };
 
-  const bestBet = withSignal
-    .filter((entry) => entry.signal.label === "Best Bet")
-    .sort((a, b) => b.row.statsInsiderPct - a.row.statsInsiderPct)[0];
+  // Slot 1: Best Bet — prefer an actual Best Bet candidate (short-priced,
+  // model-confident); fall back to the single highest-probability player
+  // left if the match genuinely has no one meeting that bar.
+  const bestBet =
+    remaining()
+      .filter((row) => bestBetKeys.has(getTryScorerKey(row)))
+      .sort((a, b) => b.statsInsiderPct - a.statsInsiderPct)[0] ||
+    remaining().sort((a, b) => b.statsInsiderPct - a.statsInsiderPct)[0];
   take(bestBet);
 
-  const highProb = withSignal
-    .filter((entry) => entry.signal.label === "High Prob" && !used.has(getTryScorerKey(entry.row)))
-    .sort((a, b) => b.row.statsInsiderPct - a.row.statsInsiderPct)[0];
+  // Slot 2: High Prob — the next-highest probability player left, whether
+  // or not they individually clear the "High Prob" signal's own threshold.
+  const highProb = remaining().sort((a, b) => b.statsInsiderPct - a.statsInsiderPct)[0];
   take(highProb);
 
+  // Slot 3: Value — ranked by real edge (model% beating market%), preferring
+  // $4-$8 from the predicted winner, loosening one constraint at a time
+  // only when nothing qualifies at the stricter tier.
   const winningTeamKey = predictedWinner ? normalizeTeamName(predictedWinner) : "";
-  const valueCandidates = withSignal.filter(
-    (entry) => entry.signal.label === "Value" && !used.has(getTryScorerKey(entry.row)),
-  );
-  const sortByEdge = (a: { row: TryScorerRow }, b: { row: TryScorerRow }) => b.row.edgePct - a.row.edgePct;
+  const sortByEdge = (a: TryScorerRow, b: TryScorerRow) => b.edgePct - a.edgePct;
 
-  // Tier 1: $4-$8, winning team, real value.
-  let value = valueCandidates
-    .filter(
-      (entry) =>
-        entry.row.bestOdds >= 4 &&
-        entry.row.bestOdds <= 8 &&
-        (!winningTeamKey || normalizeTeamName(entry.row.team) === winningTeamKey),
-    )
-    .sort(sortByEdge)[0];
-  // Tier 2: drop the winning-team requirement, keep the $4-$8 price band.
-  if (!value) {
-    value = valueCandidates.filter((entry) => entry.row.bestOdds >= 4 && entry.row.bestOdds <= 8).sort(sortByEdge)[0];
-  }
-  // Tier 3: any genuine-edge value play, any price — better than an empty slot.
-  if (!value) {
-    value = valueCandidates.sort(sortByEdge)[0];
-  }
+  const value =
+    remaining()
+      .filter((row) => row.bestOdds >= 4 && row.bestOdds <= 8 && (!winningTeamKey || normalizeTeamName(row.team) === winningTeamKey))
+      .sort(sortByEdge)[0] ||
+    remaining().filter((row) => row.bestOdds >= 4 && row.bestOdds <= 8).sort(sortByEdge)[0] ||
+    remaining().sort(sortByEdge)[0];
   take(value);
 
   return result;
