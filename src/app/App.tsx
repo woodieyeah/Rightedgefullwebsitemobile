@@ -2242,10 +2242,11 @@ function getTryScorerSignal(row: TryScorerRow, bestBetKeys?: Set<string>) {
     row.statsInsiderPct >= 42 &&
     row.edgePct >= -3 &&
     row.bestOdds >= 1.5;
-  const clearValue =
-    row.edgePct >= 3 ||
-    (row.edgePct >= 0 && row.bestOdds >= 2.5) ||
-    (row.edgePct >= -0.5 && row.bestOdds >= 3);
+  // "Value" requires a genuine edge — the model meaningfully beats the
+  // market's implied probability. Odds-only fallbacks (e.g. "any $3+ price
+  // with barely any edge") were letting 12-14 players per match onto the
+  // site, most of them longshots with no real signal behind them.
+  const clearValue = row.edgePct >= 3;
 
   if (bestBetKeys?.has(getTryScorerKey(row))) {
     return {
@@ -2274,12 +2275,6 @@ function getTryScorerSignal(row: TryScorerRow, bestBetKeys?: Set<string>) {
   return null;
 }
 
-function getTryScorerPageRows(rows: TryScorerRow[]) {
-  return rows.filter(
-    (row) => getTryScorerSignal(row) || isTryScorerBestBetCandidate(row),
-  );
-}
-
 function getTryScorerSignalClass(label?: string) {
   if (label === "Best Bet") return "bg-[#16161D] border border-[#1E1E2E] text-white";
   if (label === "High Prob") return "bg-[#16161D] border border-[#1E1E2E] text-white";
@@ -2295,6 +2290,46 @@ function getMatchPairKeyFromLabel(match: string) {
 
 function getPredictionPairKey(row: PredictionRow) {
   return buildTeamPairKey(row.homeTeam, row.awayTeam);
+}
+
+// Caps how many try-scorer plays surface per match: up to 2 "likely to hit"
+// (Best Bet / High Prob — short-priced, model-confident picks) plus enough
+// genuine-edge "Value" picks to reach a 3-per-match ceiling. This replaces
+// the old unbounded filter that let 12-14 players through per match.
+const TRY_SCORER_MAX_PER_MATCH = 3;
+const TRY_SCORER_MAX_CONFIDENCE_PER_MATCH = 2;
+
+function getTryScorerPageRows(rows: TryScorerRow[]) {
+  const byMatch = rows.reduce((groups, row) => {
+    if (!groups[row.match]) groups[row.match] = [];
+    groups[row.match].push(row);
+    return groups;
+  }, {} as Record<string, TryScorerRow[]>);
+
+  const result: TryScorerRow[] = [];
+
+  Object.values(byMatch).forEach((matchRows) => {
+    const bestBetKeys = getMatchBestBetKeys(matchRows);
+    const withSignal = matchRows
+      .map((row) => ({ row, signal: getTryScorerSignal(row, bestBetKeys) }))
+      .filter((entry) => entry.signal !== null) as Array<{ row: TryScorerRow; signal: NonNullable<ReturnType<typeof getTryScorerSignal>> }>;
+
+    const confidence = withSignal
+      .filter((entry) => entry.signal.label === "Best Bet" || entry.signal.label === "High Prob")
+      .sort((a, b) => b.row.statsInsiderPct - a.row.statsInsiderPct)
+      .slice(0, TRY_SCORER_MAX_CONFIDENCE_PER_MATCH);
+
+    const remainingSlots = TRY_SCORER_MAX_PER_MATCH - confidence.length;
+    const confidenceKeys = new Set(confidence.map((entry) => getTryScorerKey(entry.row)));
+    const value = withSignal
+      .filter((entry) => entry.signal.label === "Value" && !confidenceKeys.has(getTryScorerKey(entry.row)))
+      .sort((a, b) => b.row.edgePct - a.row.edgePct)
+      .slice(0, Math.max(0, remainingSlots));
+
+    result.push(...confidence.map((entry) => entry.row), ...value.map((entry) => entry.row));
+  });
+
+  return result;
 }
 
 const HIDDEN_PREMIUM_BEST_BET_PLAYS = [
