@@ -2292,14 +2292,75 @@ function getPredictionPairKey(row: PredictionRow) {
   return buildTeamPairKey(row.homeTeam, row.awayTeam);
 }
 
-// Caps how many try-scorer plays surface per match: up to 2 "likely to hit"
-// (Best Bet / High Prob — short-priced, model-confident picks) plus enough
-// genuine-edge "Value" picks to reach a 3-per-match ceiling. This replaces
-// the old unbounded filter that let 12-14 players through per match.
-const TRY_SCORER_MAX_PER_MATCH = 3;
-const TRY_SCORER_MAX_CONFIDENCE_PER_MATCH = 2;
+// The full candidate pool for a match (any row that qualifies for a signal
+// at all) — used where callers need to pick their own leg from a wider set
+// (e.g. Same Game Multi builders), not the trimmed 3-per-match shortlist.
+function getTryScorerCandidateRows(rows: TryScorerRow[]) {
+  return rows.filter(
+    (row) => getTryScorerSignal(row) || isTryScorerBestBetCandidate(row),
+  );
+}
 
-function getTryScorerPageRows(rows: TryScorerRow[]) {
+// Builds the exact 3-play shortlist for one match: 1 Best Bet, 1 High Prob,
+// and 1 Value pick priced $4-$8 from the team predicted to win (falls back
+// to any team, then to any price range, only when nothing qualifies at the
+// stricter tier — so a genuinely thin market still returns real plays
+// instead of an empty slot).
+function getTryScorerMatchPlays(matchRows: TryScorerRow[], predictedWinner?: string) {
+  const bestBetKeys = getMatchBestBetKeys(matchRows);
+  const withSignal = matchRows
+    .map((row) => ({ row, signal: getTryScorerSignal(row, bestBetKeys) }))
+    .filter((entry) => entry.signal !== null) as Array<{ row: TryScorerRow; signal: NonNullable<ReturnType<typeof getTryScorerSignal>> }>;
+
+  const used = new Set<string>();
+  const result: TryScorerRow[] = [];
+
+  const take = (entry: { row: TryScorerRow } | undefined) => {
+    if (!entry || used.has(getTryScorerKey(entry.row))) return false;
+    used.add(getTryScorerKey(entry.row));
+    result.push(entry.row);
+    return true;
+  };
+
+  const bestBet = withSignal
+    .filter((entry) => entry.signal.label === "Best Bet")
+    .sort((a, b) => b.row.statsInsiderPct - a.row.statsInsiderPct)[0];
+  take(bestBet);
+
+  const highProb = withSignal
+    .filter((entry) => entry.signal.label === "High Prob" && !used.has(getTryScorerKey(entry.row)))
+    .sort((a, b) => b.row.statsInsiderPct - a.row.statsInsiderPct)[0];
+  take(highProb);
+
+  const winningTeamKey = predictedWinner ? normalizeTeamName(predictedWinner) : "";
+  const valueCandidates = withSignal.filter(
+    (entry) => entry.signal.label === "Value" && !used.has(getTryScorerKey(entry.row)),
+  );
+  const sortByEdge = (a: { row: TryScorerRow }, b: { row: TryScorerRow }) => b.row.edgePct - a.row.edgePct;
+
+  // Tier 1: $4-$8, winning team, real value.
+  let value = valueCandidates
+    .filter(
+      (entry) =>
+        entry.row.bestOdds >= 4 &&
+        entry.row.bestOdds <= 8 &&
+        (!winningTeamKey || normalizeTeamName(entry.row.team) === winningTeamKey),
+    )
+    .sort(sortByEdge)[0];
+  // Tier 2: drop the winning-team requirement, keep the $4-$8 price band.
+  if (!value) {
+    value = valueCandidates.filter((entry) => entry.row.bestOdds >= 4 && entry.row.bestOdds <= 8).sort(sortByEdge)[0];
+  }
+  // Tier 3: any genuine-edge value play, any price — better than an empty slot.
+  if (!value) {
+    value = valueCandidates.sort(sortByEdge)[0];
+  }
+  take(value);
+
+  return result;
+}
+
+function getTryScorerPageRows(rows: TryScorerRow[], predictedWinnerByMatch?: Record<string, string>) {
   const byMatch = rows.reduce((groups, row) => {
     if (!groups[row.match]) groups[row.match] = [];
     groups[row.match].push(row);
@@ -2308,25 +2369,9 @@ function getTryScorerPageRows(rows: TryScorerRow[]) {
 
   const result: TryScorerRow[] = [];
 
-  Object.values(byMatch).forEach((matchRows) => {
-    const bestBetKeys = getMatchBestBetKeys(matchRows);
-    const withSignal = matchRows
-      .map((row) => ({ row, signal: getTryScorerSignal(row, bestBetKeys) }))
-      .filter((entry) => entry.signal !== null) as Array<{ row: TryScorerRow; signal: NonNullable<ReturnType<typeof getTryScorerSignal>> }>;
-
-    const confidence = withSignal
-      .filter((entry) => entry.signal.label === "Best Bet" || entry.signal.label === "High Prob")
-      .sort((a, b) => b.row.statsInsiderPct - a.row.statsInsiderPct)
-      .slice(0, TRY_SCORER_MAX_CONFIDENCE_PER_MATCH);
-
-    const remainingSlots = TRY_SCORER_MAX_PER_MATCH - confidence.length;
-    const confidenceKeys = new Set(confidence.map((entry) => getTryScorerKey(entry.row)));
-    const value = withSignal
-      .filter((entry) => entry.signal.label === "Value" && !confidenceKeys.has(getTryScorerKey(entry.row)))
-      .sort((a, b) => b.row.edgePct - a.row.edgePct)
-      .slice(0, Math.max(0, remainingSlots));
-
-    result.push(...confidence.map((entry) => entry.row), ...value.map((entry) => entry.row));
+  Object.entries(byMatch).forEach(([match, matchRows]) => {
+    const predictedWinner = predictedWinnerByMatch?.[getMatchPairKeyFromLabel(match)];
+    result.push(...getTryScorerMatchPlays(matchRows, predictedWinner));
   });
 
   return result;
@@ -11845,7 +11890,14 @@ function TryScorersPage({
       ? data.tryScorers
       : data.tryScorers.filter((row) => row.round === selectedRound);
 
-  const valuePlays = getTryScorerPageRows(roundFilteredRows);
+  const predictedWinnerByMatch = data.predictions.reduce((map, prediction) => {
+    if (prediction.predictedWinner) {
+      map[getPredictionPairKey(prediction)] = prediction.predictedWinner;
+    }
+    return map;
+  }, {} as Record<string, string>);
+
+  const valuePlays = getTryScorerPageRows(roundFilteredRows, predictedWinnerByMatch);
   const roundLabel =
     selectedRound === "all" ? "All rounds" : `Round ${selectedRound}`;
 
@@ -12547,7 +12599,7 @@ function buildSameGameMultiCards(
       const resultLeg = getSameGameMultiResultLeg(match, betrMarkets);
       if (!resultLeg) return null;
       const totalLeg = getSameGameMultiTotalLeg(match, betrMarkets);
-      const tryScorerPageRows = getTryScorerPageRows(
+      const tryScorerPageRows = getTryScorerCandidateRows(
         data.tryScorers.filter((row) => {
           if (match.roundNumber && row.round && row.round !== match.roundNumber) return false;
           return getMatchPairKeyFromLabel(row.match) === getPredictionPairKey(match);
@@ -13010,7 +13062,7 @@ function buildRoundMultiData(
     .map((match) => {
       const betrMarkets = getSgmMatchMarkets(marketMap, match).betr;
       if (!betrMarkets) return null;
-      const tryScorerRows = getTryScorerPageRows(
+      const tryScorerRows = getTryScorerCandidateRows(
         data.tryScorers.filter((row) => {
           if (match.roundNumber && row.round && row.round !== match.roundNumber) return false;
           return getMatchPairKeyFromLabel(row.match) === getPredictionPairKey(match);
