@@ -526,15 +526,36 @@ test('does not rerun match predictions when only scorer-odds sync previously fai
   assert.equal(scorerRuns, 2);
 });
 
-test('rejects a canonical odds sync that skipped Pinnacle before predictions', () => {
+test('accepts a canonical odds sync that ran without Pinnacle, falling back to raw ratings', () => {
+  // The prediction model is explicitly designed to blend against Pinnacle when
+  // available and fall back to raw ratings otherwise (Main Script.gs header).
+  // Requiring Pinnacle here would block a run the model can complete on its own.
+  const automation = loadAutomation() as {
+    assertRightEdgeCanonicalSyncResult_: (result: Record<string, unknown>) => void;
+  };
+
+  assert.doesNotThrow(() => automation.assertRightEdgeCanonicalSyncResult_({
+    updatedCount: 8,
+    pinnacleResult: { skipped: true, reason: 'Pinnacle unavailable' },
+  }));
+});
+
+test('rejects a canonical odds sync where match odds themselves never matched', () => {
+  // Missing Pinnacle is a documented fallback. Missing MATCH odds entirely
+  // means the whole feed failed, which must still stop the run.
   const automation = loadAutomation() as {
     assertRightEdgeCanonicalSyncResult_: (result: Record<string, unknown>) => void;
   };
 
   assert.throws(
     () => automation.assertRightEdgeCanonicalSyncResult_({
+      updatedCount: 0,
       pinnacleResult: { skipped: true, reason: 'Pinnacle unavailable' },
     }),
+    /Needs Check/,
+  );
+  assert.throws(
+    () => automation.assertRightEdgeCanonicalSyncResult_(null),
     /Needs Check/,
   );
 });
@@ -896,26 +917,44 @@ test('canonical match sync exposes whether the Pinnacle stage completed', () => 
   assert.match(syncSource, /return \{\s*updatedCount:\s*updatedCount,\s*pinnacleResult:\s*pinnacleResult\s*\};/);
 });
 
-test('Tuesday runtime validates the canonical Pinnacle result before continuing', () => {
+test('Tuesday runtime validates the canonical match odds result before continuing', () => {
   const automationSource = readFileSync(AUTOMATION_FILE, 'utf8');
 
+  // Pinnacle is intentionally NOT required here: the prediction model falls
+  // back to raw ratings when Pinnacle is absent (Main Script.gs), so requiring
+  // it in the automation would block a run the model can complete without it.
   assert.match(
     automationSource,
-    /const result = syncRightEdgeMatchOdds\(\{ requirePinnacle: true, requireMatchOdds: true \}\);\s*assertRightEdgeCanonicalSyncResult_\(result\);/,
+    /const result = syncRightEdgeMatchOdds\(\{ requireMatchOdds: true \}\);\s*assertRightEdgeCanonicalSyncResult_\(result\);/,
   );
+  assert.doesNotMatch(automationSource, /syncRightEdgeMatchOdds\([^)]*requirePinnacle/);
 });
 
-test('Tuesday strict mode stops before predictions when Pinnacle is unavailable', () => {
+test('Tuesday strict mode still stops before predictions when match odds themselves are unavailable', () => {
   const automationSource = readFileSync(AUTOMATION_FILE, 'utf8');
   const syncSource = readFileSync(
     new URL('../google-sheets/rightedge-match-odds-sync.gs', import.meta.url),
     'utf8',
   );
 
-  assert.match(automationSource, /syncRightEdgeMatchOdds\(\{ requirePinnacle: true, requireMatchOdds: true \}\)/);
+  assert.match(automationSource, /syncRightEdgeMatchOdds\(\{ requireMatchOdds: true \}\)/);
   assert.match(
     syncSource,
-    /if \(options && options\.requirePinnacle && pinnacleResult\.skipped\)[\s\S]*?throw new Error[\s\S]*?if \(typeof updatePredictions === 'function'\)/,
+    /if \(options && options\.requireMatchOdds && !updatedCount\)[\s\S]*?throw new Error[\s\S]*?if \(typeof updatePredictions === 'function'\)/,
+  );
+});
+
+test('a missing Pinnacle stage no longer blocks the canonical sync result', () => {
+  const syncSource = readFileSync(
+    new URL('../google-sheets/rightedge-match-odds-sync.gs', import.meta.url),
+    'utf8',
+  );
+  // requirePinnacle may still exist as an option for manual/other callers, but
+  // the Tuesday automation must not pass it, and a skipped Pinnacle result on
+  // its own must not throw when requirePinnacle is not set.
+  assert.doesNotMatch(
+    syncSource,
+    /if \(options && pinnacleResult\.skipped\)[\s\S]*?throw new Error/,
   );
 });
 

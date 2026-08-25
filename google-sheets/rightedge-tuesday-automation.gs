@@ -803,9 +803,13 @@ function assertRightEdgePlanBeforeUnchanged_(plan, readRange) {
 }
 
 function assertRightEdgeCanonicalSyncResult_(result) {
-  if (!result || !result.pinnacleResult || result.pinnacleResult.skipped) {
-    const reason = result && result.pinnacleResult && result.pinnacleResult.reason;
-    throw rightEdgeTuesdayValidationError_('Pinnacle odds did not complete' + (reason ? ': ' + reason : ''));
+  // Match odds are required — if the feed matched nothing, the whole sync
+  // effectively failed and the run must stop.
+  // Pinnacle is NOT required: the prediction model falls back to raw ratings
+  // when Pinnacle prices are unavailable (documented in Main Script.gs), so a
+  // skipped/unmatched Pinnacle stage on its own is not an error here.
+  if (!result || !result.updatedCount) {
+    throw rightEdgeTuesdayValidationError_('match odds sync returned no matching fixtures');
   }
 }
 
@@ -1325,7 +1329,11 @@ function createRightEdgeTuesdayRuntime_() {
       if (typeof syncRightEdgeMatchOdds !== 'function') {
         throw rightEdgeTuesdayValidationError_('syncRightEdgeMatchOdds is not installed');
       }
-      const result = syncRightEdgeMatchOdds({ requirePinnacle: true, requireMatchOdds: true });
+      // Pinnacle is not required: the prediction model (Main Script.gs) is
+      // explicitly designed to fall back to raw ratings when Pinnacle prices
+      // are unavailable. Requiring it here would block a run the model can
+      // complete on its own. Match odds themselves are still required.
+      const result = syncRightEdgeMatchOdds({ requireMatchOdds: true });
       assertRightEdgeCanonicalSyncResult_(result);
     },
     syncTryScorerOdds: function () {
