@@ -2301,6 +2301,18 @@ function getTryScorerCandidateRows(rows: TryScorerRow[]) {
   );
 }
 
+// A looser bar than the page-signal labels, used only to populate the
+// 3-per-match shortlist below: any player with a real chance to score
+// (>=15% model probability) or genuine edge (model% beats market% by 1.5+
+// points), or who already clears the stricter Best Bet bar. This excludes
+// pure noise (a 5% longshot with no edge) without requiring the row to
+// already carry a specific "High Prob"/"Value" label — a match can have
+// real, worthwhile candidates for a slot without any of them individually
+// clearing that label's own strict threshold.
+function isTryScorerRealCandidate(row: TryScorerRow) {
+  return row.statsInsiderPct >= 15 || row.edgePct >= 1.5 || isTryScorerBestBetCandidate(row);
+}
+
 // Builds the exact 3-play shortlist for one match: 1 Best Bet, 1 High Prob,
 // and 1 Value pick priced $4-$8 from the team predicted to win.
 //
@@ -2312,11 +2324,7 @@ function getTryScorerCandidateRows(rows: TryScorerRow[]) {
 // guarantees exactly 3 whenever the match has at least 3 real candidates.
 function getTryScorerMatchPlays(matchRows: TryScorerRow[], predictedWinner?: string) {
   const bestBetKeys = getMatchBestBetKeys(matchRows);
-  // Prefer real candidates (rows that clear some signal bar at all), but if
-  // a match genuinely has fewer than 3 of those, fall back to every row we
-  // have data for — 3 real plays beats 1-2 "clean" ones on a thin market.
-  const candidatePool = getTryScorerCandidateRows(matchRows);
-  const candidates = candidatePool.length >= 3 ? candidatePool : matchRows;
+  const candidates = matchRows.filter(isTryScorerRealCandidate);
 
   const used = new Set<string>();
   const result: TryScorerRow[] = [];
