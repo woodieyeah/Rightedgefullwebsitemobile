@@ -379,6 +379,10 @@ type TryScorerRow = {
   marketImpliedPct: number;
   edgePct: number;
   value: string;
+  // Set only on rows returned by getTryScorerMatchPlays: the role (Best
+  // Bet / High Prob / Value) this row was actually picked for, so the page
+  // can display it directly instead of recomputing a stricter signal.
+  assignedTryScorerRole?: string;
 };
 
 type ProofResult = "Hit" | "Miss" | "Pending" | "Needs Check";
@@ -2322,6 +2326,14 @@ function isTryScorerRealCandidate(row: TryScorerRow) {
 // whenever nobody in that match happened to clear the label's threshold,
 // even though plenty of real candidates were sitting right there. Ranking
 // guarantees exactly 3 whenever the match has at least 3 real candidates.
+//
+// Each returned row is a shallow copy carrying the role it was picked FOR
+// (assignedTryScorerRole: "Best Bet" | "High Prob" | "Value") so the page
+// can display that role directly, instead of recomputing
+// getTryScorerSignal() afterwards — which uses a stricter threshold and
+// would show "Watch" on a row that was deliberately chosen as, say, the
+// match's Value pick just because it didn't happen to clear that label's
+// own strict bar on its own.
 function getTryScorerMatchPlays(matchRows: TryScorerRow[], predictedWinner?: string) {
   const bestBetKeys = getMatchBestBetKeys(matchRows);
   const candidates = matchRows.filter(isTryScorerRealCandidate);
@@ -2330,10 +2342,10 @@ function getTryScorerMatchPlays(matchRows: TryScorerRow[], predictedWinner?: str
   const result: TryScorerRow[] = [];
   const remaining = () => candidates.filter((row) => !used.has(getTryScorerKey(row)));
 
-  const take = (row: TryScorerRow | undefined) => {
+  const take = (row: TryScorerRow | undefined, role: string) => {
     if (!row || used.has(getTryScorerKey(row))) return false;
     used.add(getTryScorerKey(row));
-    result.push(row);
+    result.push({ ...row, assignedTryScorerRole: role });
     return true;
   };
 
@@ -2345,12 +2357,12 @@ function getTryScorerMatchPlays(matchRows: TryScorerRow[], predictedWinner?: str
       .filter((row) => bestBetKeys.has(getTryScorerKey(row)))
       .sort((a, b) => b.statsInsiderPct - a.statsInsiderPct)[0] ||
     remaining().sort((a, b) => b.statsInsiderPct - a.statsInsiderPct)[0];
-  take(bestBet);
+  take(bestBet, "Best Bet");
 
   // Slot 2: High Prob — the next-highest probability player left, whether
   // or not they individually clear the "High Prob" signal's own threshold.
   const highProb = remaining().sort((a, b) => b.statsInsiderPct - a.statsInsiderPct)[0];
-  take(highProb);
+  take(highProb, "High Prob");
 
   // Slot 3: Value — ranked by real edge (model% beating market%), preferring
   // $4-$8 from the predicted winner, loosening one constraint at a time
@@ -2364,9 +2376,16 @@ function getTryScorerMatchPlays(matchRows: TryScorerRow[], predictedWinner?: str
       .sort(sortByEdge)[0] ||
     remaining().filter((row) => row.bestOdds >= 4 && row.bestOdds <= 8).sort(sortByEdge)[0] ||
     remaining().sort(sortByEdge)[0];
-  take(value);
+  take(value, "Value");
 
   return result;
+}
+
+// Reads the role a row was actually picked for (set by getTryScorerMatchPlays),
+// falling back to the recomputed signal for rows that didn't go through that
+// shortlist builder (e.g. the SGM candidate-pool callers).
+function getAssignedTryScorerLabel(row: TryScorerRow, bestBetKeys?: Set<string>) {
+  return row.assignedTryScorerRole || getTryScorerSignal(row, bestBetKeys)?.label;
 }
 
 function getTryScorerPageRows(rows: TryScorerRow[], predictedWinnerByMatch?: Record<string, string>) {
@@ -12006,11 +12025,12 @@ function TryScorersPage({
             const homeTeam = teams[0] || "";
             const awayTeam = teams[1] || "";
             const bestBetKeys = getMatchBestBetKeys(players);
+            const tryScorerSortRank: Record<string, number> = { "Best Bet": 3, "High Prob": 2, Value: 1 };
             const sortedPlayers = [...players].sort((a, b) => {
-              const aSignal = getTryScorerSignal(a, bestBetKeys);
-              const bSignal = getTryScorerSignal(b, bestBetKeys);
+              const aLabel = getAssignedTryScorerLabel(a, bestBetKeys);
+              const bLabel = getAssignedTryScorerLabel(b, bestBetKeys);
               return (
-                (bSignal?.sortRank || 0) - (aSignal?.sortRank || 0) ||
+                (tryScorerSortRank[bLabel || ""] || 0) - (tryScorerSortRank[aLabel || ""] || 0) ||
                 b.statsInsiderPct - a.statsInsiderPct ||
                 b.edgePct - a.edgePct
               );
@@ -12048,7 +12068,7 @@ function TryScorersPage({
                     </thead>
                     <tbody className="divide-y divide-white/5">
                       {sortedPlayers.map((row, i) => {
-                        const signal = getTryScorerSignal(row, bestBetKeys);
+                        const signalLabel = getAssignedTryScorerLabel(row, bestBetKeys);
                         const isBestBet = bestBetKeys.has(getTryScorerKey(row));
                         return (
                         <tr
@@ -12089,8 +12109,8 @@ function TryScorersPage({
                             />
                           </td>
                           <td className="px-2 py-4">
-                            <span className={`inline-flex max-w-full whitespace-nowrap px-2 py-1 text-[10px] font-black uppercase tracking-wider ${getTryScorerSignalClass(signal?.label)}`}>
-                              {signal?.label || "Watch"}
+                            <span className={`inline-flex max-w-full whitespace-nowrap px-2 py-1 text-[10px] font-black uppercase tracking-wider ${getTryScorerSignalClass(signalLabel)}`}>
+                              {signalLabel || "Watch"}
                             </span>
                           </td>
                         </tr>
@@ -12104,7 +12124,7 @@ function TryScorersPage({
                 <div className="md:hidden flex flex-col divide-y divide-white/5">
                   {sortedPlayers.map((row, i) => {
                     const teamColors = getTeamColors(row.team);
-                    const signal = getTryScorerSignal(row, bestBetKeys);
+                    const signalLabel = getAssignedTryScorerLabel(row, bestBetKeys);
                     const isBestBet = bestBetKeys.has(getTryScorerKey(row));
                     return (
                       <div
@@ -12139,8 +12159,8 @@ function TryScorersPage({
                             label="View market"
                             className="!min-h-[34px] !px-2.5 !py-1 !text-[9px]"
                           />
-                          <span className={`px-2 py-1 text-[10px] font-black uppercase tracking-widest ${getTryScorerSignalClass(signal?.label)}`}>
-                            {signal?.label || "Watch"}
+                          <span className={`px-2 py-1 text-[10px] font-black uppercase tracking-widest ${getTryScorerSignalClass(signalLabel)}`}>
+                            {signalLabel || "Watch"}
                           </span>
                         </div>
                       </div>
