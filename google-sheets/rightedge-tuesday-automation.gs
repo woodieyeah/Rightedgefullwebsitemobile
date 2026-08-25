@@ -24,7 +24,7 @@ function rightEdgeTuesdayValidationError_(message) {
 
 // The single canonical scorer input tab. Snapshot, plan and verification must
 // all agree on this, or approval compares a preview against a different sheet.
-const RIGHTEDGE_TUESDAY_SCORER_SHEET = 'Player Prop - Anytime Try Scorer';
+const RIGHTEDGE_TUESDAY_SCORER_SHEET = 'Try Scorer Value Plays';
 
 // Self-contained SHA-256 so plan binding is identical in Apps Script and in
 // tests, without depending on the Utilities service being present.
@@ -190,7 +190,7 @@ function normalizeRightEdgeNrlTeam_(value) {
     [['st geo illa', 'st george illawarra', 'st george illawarra dragons', 'st george', 'dragons', 'sgi'], 'St Geo Illa'],
     [['souths', 'south sydney', 'south sydney rabbitohs', 'rabbitohs', 'sou'], 'Souths'],
     [['sydney', 'sydney roosters', 'roosters', 'syd'], 'Sydney'],
-    [['warriors', 'new zealand warriors', 'nz warriors', 'war'], 'Warriors'],
+    [['warriors', 'new zealand warriors', 'nz warriors', 'new zealand', 'war'], 'Warriors'],
     [['wests tigers', 'wests', 'tigers', 'wst'], 'Wests Tigers'],
   ];
 
@@ -423,6 +423,7 @@ function parseRightEdgeStatsInsiderMatch_(payload, expectedMatchId, positionLook
 
   const seenPlayers = {};
   const scorerRows = [];
+  const unmapped = [];
   const matchLabel = home + ' v ' + away;
   [[home, homePlayers], [away, awayPlayers]].forEach(function (teamAndPlayers) {
     const team = teamAndPlayers[0];
@@ -433,11 +434,22 @@ function parseRightEdgeStatsInsiderMatch_(payload, expectedMatchId, positionLook
       const probability = Number(player && player.anytimeTry);
       const lookupKey = rightEdgePositionKey_(team, fullName);
       const position = String(positionLookup && positionLookup[lookupKey] || '').trim();
+      // A missing/invalid name or probability means the record itself is
+      // broken — that is still fatal, because it signals corrupted feed
+      // data, not just an unfamiliar player.
       if (!firstName || !lastName || !Number.isFinite(probability) || probability <= 0 || probability >= 1 ||
-          seenPlayers[lookupKey] || !position) {
-        throw rightEdgeTuesdayValidationError_('malformed, duplicate, or unmapped Stats Insider player: ' + team + ' / ' + fullName);
+          seenPlayers[lookupKey]) {
+        throw rightEdgeTuesdayValidationError_('malformed or duplicate Stats Insider player: ' + team + ' / ' + fullName);
       }
       seenPlayers[lookupKey] = true;
+      // A player we simply have no historical position for (new call-up,
+      // rarely used, name spelling variance not yet in the mapping table)
+      // is excluded from this match's scorer rows and reported separately
+      // — it must never halt the whole round over one player.
+      if (!position) {
+        unmapped.push({ team: team, player: fullName });
+        return;
+      }
       scorerRows.push([
         Number(match.RoundNumber),
         sanitizeRightEdgeSheetText_(matchLabel),
@@ -445,11 +457,15 @@ function parseRightEdgeStatsInsiderMatch_(payload, expectedMatchId, positionLook
         sanitizeRightEdgeSheetText_(team),
         sanitizeRightEdgeSheetText_(position),
         probability,
+        // Best Odds, Bookmaker, Market Implied %, Edge % are filled in by the
+        // separate odds-sync step once these rows exist — write them blank
+        // here so the row shape matches "Try Scorer Value Plays" exactly.
+        '', '', '', '',
       ]);
     });
   });
 
-  return { fixture: [home, away], scorerRows: scorerRows };
+  return { fixture: [home, away], scorerRows: scorerRows, unmapped: unmapped };
 }
 
 // Checks every scheduled Stats Insider match and only throws once every match
@@ -701,6 +717,7 @@ function buildRightEdgeTuesdayPlan_(input) {
     roundNumber: input.roundNumber,
     sourceHash: input.sourceHash,
     createdAt: input.createdAt,
+    unmappedPlayers: Array.isArray(input.unmappedPlayers) ? input.unmappedPlayers : [],
     ranges: ranges,
     changes: changes,
   };
@@ -757,8 +774,10 @@ function collectRightEdgeTuesdayPlan_(services) {
   const fixtureRows = validateRightEdgeUpcomingFixtures_(upcomingFixtures, statsMatches);
   assertRightEdgeFixtureIntegrity_(fixtureRows);
   const scorerRows = [];
+  const unmappedPlayers = [];
   statsMatches.forEach(function (match) {
     Array.prototype.push.apply(scorerRows, match.scorerRows);
+    Array.prototype.push.apply(unmappedPlayers, match.unmapped || []);
   });
 
   const metrics = {
@@ -783,6 +802,7 @@ function collectRightEdgeTuesdayPlan_(services) {
     roundNumber: roundNumber,
     sourceHash: sourceHash,
     createdAt: services.nowIso(),
+    unmappedPlayers: unmappedPlayers,
     seasonRange: {
       sheet: season + ' Data Sheet', startRow: 4, startColumn: 1,
       before: snapshot.seasonBefore, after: ladderRows,
@@ -805,11 +825,19 @@ function collectRightEdgeTuesdayPlan_(services) {
 function runRightEdgeTuesdayWorkflow_(services) {
   const plan = services.collectPlan();
   services.savePreview(plan);
+  const unmappedNote = (plan.unmappedPlayers || []).length
+    ? ' (' + plan.unmappedPlayers.length + ' player(s) excluded, position unknown: '
+      + plan.unmappedPlayers.map(function (p) { return p.team + ' / ' + p.player; }).join('; ') + ')'
+    : '';
   if (Number(services.approvedRuns()) < 2) {
-    return { status: 'Awaiting Approval', planId: plan.id };
+    return { status: 'Awaiting Approval', planId: plan.id, unmappedNote: unmappedNote };
   }
   const result = services.applyPlan(plan);
-  return { status: result && result.skipped ? 'Already Applied' : 'Applied', planId: plan.id };
+  return {
+    status: (result && result.skipped ? 'Already Applied' : 'Applied') + unmappedNote,
+    planId: plan.id,
+    unmappedNote: unmappedNote,
+  };
 }
 
 function assertRightEdgePlanBeforeUnchanged_(plan, readRange) {
@@ -841,7 +869,7 @@ const RIGHTEDGE_TUESDAY_CANONICAL_RANGES = [
   { key: 'fixtures', sheet: 'Match Predictions', startRow: 2, startColumn: 1, width: 2 },
   // The scorer block appends beneath previous rounds, so its start row is
   // validated as "row 2 or below" rather than pinned to a fixed row.
-  { key: 'scorers', sheet: RIGHTEDGE_TUESDAY_SCORER_SHEET, startRow: null, startColumn: 1, width: 6 },
+  { key: 'scorers', sheet: RIGHTEDGE_TUESDAY_SCORER_SHEET, startRow: null, startColumn: 1, width: 10 },
 ];
 
 function assertRightEdgePlanShape_(plan) {
@@ -1149,10 +1177,10 @@ function getRightEdgeSheetSnapshot_(context) {
       throw rightEdgeTuesdayValidationError_('existing target-round scorer rows are partial or non-contiguous');
     }
     scorerStartRow = targetIndexes[0] + 2;
-    scorerBefore = scorerSheet.getRange(scorerStartRow, 1, expectedScorerRows, 6).getValues();
+    scorerBefore = scorerSheet.getRange(scorerStartRow, 1, expectedScorerRows, 10).getValues();
   } else {
     scorerStartRow = scorerLastRow + 1;
-    scorerBefore = blankRightEdgeRows_(expectedScorerRows, 6);
+    scorerBefore = blankRightEdgeRows_(expectedScorerRows, 10);
   }
 
   return {
@@ -1216,11 +1244,14 @@ function saveRightEdgeTuesdayPreview_(plan) {
     ['Changed cells', plan.changes.length],
     ['Sources', 'Rugby League Project; NRL.com; Champion Data; Stats Insider'],
     ['Execution', 'syncRightEdgeMatchOdds once (Match Odds → Pinnacle → updatePredictions), then scorer odds'],
+    ['Unmapped players (excluded, position unknown)', (plan.unmappedPlayers || []).length
+      ? plan.unmappedPlayers.map(function (p) { return p.team + ' / ' + p.player; }).join('; ')
+      : 'None'],
   ];
   sheet.getRange(1, 1, metadata.length, 2).setValues(metadata);
-  sheet.getRange(10, 1, 1, 4).setValues([['Sheet', 'Cell', 'Before', 'Proposed']]);
-  if (plan.changes.length) sheet.getRange(11, 1, plan.changes.length, 4).setValues(plan.changes);
-  sheet.setFrozenRows(10);
+  sheet.getRange(metadata.length + 1, 1, 1, 4).setValues([['Sheet', 'Cell', 'Before', 'Proposed']]);
+  if (plan.changes.length) sheet.getRange(metadata.length + 2, 1, plan.changes.length, 4).setValues(plan.changes);
+  sheet.setFrozenRows(metadata.length);
   sheet.autoResizeColumns(1, 4);
   saveRightEdgePendingPlan_(spreadsheet, plan);
 }
@@ -1307,24 +1338,27 @@ function verifyRightEdgeTuesdayOutputs_(plan) {
   const scorerOutput = getRequiredRightEdgeSheet_(spreadsheet, RIGHTEDGE_TUESDAY_SCORER_SHEET)
     .getRange(scorerRange.startRow, 1, scorerRange.after.length, 10).getValues();
   let pricedRows = 0;
-  let valueRows = 0;
   scorerOutput.forEach(function (row, index) {
-    if (JSON.stringify(row.slice(0, 6)) !== JSON.stringify(scorerRange.after[index])) {
+    // Only the first 6 columns (Round, Match, Player, Team, Position, Model %)
+    // are written by this automation — columns 7-10 (Best Odds, Bookmaker,
+    // Market Implied %, Edge %) are filled in afterward by the separate
+    // odds-sync step, so they are expected to differ from the blank
+    // placeholders this automation wrote.
+    if (JSON.stringify(row.slice(0, 6)) !== JSON.stringify(scorerRange.after[index].slice(0, 6))) {
       throw rightEdgeTuesdayValidationError_('scorer input verification failed at row ' + (scorerRange.startRow + index));
     }
     const hasOdds = row[6] !== '' || row[7] !== '';
     if (!hasOdds) return;
     if (!Number.isFinite(Number(row[6])) || Number(row[6]) <= 1 || !String(row[7] || '').trim() ||
-        !Number.isFinite(Number(row[8])) || typeof row[9] !== 'boolean') {
+        !Number.isFinite(Number(row[8]))) {
       throw rightEdgeTuesdayValidationError_('scorer value-play output is malformed at row ' + (scorerRange.startRow + index));
     }
     pricedRows += 1;
-    if (row[9] === true) valueRows += 1;
   });
   if (!pricedRows) throw rightEdgeTuesdayValidationError_('scorer odds sync returned no priced players');
   PropertiesService.getDocumentProperties().setProperty(
     RIGHTEDGE_TUESDAY_LAST_VERIFICATION_KEY,
-    JSON.stringify({ planId: plan.id, fixtures: fixtures.length, pricedRows: pricedRows, valueRows: valueRows })
+    JSON.stringify({ planId: plan.id, fixtures: fixtures.length, pricedRows: pricedRows })
   );
 }
 

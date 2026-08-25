@@ -69,7 +69,11 @@ const CANONICAL_RANGE_SPECS = [
   { key: 'season', sheet: '2026 Data Sheet', startRow: 4, width: 27 },
   { key: 'advanced', sheet: '2026 Advanced Data Sheet', startRow: 2, width: 6 },
   { key: 'fixtures', sheet: 'Match Predictions', startRow: 2, width: 2 },
-  { key: 'scorers', sheet: 'Player Prop - Anytime Try Scorer', startRow: 2, width: 6 },
+  // Try Scorer Value Plays has 10 columns: the 6 the automation writes
+  // (Round, Match, Player, Team, Position, Model %) plus 4 the odds-sync
+  // step fills in afterward (Best Odds, Bookmaker, Market Implied %, Edge %),
+  // which the automation writes as blank placeholders.
+  { key: 'scorers', sheet: 'Try Scorer Value Plays', startRow: 2, width: 10 },
 ];
 
 function canonicalRanges() {
@@ -272,10 +276,10 @@ test('parses exactly 17 verified Stats Insider scorer probabilities for each tea
   assert.deepEqual(Array.from(parsed.fixture), ['Brisbane', 'Melbourne']);
   assert.equal(parsed.scorerRows.length, 34);
   assert.deepEqual(Array.from(parsed.scorerRows[0]), [
-    26, 'Brisbane v Melbourne', 'Home Player 1', 'Brisbane', 'Wing', 0.01,
+    26, 'Brisbane v Melbourne', 'Home Player 1', 'Brisbane', 'Wing', 0.01, '', '', '', '',
   ]);
   assert.deepEqual(Array.from(parsed.scorerRows[33]), [
-    26, 'Brisbane v Melbourne', 'Away Player 17', 'Melbourne', 'Centre', 0.17,
+    26, 'Brisbane v Melbourne', 'Away Player 17', 'Melbourne', 'Centre', 0.17, '', '', '', '',
   ]);
 });
 
@@ -774,11 +778,11 @@ test('builds an immutable four-range plan with exact cell changes and stale fixt
       after: [['C', 'D']],
     },
     scorerRange: {
-      sheet: 'Player Prop - Anytime Try Scorer',
+      sheet: 'Try Scorer Value Plays',
       startRow: 2,
       startColumn: 1,
-      before: [['', '', '', '', '', '']],
-      after: [[27, 'Brisbane v Melbourne', 'Player', 'Brisbane', 'Wing', 0.2]],
+      before: [['', '', '', '', '', '', '', '', '', '']],
+      after: [[27, 'Brisbane v Melbourne', 'Player', 'Brisbane', 'Wing', 0.2, '', '', '', '']],
     },
   });
 
@@ -905,7 +909,7 @@ test('collects aligned source data into one read-only approval plan', () => {
       fixtureBefore: Array.from({ length: 8 }, () => ['', '']),
       scorerHistory,
       scorerStartRow: 100,
-      scorerBefore: Array.from({ length: 34 }, () => ['', '', '', '', '', '']),
+      scorerBefore: Array.from({ length: 34 }, () => ['', '', '', '', '', '', '', '', '', '']),
     }),
     computeHash: () => 'hash123',
     nowIso: () => '2026-08-25T08:00:00.000Z',
@@ -1082,6 +1086,15 @@ test('rejects unknown team identities instead of guessing from a substring', () 
   assert.throws(() => automation.normalizeRightEdgeNrlTeam_('Brisbane Reserves'), /Needs Check/);
 });
 
+test('recognizes "New Zealand" as an alias for the Warriors, matching how Stats Insider labels them', () => {
+  const automation = loadAutomation() as {
+    normalizeRightEdgeNrlTeam_: (value: unknown) => string;
+  };
+
+  assert.equal(automation.normalizeRightEdgeNrlTeam_('New Zealand'), 'Warriors');
+  assert.equal(automation.normalizeRightEdgeNrlTeam_('new zealand'), 'Warriors');
+});
+
 test('treats a missing NRL metric value as Needs Check instead of zero', () => {
   const automation = loadAutomation() as {
     parseRightEdgeNrlMetric_: (payload: unknown, title: string) => Record<string, number>;
@@ -1183,6 +1196,95 @@ test('sanitizes Stats Insider player names before they reach the Sheet', () => {
   assert.equal(parsed.scorerRows[0][2], "'=cmd Player 1");
 });
 
+test('one unmapped player is excluded and noted, not fatal to the whole match', () => {
+  const automation = loadAutomation() as {
+    parseRightEdgeStatsInsiderMatch_: (
+      payload: unknown,
+      matchId: string,
+      positions: Record<string, string>,
+    ) => { scorerRows: Array<Array<string | number>>; unmapped: Array<{ team: string; player: string }> };
+  };
+  // 17 home players, all mapped except one (simulating a new/rarely-used
+  // player Champion Data/Bet Log history has never seen before).
+  const home = Array.from({ length: 17 }, (_, index) => ({
+    first_name: 'Home',
+    last_name: index === 5 ? 'Muhleisen' : `Player ${index + 1}`,
+    anytimeTry: (index + 1) / 100,
+  }));
+  const away = Array.from({ length: 17 }, (_, index) => ({
+    first_name: 'Away',
+    last_name: `Player ${index + 1}`,
+    anytimeTry: (index + 1) / 100,
+  }));
+  const positions = Object.fromEntries([
+    // Note: index 5 ("Muhleisen") deliberately has NO position entry.
+    ...home
+      .filter((player) => player.last_name !== 'Muhleisen')
+      .map((player) => [`Brisbane|${player.first_name} ${player.last_name}`.toLowerCase(), 'Wing']),
+    ...away.map((player) => [`Melbourne|${player.first_name} ${player.last_name}`.toLowerCase(), 'Centre']),
+  ]);
+  const payload = {
+    MatchData: {
+      SIMatchID: 'NRL_2026_26_BRI_MEL',
+      Season: 2026,
+      RoundNumber: 26,
+      HomeTeam: { Market: 'Brisbane' },
+      AwayTeam: { Market: 'Melbourne' },
+    },
+    PreData: { playerPropsData: { home, away } },
+  };
+
+  const parsed = automation.parseRightEdgeStatsInsiderMatch_(payload, 'NRL_2026_26_BRI_MEL', positions);
+
+  // The match itself succeeds (does not throw) even though one player
+  // couldn't be mapped to a position.
+  assert.equal(parsed.scorerRows.length, 33); // 34 players - 1 excluded
+  assert.equal(parsed.unmapped.length, 1);
+  assert.equal(parsed.unmapped[0].player, 'Home Muhleisen');
+  assert.equal(parsed.unmapped[0].team, 'Brisbane');
+  // The excluded player must not silently appear in scorerRows either.
+  assert.ok(!parsed.scorerRows.some((row) => row[2] === 'Home Muhleisen'));
+});
+
+test('a genuinely malformed player (missing name or invalid probability) still blocks the match', () => {
+  const automation = loadAutomation() as {
+    parseRightEdgeStatsInsiderMatch_: (
+      payload: unknown,
+      matchId: string,
+      positions: Record<string, string>,
+    ) => unknown;
+  };
+  const home = Array.from({ length: 17 }, (_, index) => ({
+    first_name: index === 3 ? '' : 'Home', // missing first name = genuinely malformed
+    last_name: `Player ${index + 1}`,
+    anytimeTry: (index + 1) / 100,
+  }));
+  const away = Array.from({ length: 17 }, (_, index) => ({
+    first_name: 'Away',
+    last_name: `Player ${index + 1}`,
+    anytimeTry: (index + 1) / 100,
+  }));
+  const positions = Object.fromEntries([
+    ...home.map((player) => [`Brisbane|${player.first_name} ${player.last_name}`.toLowerCase(), 'Wing']),
+    ...away.map((player) => [`Melbourne|${player.first_name} ${player.last_name}`.toLowerCase(), 'Centre']),
+  ]);
+  const payload = {
+    MatchData: {
+      SIMatchID: 'NRL_2026_26_BRI_MEL',
+      Season: 2026,
+      RoundNumber: 26,
+      HomeTeam: { Market: 'Brisbane' },
+      AwayTeam: { Market: 'Melbourne' },
+    },
+    PreData: { playerPropsData: { home, away } },
+  };
+
+  assert.throws(
+    () => automation.parseRightEdgeStatsInsiderMatch_(payload, 'NRL_2026_26_BRI_MEL', positions),
+    /Needs Check/,
+  );
+});
+
 test('rejects a fixture whose home and away teams are identical', () => {
   const automation = loadAutomation() as {
     assertRightEdgeFixtureIntegrity_: (fixtures: string[][]) => void;
@@ -1230,7 +1332,7 @@ test('binds each plan range to its canonical sheet, coordinates, and width', () 
       validRange('season', '2026 Data Sheet', 4, 27),
       validRange('advanced', '2026 Advanced Data Sheet', 2, 6),
       validRange('fixtures', 'Match Predictions', 2, 2),
-      validRange('scorers', 'Player Prop - Anytime Try Scorer', 2, 6),
+      validRange('scorers', 'Try Scorer Value Plays', 2, 10),
     ],
   };
 
@@ -1521,13 +1623,15 @@ test('scorer snapshot, plan and verification all target the same canonical score
   };
   const automationSource = readFileSync(AUTOMATION_FILE, 'utf8');
 
-  // Behavioural: the canonical scorer destination is the real Sheet's input tab.
+  // Behavioural: the canonical scorer destination is the tab the operator
+  // actually reviews and prices — "Try Scorer Value Plays" — not the raw
+  // intermediate tab.
   const ranges = canonicalRanges();
-  assert.equal(ranges[3].sheet, 'Player Prop - Anytime Try Scorer');
+  assert.equal(ranges[3].sheet, 'Try Scorer Value Plays');
   assert.doesNotThrow(() => automation.assertRightEdgePlanShape_({ id: 'x', ranges }));
 
   const wrongTab = canonicalRanges();
-  wrongTab[3].sheet = 'Try Scorer Value Plays';
+  wrongTab[3].sheet = 'Player Prop - Anytime Try Scorer';
   assert.throws(() => automation.assertRightEdgePlanShape_({ id: 'x', ranges: wrongTab }), /Needs Check/);
 
   // Snapshot, canonical range and verification must all resolve via that constant,
@@ -1545,8 +1649,103 @@ test('scorer snapshot, plan and verification all target the same canonical score
     /getRequiredRightEdgeSheet_\(spreadsheet, RIGHTEDGE_TUESDAY_SCORER_SHEET\)\s*\n?\s*\.getRange\(scorerRange\.startRow/,
   );
 
-  // 'Try Scorer Value Plays' is a downstream output tab, never a scorer input.
-  assert.doesNotMatch(automationSource, /getRequiredRightEdgeSheet_\(spreadsheet, 'Try Scorer Value Plays'\)/);
+  // The raw intermediate tab is never touched by this pipeline anymore —
+  // "Try Scorer Value Plays" (via the RIGHTEDGE_TUESDAY_SCORER_SHEET constant)
+  // is the sole scorer destination end to end.
+  assert.doesNotMatch(automationSource, /getRequiredRightEdgeSheet_\(spreadsheet, 'Player Prop - Anytime Try Scorer'\)/);
+});
+
+test('output verification accepts a 10-column scorer row where odds columns were filled in after the write', () => {
+  const automationSource = readFileSync(AUTOMATION_FILE, 'utf8');
+  const context: Record<string, unknown> = { console, JSON, Number, String, Array };
+
+  // scorerRange.after is exactly what this automation wrote: 6 real columns
+  // plus 4 blank placeholders for the odds-sync step to fill in later.
+  const scorerAfter = [
+    [26, 'Brisbane v Melbourne', 'Home Player 1', 'Brisbane', 'Wing', 0.2, '', '', '', ''],
+  ];
+  // The live Sheet, read back AFTER the separate odds-sync step ran: same
+  // first 6 columns, but columns 7-10 are now populated with real odds.
+  const scorerOutputRow = [26, 'Brisbane v Melbourne', 'Home Player 1', 'Brisbane', 'Wing', 0.2, 2.5, 'Neds', 0.4, -0.2];
+
+  const fixtureAfter = [['Brisbane', 'Melbourne']];
+  const scorerSheet = {
+    getRange: (row: number, col: number, numRows: number, numCols: number) => ({
+      getValues: () => Array.from({ length: numRows }, () => scorerOutputRow.slice(0, numCols)),
+    }),
+  };
+  const predictionSheet = {
+    getRange: () => ({
+      getValues: () => [['Brisbane', 'Melbourne', 'Brisbane', 27, 18]],
+    }),
+  };
+  context.SpreadsheetApp = {
+    getActiveSpreadsheet: () => ({
+      getSheetByName: (name: string) =>
+        name === 'Try Scorer Value Plays' ? scorerSheet : name === 'Match Predictions' ? predictionSheet : null,
+    }),
+  };
+  context.PropertiesService = {
+    getDocumentProperties: () => ({ setProperty: () => undefined }),
+  };
+  vm.createContext(context);
+  vm.runInContext(automationSource, context);
+
+  const plan = {
+    ranges: [
+      { key: 'fixtures', after: fixtureAfter },
+      { key: 'scorers', startRow: 2, after: scorerAfter },
+    ],
+  };
+
+  assert.doesNotThrow(() => (context.verifyRightEdgeTuesdayOutputs_ as (plan: unknown) => void)(plan));
+});
+
+test('output verification rejects a scorer row whose real (non-odds) columns were changed after the write', () => {
+  const automationSource = readFileSync(AUTOMATION_FILE, 'utf8');
+  const context: Record<string, unknown> = { console, JSON, Number, String, Array };
+
+  const scorerAfter = [
+    [26, 'Brisbane v Melbourne', 'Home Player 1', 'Brisbane', 'Wing', 0.2, '', '', '', ''],
+  ];
+  // Player name differs from what was written — a real corruption, not an
+  // odds-sync fill-in, and must still be caught.
+  const scorerOutputRow = [26, 'Brisbane v Melbourne', 'SOMEONE ELSE', 'Brisbane', 'Wing', 0.2, '', '', '', ''];
+
+  const fixtureAfter = [['Brisbane', 'Melbourne']];
+  const scorerSheet = {
+    getRange: (row: number, col: number, numRows: number, numCols: number) => ({
+      getValues: () => Array.from({ length: numRows }, () => scorerOutputRow.slice(0, numCols)),
+    }),
+  };
+  const predictionSheet = {
+    getRange: () => ({
+      getValues: () => [['Brisbane', 'Melbourne', 'Brisbane', 27, 18]],
+    }),
+  };
+  context.SpreadsheetApp = {
+    getActiveSpreadsheet: () => ({
+      getSheetByName: (name: string) =>
+        name === 'Try Scorer Value Plays' ? scorerSheet : name === 'Match Predictions' ? predictionSheet : null,
+    }),
+  };
+  context.PropertiesService = {
+    getDocumentProperties: () => ({ setProperty: () => undefined }),
+  };
+  vm.createContext(context);
+  vm.runInContext(automationSource, context);
+
+  const plan = {
+    ranges: [
+      { key: 'fixtures', after: fixtureAfter },
+      { key: 'scorers', startRow: 2, after: scorerAfter },
+    ],
+  };
+
+  assert.throws(
+    () => (context.verifyRightEdgeTuesdayOutputs_ as (plan: unknown) => void)(plan),
+    /scorer input verification failed/,
+  );
 });
 
 test('the scorer plan appends at the snapshot row instead of always overwriting row 2', () => {
@@ -1558,6 +1757,96 @@ test('the scorer plan appends at the snapshot row instead of always overwriting 
     automationSource,
     /scorerRange:\s*\{[\s\S]{0,160}?startRow:\s*2\s*,/,
   );
+});
+
+test('the real Sheet snapshot pads scorer rows at the full 10-column width, matching what is written', () => {
+  const automationSource = readFileSync(AUTOMATION_FILE, 'utf8');
+  const context: Record<string, unknown> = { console, JSON, Number, String, Array, Object };
+
+  const scorerSheet = {
+    getLastRow: () => 1, // no existing history rows -> takes the "blank" branch
+    getRange: () => ({ getValues: () => [] }),
+  };
+  const seasonSheet = { getRange: () => ({ getValues: () => Array.from({ length: 17 }, () => Array(27).fill(0)) }) };
+  const advancedSheet = { getRange: () => ({ getValues: () => Array.from({ length: 17 }, () => Array(6).fill(0)) }) };
+  const predictionSheet = {
+    getLastRow: () => 9,
+    getRange: () => ({ getValues: () => Array.from({ length: 8 }, () => ['', '']) }),
+  };
+  context.SpreadsheetApp = {
+    getActiveSpreadsheet: () => ({
+      getSheetByName: (name: string) => {
+        if (name === '2026 Data Sheet') return seasonSheet;
+        if (name === '2026 Advanced Data Sheet') return advancedSheet;
+        if (name === 'Match Predictions') return predictionSheet;
+        if (name === 'Try Scorer Value Plays') return scorerSheet;
+        return null;
+      },
+    }),
+  };
+  vm.createContext(context);
+  vm.runInContext(automationSource, context);
+
+  const snapshot = (context.getRightEdgeSheetSnapshot_ as (ctx: unknown) => { scorerBefore: unknown[][] })({
+    season: 2026,
+    roundNumber: 26,
+    fixtureCount: 8,
+    statsMatchCount: 8,
+  });
+
+  // 8 matches * 34 players/match, at the full 10-column row width the
+  // automation actually writes (6 real columns + 4 odds-sync placeholders).
+  // A 6-column "before" against a 10-column "after" is exactly the live
+  // "inconsistent scorers plan range width" failure this test guards against.
+  assert.equal(snapshot.scorerBefore.length, 8 * 34);
+  assert.equal(snapshot.scorerBefore[0].length, 10);
+});
+
+test('the real Sheet snapshot reads EXISTING scorer history rows at the full 10-column width too', () => {
+  const automationSource = readFileSync(AUTOMATION_FILE, 'utf8');
+  const context: Record<string, unknown> = { console, JSON, Number, String, Array, Object };
+
+  let requestedNumCols: number | undefined;
+  const historyRows = Array.from({ length: 34 }, () => [26, 'Brisbane v Melbourne', 'Some Player', 'Brisbane', 'Wing']);
+  const fullRows = Array.from({ length: 34 }, () =>
+    [26, 'Brisbane v Melbourne', 'Some Player', 'Brisbane', 'Wing', 0.2, '', '', '', '']);
+  const scorerSheet = {
+    getLastRow: () => 35, // header + 34 existing Round 26 rows
+    getRange: (row: number, col: number, numRows: number, numCols: number) => {
+      if (numCols === 5) return { getValues: () => historyRows };
+      requestedNumCols = numCols;
+      return { getValues: () => fullRows };
+    },
+  };
+  const seasonSheet = { getRange: () => ({ getValues: () => Array.from({ length: 17 }, () => Array(27).fill(0)) }) };
+  const advancedSheet = { getRange: () => ({ getValues: () => Array.from({ length: 17 }, () => Array(6).fill(0)) }) };
+  const predictionSheet = {
+    getLastRow: () => 9,
+    getRange: () => ({ getValues: () => Array.from({ length: 8 }, () => ['', '']) }),
+  };
+  context.SpreadsheetApp = {
+    getActiveSpreadsheet: () => ({
+      getSheetByName: (name: string) => {
+        if (name === '2026 Data Sheet') return seasonSheet;
+        if (name === '2026 Advanced Data Sheet') return advancedSheet;
+        if (name === 'Match Predictions') return predictionSheet;
+        if (name === 'Try Scorer Value Plays') return scorerSheet;
+        return null;
+      },
+    }),
+  };
+  vm.createContext(context);
+  vm.runInContext(automationSource, context);
+
+  const snapshot = (context.getRightEdgeSheetSnapshot_ as (ctx: unknown) => { scorerBefore: unknown[][] })({
+    season: 2026,
+    roundNumber: 26,
+    fixtureCount: 1,
+    statsMatchCount: 1,
+  });
+
+  assert.equal(requestedNumCols, 10);
+  assert.equal(snapshot.scorerBefore[0].length, 10);
 });
 
 test('the scorer range is validated by shape without pinning it to a fixed start row', () => {
