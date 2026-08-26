@@ -18,6 +18,7 @@ _Last updated: 2026-08-25. All times below are AEST (Sydney, UTC+10) — matched
 | Sunday | 7:00am | Same as Thursday, for Sunday's fixtures. |
 | Sunday | 5:00pm | **Full round results**, once every game is finished — final scores, Core Plays Hit/Miss, Same Game Multis Hit/Miss. Only reports if the round's verified results file has actually been built; says plainly if it hasn't (never guesses a result). |
 | Thu/Fri/Sat | 8:00am | **Opportunity scan.** Three checks, treated differently: (1) standout round momentum (e.g. 3+ SGMs Hit) — a real content trigger, hands off to Marketing Bot; (2) a strong upcoming odds edge — reported as information, not an automatic content instruction; (3) a traffic-up-conversions-flat mismatch (real PostHog + Stripe numbers) — reported as a business signal for you to weigh, not a copy prompt. Silent almost every run. |
+| Monday | 7:00am | **Weekly email click diagnosis.** Compares every broadcast sent that week (Free vs Free, Premium vs Premium) by real unique clicks — not opens — and points at the actual difference between the best and worst performer (subject wording, specific numbers vs vague teases, send time). Only claims a pattern with 2+ real examples. Never drafts content — that's Marketing Bot's job. |
 
 ## Marketing Bot
 
@@ -33,9 +34,9 @@ Marketing Bot doesn't just relay numbers — it reads the real Core Play / Same 
 
 Neither bot can create, schedule, or send anything in Resend. Every email path ends the same way: a draft + a plain-English summary + an explicit yes/no request in Discord. Nothing goes out without you saying so.
 
-## PostHog — what it can and can't tell us
+## Resend and PostHog — what each actually tells us
 
-PostHog is connected and gives real website traffic data (when people are actually browsing rightedge.com.au). It does **not** track email opens or clicks — Resend and PostHog aren't linked for that. So "suggested send time" is a traffic-based estimate, not a true email-engagement metric. Worth wiring up properly later if you want it.
+Resend has real, direct email engagement data — open rate, click rate, and exactly which links got clicked per broadcast (confirmed: ~49% open rate, ~2.4% click rate across recent sends). That's the primary signal for the weekly click diagnosis above. PostHog separately tracks real website traffic (people actually browsing rightedge.com.au) — useful for the opportunity scan's traffic/conversion check, but it's not linked to email at all.
 
 ## Where these live
 
@@ -52,3 +53,4 @@ Managed as Hermes scheduled jobs. To pause, adjust, or check on one directly, yo
 | Marketing Bot — Tuesday Email Draft | `a1126ab1194a` |
 | Marketing Bot — Premium Results Email Draft | `282d9fe98474` |
 | Data Bot — Opportunity Scan (Mid-Week) | `62215eca9043` |
+| Data Bot — Weekly Email Click Diagnosis | `326098dba61f` |
