@@ -23,12 +23,12 @@ _Last updated: 2026-08-25. All times below are AEST (Sydney, UTC+10) — matched
 
 ## Marketing Bot
 
-Marketing Bot doesn't just relay numbers — it reads the real Core Play / Same Game Multi selection logic straight from the site's code (`buildConfidence` and `buildSameGameMultiCards` in App.tsx) so every claim it makes about "why this play" is grounded in what the model actually did, then searches for genuine current NRL news (injuries, form, storylines) to find a real angle — not generic AI marketing copy.
+Marketing Bot no longer freelances a design each week. It reuses a FIXED, PROVEN template — `email-templates/round-live-winner-template.html` — the actual HTML of the real broadcast that got 30 real unique clicks, the best-performing send confirmed so far. It fills in that week's real numbers (round number, kickoff time, last round's real settled Hit/Miss record, this round's real strongest overlay) without changing the layout, block order, or design. See `email-templates/README.md` for what each placeholder needs and where its real value comes from.
 
 | Day | Time (AEST) | What it does |
 |---|---|---|
-| Tuesday | 7:30pm | Finds the round's most genuine story (an in-form team, a returning player behind a Core Play, market-vs-reality gap) and writes the "Round is live" email around it — not a template. Send-time is based on **real Resend open/click data**. Posts the draft + reasoning for your yes/no. Never sends without approval. |
-| Sunday | 5:30pm | Same narrative approach for the Premium results recap — the real story of the round (a clean sweep, a big-priced SGM landing, a narrow Miss that still proved the read). Same real-Resend-data send-time, same draft-only rule. |
+| Thursday | 4:00pm | Drafts the "Round is live" email using the fixed template above, reading real numbers from the Sheet + results files, and using the week's real content hook + best send-time window already computed by Data Bot's diagnosis/recommendation jobs (chained via context). Posts the filled HTML + a plain summary of what changed, ends with an explicit yes/no. Never sends. |
+| Sunday | 5:30pm | Same real-narrative approach for the Premium results recap — the real story of the round (a clean sweep, a big-priced SGM landing, a narrow Miss that still proved the read). Same real-Resend-data send-time, same draft-only rule. |
 | As triggered | When Data Bot flags standout round momentum | Proposes a sharp email or Instagram-post angle in Discord — not a template. Email ideas get drafted properly; Instagram ideas are described only (you write/post those yourself). |
 
 ## What "draft-only" means
@@ -51,7 +51,7 @@ Managed as Hermes scheduled jobs. To pause, adjust, or check on one directly, yo
 | Data Bot — Wednesday Follow-up | `31ada636225b` |
 | Data Bot — Daily Plays (Thu/Fri/Sat/Sun) | `75457baa4da7` |
 | Data Bot — Sunday Round Results | `8b55706c72e2` |
-| Marketing Bot — Tuesday Email Draft | `a1126ab1194a` |
+| Marketing Bot — Thursday Round-Live Email Draft | `a1126ab1194a` |
 | Marketing Bot — Premium Results Email Draft | `282d9fe98474` |
 | Data Bot — Opportunity Scan (Mid-Week) | `62215eca9043` |
 | Data Bot — Weekly Email Click Diagnosis | `326098dba61f` |
