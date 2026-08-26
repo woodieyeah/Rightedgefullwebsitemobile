@@ -18,7 +18,8 @@ _Last updated: 2026-08-25. All times below are AEST (Sydney, UTC+10) — matched
 | Sunday | 7:00am | Same as Thursday, for Sunday's fixtures. |
 | Sunday | 5:00pm | **Full round results**, once every game is finished — final scores, Core Plays Hit/Miss, Same Game Multis Hit/Miss. Only reports if the round's verified results file has actually been built; says plainly if it hasn't (never guesses a result). |
 | Thu/Fri/Sat | 8:00am | **Opportunity scan.** Three checks, treated differently: (1) standout round momentum (e.g. 3+ SGMs Hit) — a real content trigger, hands off to Marketing Bot; (2) a strong upcoming odds edge — reported as information, not an automatic content instruction; (3) a traffic-up-conversions-flat mismatch (real PostHog + Stripe numbers) — reported as a business signal for you to weigh, not a copy prompt. Silent almost every run. |
-| Monday | 7:00am | **Weekly email click diagnosis.** Compares every broadcast sent that week (Free vs Free, Premium vs Premium) by real unique clicks — not opens — and points at the actual difference between the best and worst performer (subject wording, specific numbers vs vague teases, send time). Only claims a pattern with 2+ real examples. Never drafts content — that's Marketing Bot's job. |
+| Monday | 7:00am | **Weekly email design + click diagnosis.** Reads real subject lines, full HTML structure, and actual Hit/Miss results (from the real round results files) across every broadcast sent that week — Free vs Free, Premium vs Premium, never cross-compared. Finds concrete patterns (e.g. "withheld-result subjects outperform revealed-result ones"), only claims one with 2+ real examples, checks its own pattern week over week via continuity. Feeds its findings to the daily send-recommendation job below. Never drafts content. |
+| Daily | 6:00pm | **Daily send recommendation.** Reads the weekly diagnosis's real findings, checks tomorrow's actual fixtures and what's genuinely new, and gives ONE short recommendation: what angle to lead with, which segment, and the best-performing send-time window — always citing the real number behind the call. Silent if there's nothing new to say. This is a recommendation only — Marketing Bot still drafts and asks for approval separately. |
 
 ## Marketing Bot
 
@@ -54,3 +55,4 @@ Managed as Hermes scheduled jobs. To pause, adjust, or check on one directly, yo
 | Marketing Bot — Premium Results Email Draft | `282d9fe98474` |
 | Data Bot — Opportunity Scan (Mid-Week) | `62215eca9043` |
 | Data Bot — Weekly Email Click Diagnosis | `326098dba61f` |
+| Data Bot — Daily Send Recommendation | `f26c2ad75bfc` |
