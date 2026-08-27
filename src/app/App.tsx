@@ -10834,6 +10834,8 @@ function BestBetsPage({
   };
 
   if (!isPremium && !isAdmin) {
+    // eslint-disable-next-line no-console
+    console.log("[RE-DEBUG] BestBetsPage rendering LOCKED paywall. isPremium=" + isPremium + " isAdmin=" + isAdmin + " runtimeAuthState=" + JSON.stringify(runtimeAuthState));
     return (
       <div className="flex flex-col gap-6 md:gap-8">
         <GlassCard className="p-8 md:p-12 text-center !border-[#FF2E63] !shadow-[8px_8px_0_0_#FF2E63] relative overflow-hidden">
@@ -15292,11 +15294,11 @@ export default function App() {
             // right after a successful premium login, since the paywall has
             // been observed to reappear seconds later in production.
             // eslint-disable-next-line no-console
-            console.log("[RE-DEBUG] PaymentGateModal onSuccess fired", {
-              freshHasPaidAccess,
-              runtimeAuthState: { ...runtimeAuthState },
-              currentHash: window.location.hash,
-            });
+            console.log(
+              "[RE-DEBUG] onSuccess fired. freshHasPaidAccess=" + freshHasPaidAccess +
+              " runtimeAuthState=" + JSON.stringify(runtimeAuthState) +
+              " hash=" + window.location.hash
+            );
             setPaidAccessState(freshHasPaidAccess);
             setShowEmailGate(false);
             setShowPaymentGate(false);
