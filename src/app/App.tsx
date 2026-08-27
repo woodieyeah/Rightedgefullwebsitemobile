@@ -10834,8 +10834,6 @@ function BestBetsPage({
   };
 
   if (!isPremium && !isAdmin) {
-    // eslint-disable-next-line no-console
-    console.log("[RE-DEBUG] BestBetsPage rendering LOCKED paywall. isPremium=" + isPremium + " isAdmin=" + isAdmin + " runtimeAuthState=" + JSON.stringify(runtimeAuthState));
     return (
       <div className="flex flex-col gap-6 md:gap-8">
         <GlassCard className="p-8 md:p-12 text-center !border-[#FF2E63] !shadow-[8px_8px_0_0_#FF2E63] relative overflow-hidden">
@@ -14781,7 +14779,19 @@ export default function App() {
     const handleAdminAuth = () => {
       void refreshAuthSession();
     };
+    // A 401 from an admin-only endpoint (round-snapshot polling, etc.) is
+    // EXPECTED and normal for every non-admin visitor -- including a real,
+    // correctly-logged-in Premium subscriber, since they were never an admin
+    // to begin with. Previously this unconditionally wiped the whole auth
+    // state via failClosedAuthState(), which meant a background admin-fetch
+    // 401 landing moments after a genuine login would silently log the user
+    // back out and re-show the paywall. Confirmed via live reproduction and
+    // a captured call stack: handleAdminCleared <- protectedAdminFetch
+    // (round-snapshot 401) firing right after handleEmailSubmit's successful
+    // login. Only clear the session here if the user actually WAS an admin
+    // (a genuine admin session expiring), never for an ordinary subscriber.
     const handleAdminCleared = () => {
+      if (!runtimeAuthState.admin) return;
       authSessionGenerationRef.current += 1;
       applyAuthState(failClosedAuthState(runtimeAuthState));
     };
@@ -14880,8 +14890,6 @@ export default function App() {
       setShowEmailGate(false);
 
       if (hasPaidAccess() || isUserAdmin()) {
-        // eslint-disable-next-line no-console
-        console.log("[RE-DEBUG] checkHash: hasPaidAccess true, showing premium", { hash });
         setPaidAccessState(hasPaidAccess());
         setShowPaymentGate(false);
       } else if (hasEmailAccess() && getUserEmail()) {
@@ -15289,17 +15297,7 @@ export default function App() {
             setShowPaymentGate(false);
           }}
           onSuccess={() => {
-            const freshHasPaidAccess = hasPaidAccess();
-            // TEMP DEBUG (PR #53 investigation): trace exactly what happens
-            // right after a successful premium login, since the paywall has
-            // been observed to reappear seconds later in production.
-            // eslint-disable-next-line no-console
-            console.log(
-              "[RE-DEBUG] onSuccess fired. freshHasPaidAccess=" + freshHasPaidAccess +
-              " runtimeAuthState=" + JSON.stringify(runtimeAuthState) +
-              " hash=" + window.location.hash
-            );
-            setPaidAccessState(freshHasPaidAccess);
+            setPaidAccessState(hasPaidAccess());
             setShowEmailGate(false);
             setShowPaymentGate(false);
             setSitePage("app");
