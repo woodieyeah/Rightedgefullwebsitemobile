@@ -14878,6 +14878,8 @@ export default function App() {
       setShowEmailGate(false);
 
       if (hasPaidAccess() || isUserAdmin()) {
+        // eslint-disable-next-line no-console
+        console.log("[RE-DEBUG] checkHash: hasPaidAccess true, showing premium", { hash });
         setPaidAccessState(hasPaidAccess());
         setShowPaymentGate(false);
       } else if (hasEmailAccess() && getUserEmail()) {
@@ -15285,7 +15287,17 @@ export default function App() {
             setShowPaymentGate(false);
           }}
           onSuccess={() => {
-            setPaidAccessState(hasPaidAccess());
+            const freshHasPaidAccess = hasPaidAccess();
+            // TEMP DEBUG (PR #53 investigation): trace exactly what happens
+            // right after a successful premium login, since the paywall has
+            // been observed to reappear seconds later in production.
+            // eslint-disable-next-line no-console
+            console.log("[RE-DEBUG] PaymentGateModal onSuccess fired", {
+              freshHasPaidAccess,
+              runtimeAuthState: { ...runtimeAuthState },
+              currentHash: window.location.hash,
+            });
+            setPaidAccessState(freshHasPaidAccess);
             setShowEmailGate(false);
             setShowPaymentGate(false);
             setSitePage("app");
