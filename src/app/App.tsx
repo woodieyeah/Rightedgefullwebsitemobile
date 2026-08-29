@@ -4061,8 +4061,20 @@ type AuthSessionCheckResult =
 
 let authSessionCheckPromise: Promise<AuthSessionCheckResult> | null = null;
 
-function requestAuthSession(): Promise<AuthSessionCheckResult> {
-  if (authSessionCheckPromise) return authSessionCheckPromise;
+// `force=true` bypasses the shared in-flight promise below and always starts a
+// brand new /api/auth/session request. This matters right after a login
+// action (verify-email success, checkout-session confirm) sets a fresh
+// session cookie: if an EARLIER auth check (e.g. the page's initial mount
+// check) is still in flight at that exact moment, the normal dedup path
+// would hand the login's caller that OLDER, pre-login (unauthenticated)
+// result instead of checking again -- making a successful login look like
+// it silently failed and the paywall reappear. Confirmed via live
+// reproduction: the premium login modal would briefly close then reopen
+// because handleEmailSubmit's onSessionRefresh() call received a stale
+// "unauthenticated" result from a bootstrap-time check that hadn't
+// resolved yet, even though the new session cookie was already valid.
+function requestAuthSession(force = false): Promise<AuthSessionCheckResult> {
+  if (!force && authSessionCheckPromise) return authSessionCheckPromise;
 
   authSessionCheckPromise = (async (): Promise<AuthSessionCheckResult> => {
     try {
@@ -14571,9 +14583,14 @@ export default function App() {
     }
   };
 
-  const refreshAuthSession = async (): Promise<RuntimeAuthState> => {
+  // `force=true` guarantees a brand new /api/auth/session check even if
+  // another check is already in flight -- required right after a login
+  // action confirms a fresh session cookie exists, so a stale pre-login
+  // result can never be handed back as if it were current. See
+  // requestAuthSession() for the full failure mode this fixes.
+  const refreshAuthSession = async (force = false): Promise<RuntimeAuthState> => {
     const generation = ++authSessionGenerationRef.current;
-    const result = await requestAuthSession();
+    const result = await requestAuthSession(force);
     if (generation !== authSessionGenerationRef.current) {
       return runtimeAuthState;
     }
@@ -14762,7 +14779,19 @@ export default function App() {
     const handleAdminAuth = () => {
       void refreshAuthSession();
     };
+    // A 401 from an admin-only endpoint (round-snapshot polling, etc.) is
+    // EXPECTED and normal for every non-admin visitor -- including a real,
+    // correctly-logged-in Premium subscriber, since they were never an admin
+    // to begin with. Previously this unconditionally wiped the whole auth
+    // state via failClosedAuthState(), which meant a background admin-fetch
+    // 401 landing moments after a genuine login would silently log the user
+    // back out and re-show the paywall. Confirmed via live reproduction and
+    // a captured call stack: handleAdminCleared <- protectedAdminFetch
+    // (round-snapshot 401) firing right after handleEmailSubmit's successful
+    // login. Only clear the session here if the user actually WAS an admin
+    // (a genuine admin session expiring), never for an ordinary subscriber.
     const handleAdminCleared = () => {
+      if (!runtimeAuthState.admin) return;
       authSessionGenerationRef.current += 1;
       applyAuthState(failClosedAuthState(runtimeAuthState));
     };
@@ -14953,7 +14982,7 @@ export default function App() {
           try {
             sessionStorage.removeItem(PREMIUM_CHECKOUT_RETURN_GUARD_KEY);
           } catch {}
-          const nextAuthState = await refreshAuthSession();
+          const nextAuthState = await refreshAuthSession(true);
           if (nextAuthState.tier !== "premium") {
             (window as any).trackAnalyticsEvent?.("premium_checkout_confirm_failed", {
               session_id: sessionId,
@@ -15256,7 +15285,7 @@ export default function App() {
             setShowEmailGate(false);
           }}
           onSuccess={handleEmailSuccess}
-          onSessionRefresh={refreshAuthSession}
+          onSessionRefresh={() => refreshAuthSession(true)}
         />
 
         <PaymentGateModal
@@ -15278,7 +15307,7 @@ export default function App() {
               : "best-bets";
             window.location.hash = returnHash;
           }}
-          onSessionRefresh={refreshAuthSession}
+          onSessionRefresh={() => refreshAuthSession(true)}
         />
 
         <div className="p-8 mt-8 border-t-4 border-white/10 bg-[#111317]">
