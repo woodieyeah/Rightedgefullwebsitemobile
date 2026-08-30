@@ -9777,6 +9777,11 @@ function getRound26ArchivedPremiumPlay(
   mode: PremiumPlayMode,
 ): PremiumMarketPlay | null {
   if (row.roundNumber !== 26) return null;
+  // COMPLETED MATCHES ONLY. While a match is still upcoming or live the real
+  // live odds are the better source and must win everywhere -- otherwise this
+  // published play would override the live Core Play on the Premium Plays
+  // page and stop it matching the match card.
+  if (!isFixtureCompleted(row.fixture)) return null;
   const entry = ROUND_26_ARCHIVED_PREMIUM_PLAYS[getPredictionPairKey(row)]?.[mode];
   if (!entry) return null;
   // Line cards show "model margin vs market", read off projectedValue: the
