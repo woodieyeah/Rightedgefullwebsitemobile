@@ -2346,6 +2346,77 @@ function publicNrlTeamName(team: string) {
   return publicNames[normalized] || shortNrlTeamName(team);
 }
 
+// Builds the same match key the CLIENT builds (getPredictionPairKey in
+// src/app/App.tsx). This deliberately mirrors the client's normalizeTeamName
+// alias table rather than reusing normalizeNrlTeamName, because the latter
+// mis-maps two of the fixture sheet's own team names:
+//   - "North Qld" matches its \bqld\b State of Origin rule and becomes
+//     "Queensland Maroons" instead of the Cowboys
+//   - "St Geo Illa" matches neither "dragon" nor "st george", so it falls
+//     through unmapped instead of becoming the Dragons
+// Either one silently prevented that match from ever freezing, so this key
+// must stay in sync with the client's table, not the server's.
+const CLIENT_TEAM_ALIASES: Record<string, string> = {
+  melbourne: "Storm",
+  storm: "Storm",
+  penrith: "Panthers",
+  panthers: "Panthers",
+  cronulla: "Sharks",
+  sharks: "Sharks",
+  "cronulla-sutherland": "Sharks",
+  sydney: "Roosters",
+  roosters: "Roosters",
+  canterbury: "Bulldogs",
+  "canterbury-bankstown": "Bulldogs",
+  bulldogs: "Bulldogs",
+  dolphins: "Dolphins",
+  "north qld": "Cowboys",
+  "north queensland": "Cowboys",
+  cowboys: "Cowboys",
+  "st geo illa": "Dragons",
+  "st george": "Dragons",
+  "st george illawarra": "Dragons",
+  dragons: "Dragons",
+  manly: "Sea Eagles",
+  "manly-warringah": "Sea Eagles",
+  "sea eagles": "Sea Eagles",
+  brisbane: "Broncos",
+  broncos: "Broncos",
+  newcastle: "Knights",
+  knights: "Knights",
+  canberra: "Raiders",
+  raiders: "Raiders",
+  warriors: "Warriors",
+  "new zealand": "Warriors",
+  souths: "Rabbitohs",
+  "south sydney": "Rabbitohs",
+  rabbitohs: "Rabbitohs",
+  "gold coast": "Titans",
+  titans: "Titans",
+  parramatta: "Eels",
+  eels: "Eels",
+  "wests tigers": "Tigers",
+  tigers: "Tigers",
+};
+
+function clientTeamName(team: string) {
+  const lower = String(team || "").trim().toLowerCase();
+  if (!lower) return "";
+  // Longest alias first, exactly like the client, so "north queensland"
+  // is preferred over a shorter accidental substring match.
+  const aliases = Object.keys(CLIENT_TEAM_ALIASES).sort((a, b) => b.length - a.length);
+  for (const alias of aliases) {
+    if (lower.includes(alias)) return CLIENT_TEAM_ALIASES[alias];
+  }
+  return String(team || "").trim();
+}
+
+function buildPublicMatchKey(home: string, away: string) {
+  return [clientTeamName(home), clientTeamName(away)]
+    .sort((a, b) => a.localeCompare(b))
+    .join("__");
+}
+
 function buildOddsMatchKey(home: string, away: string) {
   return `${normalizeNrlTeamName(home)} v ${normalizeNrlTeamName(away)}`.toLowerCase();
 }
@@ -5276,9 +5347,16 @@ app.post("/round-snapshot", async (c) => {
       for (const row of fixtureRows) {
         const rowRound = toSheetRound(getSheetValue(row, ["Round Number", "RoundNumber", "Round"]));
         if (rowRound !== round) continue;
-        const homeTeam = shortNrlTeamName(getSheetValue(row, ["Home Team", "Home"]));
-        const awayTeam = shortNrlTeamName(getSheetValue(row, ["Away Team", "Away"]));
-        if (normalizeServerMatchKey(`${homeTeam} v ${awayTeam}`) !== matchKey) continue;
+        // Build the key from the RAW sheet values. Passing them through
+        // shortNrlTeamName first loses information and mis-maps two teams:
+        // its output "North Qld" then trips the \bqld\b State of Origin rule
+        // (-> Queensland Maroons) and "St Geo Illa" no longer matches the
+        // Dragons rule, so neither match could ever freeze.
+        const rawHome = getSheetValue(row, ["Home Team", "Home"]);
+        const rawAway = getSheetValue(row, ["Away Team", "Away"]);
+        // The client builds its matchKey from public team names (Knights,
+        // Warriors), so compare on those to match what the client sends.
+        if (buildPublicMatchKey(rawHome, rawAway) !== matchKey) continue;
         kickoffMs = parseAestKickoffMs(
           getSheetValue(row, ["Date ISO", "DateISO"]),
           getSheetValue(row, ["AEST", "AEDT", "Time", "Kickoff"]),
