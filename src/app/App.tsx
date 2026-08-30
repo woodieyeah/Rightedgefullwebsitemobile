@@ -13383,6 +13383,112 @@ function getRoundMultiLeg(
   return selected;
 }
 
+// Round 26 round-multi legs, hardcoded from the published Round 26 Multis
+// sheet. Once a match completes the live odds feed stops carrying it, so its
+// leg could no longer be rebuilt and silently dropped out of the round multi
+// (8 legs collapsing to 2). These stand in for completed matches only, so
+// upcoming matches keep using real live odds.
+const ROUND_26_ARCHIVED_ROUND_MULTI_LEGS: Record<string, {
+  kind: SameGameMultiLeg["kind"];
+  label: string;
+  suffix?: string;
+  team?: string;
+  marketPct: number;
+  modelPct: number;
+  odds: number;
+}> = {
+  [buildTeamPairKey("Broncos", "Storm")]: {
+    kind: "result",
+    label: "Storm",
+    team: "Storm",
+    marketPct: 58.8,
+    modelPct: 56.8,
+    odds: 1.7,
+  },
+  [buildTeamPairKey("Sea Eagles", "Dragons")]: {
+    kind: "try-scorer",
+    label: "Tom Trbojevic",
+    suffix: "ANYTIME",
+    team: "Sea Eagles",
+    marketPct: 48.8,
+    modelPct: 49.8,
+    odds: 2.05,
+  },
+  [buildTeamPairKey("Panthers", "Bulldogs")]: {
+    kind: "result",
+    label: "Panthers",
+    team: "Panthers",
+    marketPct: 76.9,
+    modelPct: 70.4,
+    odds: 1.3,
+  },
+  [buildTeamPairKey("Titans", "Rabbitohs")]: {
+    kind: "result",
+    label: "Rabbitohs",
+    team: "Rabbitohs",
+    marketPct: 72.5,
+    modelPct: 66.7,
+    odds: 1.38,
+  },
+  [buildTeamPairKey("Roosters", "Dolphins")]: {
+    kind: "result",
+    label: "Roosters",
+    team: "Roosters",
+    marketPct: 64.5,
+    modelPct: 59.2,
+    odds: 1.55,
+  },
+  [buildTeamPairKey("Cowboys", "Tigers")]: {
+    kind: "try-scorer",
+    label: "Jeremiah Nanai",
+    suffix: "ANYTIME",
+    team: "Cowboys",
+    marketPct: 32.3,
+    modelPct: 45.7,
+    odds: 3.1,
+  },
+  [buildTeamPairKey("Warriors", "Knights")]: {
+    kind: "try-scorer",
+    label: "Alofiana Khan-Pereira",
+    suffix: "ANYTIME",
+    team: "Warriors",
+    marketPct: 65.4,
+    modelPct: 65.5,
+    odds: 1.53,
+  },
+  [buildTeamPairKey("Eels", "Sharks")]: {
+    kind: "result",
+    label: "Sharks -6.5",
+    team: "Sharks",
+    marketPct: 52.6,
+    modelPct: 58.3,
+    odds: 1.9,
+  },
+};
+
+function getRound26ArchivedRoundMultiLeg(
+  match: PredictionRow,
+  status: MultiCardStatus,
+): RoundMultiLeg | null {
+  if (match.roundNumber !== 26) return null;
+  // Completed matches only -- a live match must keep using live odds.
+  if (status !== "completed") return null;
+  const entry = ROUND_26_ARCHIVED_ROUND_MULTI_LEGS[getPredictionPairKey(match)];
+  if (!entry) return null;
+  return {
+    key: `${buildMatchLabelKey(match.match)}-r26-archived`,
+    match: `${match.homeTeam} V ${match.awayTeam}`,
+    kind: entry.kind,
+    label: entry.label,
+    suffix: entry.suffix,
+    team: entry.team,
+    status,
+    marketPct: entry.marketPct,
+    modelPct: entry.modelPct,
+    odds: entry.odds,
+  };
+}
+
 function buildRoundMultiData(
   data: DashboardData,
   marketMap: SgmMarketMap,
@@ -13415,19 +13521,20 @@ function buildRoundMultiData(
 
   const legs = matches
     .map((match) => {
+      const status = getMultiMatchStatus(match, settledMatchKeys, now);
       const betrMarkets = getSgmMatchMarkets(marketMap, match).betr;
-      if (!betrMarkets) return null;
+      // A completed match is dropped by the live odds feed, so fall back to
+      // the published leg rather than losing it from the round multi.
+      if (!betrMarkets) return getRound26ArchivedRoundMultiLeg(match, status);
       const tryScorerRows = getTryScorerCandidateRows(
         data.tryScorers.filter((row) => {
           if (match.roundNumber && row.round && row.round !== match.roundNumber) return false;
           return getMatchPairKeyFromLabel(row.match) === getPredictionPairKey(match);
         }),
       );
-      return getRoundMultiLeg(
-        match,
-        betrMarkets,
-        tryScorerRows,
-        getMultiMatchStatus(match, settledMatchKeys, now),
+      return (
+        getRoundMultiLeg(match, betrMarkets, tryScorerRows, status) ||
+        getRound26ArchivedRoundMultiLeg(match, status)
       );
     })
     .filter((leg): leg is RoundMultiLeg => Boolean(leg));
