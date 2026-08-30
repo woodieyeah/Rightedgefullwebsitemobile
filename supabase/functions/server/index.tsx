@@ -468,6 +468,12 @@ function buildPlaySnapshotKey(round: number, matchKey: string) {
   return `play_snapshot:${round}:${matchKey}`;
 }
 
+// How long before kickoff the public freeze may write a match's plays.
+// Kept in sync with PREMIUM_MATCH_FREEZE_WINDOW_MS in src/app/App.tsx.
+const PUBLIC_FREEZE_WINDOW_MS = 60 * 60 * 1000;
+// Small allowance after kickoff so a freeze already in flight still lands.
+const PUBLIC_FREEZE_GRACE_MS = 15 * 60 * 1000;
+
 function buildRoundResultKey(round: number, matchKey: string) {
   return `round_result:${round}:${matchKey}`;
 }
@@ -5169,6 +5175,156 @@ app.post("/admin/round-snapshot", async (c) => {
     return c.json({ ok: true, frozen: true, snapshot });
   } catch (error: any) {
     console.error("[round-snapshot] error:", error);
+    return c.json({ error: "Internal server error", message: error?.message }, 500);
+  }
+});
+
+// Public write-once freeze of a match's plays.
+//
+// The freeze runs in ordinary visitors' browsers, so it cannot live behind the
+// admin guard -- when it did, every write returned 401 and NOTHING was ever
+// frozen, which is why completed matches lost their plays entirely.
+//
+// Safety comes from the write being strictly first-write-wins and tightly
+// validated, not from authentication:
+//   - once a snapshot exists for a match it is returned as-is and never
+//     overwritten, so a later visitor cannot alter a frozen play
+//   - a snapshot may only be written from T-FREEZE_WINDOW up to kickoff,
+//     using the kickoff time the server derives, never a client-supplied one
+//   - the payload is size-capped and shape-checked
+app.post("/round-snapshot", async (c) => {
+  try {
+    const body = await c.req.json().catch(() => null);
+    if (!body || typeof body !== "object") {
+      return c.json({ error: "Invalid body" }, 400);
+    }
+    const round = Number(body.round);
+    const match = typeof body.match === "string" ? body.match : "";
+    if (!Number.isFinite(round) || round <= 0) {
+      return c.json({ error: "Invalid round" }, 400);
+    }
+    if (!match.trim() && !String(body.matchKey || "").trim()) {
+      return c.json({ error: "Invalid match" }, 400);
+    }
+    if (body.payload == null || typeof body.payload !== "object") {
+      return c.json({ error: "Invalid payload" }, 400);
+    }
+
+    // Reject oversized payloads outright rather than storing them.
+    const serialized = JSON.stringify(body.payload);
+    if (serialized.length > 24_000) {
+      return c.json({ error: "Payload too large" }, 413);
+    }
+
+    // Strict shape validation. Because the freeze is written from an ordinary
+    // visitor's browser and is permanent, a malformed or nonsense payload must
+    // never be accepted -- otherwise it would lock in and be shown to everyone.
+    const payload: any = body.payload;
+    const isSaneOdds = (value: unknown) =>
+      value === undefined || value === null || value === 0 ||
+      (typeof value === "number" && Number.isFinite(value) && value >= 1 && value <= 1000);
+    const isSanePct = (value: unknown) =>
+      value === undefined || value === null ||
+      (typeof value === "number" && Number.isFinite(value) && value >= -1000 && value <= 1000);
+
+    if (!isSaneOdds(payload.odds) || !isSanePct(payload.modelPct) || !isSanePct(payload.modelEdge)) {
+      return c.json({ error: "Invalid play values" }, 400);
+    }
+    if (payload.premiumPlays !== undefined) {
+      if (!Array.isArray(payload.premiumPlays) || payload.premiumPlays.length > 12) {
+        return c.json({ error: "Invalid premiumPlays" }, 400);
+      }
+      for (const play of payload.premiumPlays) {
+        if (!play || typeof play !== "object") {
+          return c.json({ error: "Invalid premiumPlays entry" }, 400);
+        }
+        if (typeof play.selection !== "string" || play.selection.length > 120) {
+          return c.json({ error: "Invalid play selection" }, 400);
+        }
+        if (!isSaneOdds(play.odds) || !isSanePct(play.modelPct)) {
+          return c.json({ error: "Invalid play odds" }, 400);
+        }
+      }
+    }
+    if (payload.tryScorers !== undefined) {
+      if (!Array.isArray(payload.tryScorers) || payload.tryScorers.length > 30) {
+        return c.json({ error: "Invalid tryScorers" }, 400);
+      }
+      for (const scorer of payload.tryScorers) {
+        if (!scorer || typeof scorer !== "object") {
+          return c.json({ error: "Invalid tryScorers entry" }, 400);
+        }
+        if (typeof scorer.player !== "string" || scorer.player.length > 80) {
+          return c.json({ error: "Invalid try scorer name" }, 400);
+        }
+        if (!isSaneOdds(scorer.odds)) {
+          return c.json({ error: "Invalid try scorer odds" }, 400);
+        }
+      }
+    }
+
+    const matchKey = String(body.matchKey || "").trim() || normalizeServerMatchKey(match);
+    if (!matchKey) return c.json({ error: "Invalid matchKey" }, 400);
+
+    // Only allow a freeze inside the real kickoff window, using the kickoff
+    // time the SERVER derives from the fixtures sheet -- never a client
+    // supplied one. This stops a snapshot being planted early (which would
+    // lock in a stale play) or long after a match finished.
+    try {
+      const fixtureRows = await fetchPublishedSheetRows(SHEET_GIDS.fixtures2026);
+      let kickoffMs = 0;
+      for (const row of fixtureRows) {
+        const rowRound = toSheetRound(getSheetValue(row, ["Round Number", "RoundNumber", "Round"]));
+        if (rowRound !== round) continue;
+        const homeTeam = shortNrlTeamName(getSheetValue(row, ["Home Team", "Home"]));
+        const awayTeam = shortNrlTeamName(getSheetValue(row, ["Away Team", "Away"]));
+        if (normalizeServerMatchKey(`${homeTeam} v ${awayTeam}`) !== matchKey) continue;
+        kickoffMs = parseAestKickoffMs(
+          getSheetValue(row, ["Date ISO", "DateISO"]),
+          getSheetValue(row, ["AEST", "AEDT", "Time", "Kickoff"]),
+          getSheetValue(row, ["TZ", "Timezone", "Time Zone"]) || "AEST",
+        );
+        break;
+      }
+      if (!kickoffMs) {
+        return c.json({ error: "Unknown fixture for this round" }, 400);
+      }
+      const now = Date.now();
+      if (now < kickoffMs - PUBLIC_FREEZE_WINDOW_MS) {
+        return c.json({ error: "Freeze window has not opened for this match" }, 409);
+      }
+      if (now > kickoffMs + PUBLIC_FREEZE_GRACE_MS) {
+        return c.json({ error: "Freeze window has closed for this match" }, 409);
+      }
+    } catch (windowError: any) {
+      console.error("[round-snapshot:public] window check failed:", windowError);
+      return c.json({ error: "Could not verify freeze window" }, 503);
+    }
+
+    const key = buildPlaySnapshotKey(round, matchKey);
+    const existing = await kv.get(key);
+    if (existing) {
+      // First write wins, permanently. Never overwrite a frozen play.
+      const parsed = parseKvValue(existing);
+      return c.json({ ok: true, frozen: true, alreadyFrozen: true, snapshot: parsed });
+    }
+
+    const snapshot = {
+      round,
+      match: match || matchKey,
+      matchKey,
+      payload: body.payload,
+      frozenAt: new Date().toISOString(),
+    };
+    await kv.set(key, snapshot);
+    console.info("[round-snapshot] public freeze written", {
+      round,
+      matchKey,
+      freezeWindowHours: body.payload?.freezeWindowHours,
+    });
+    return c.json({ ok: true, frozen: true, snapshot });
+  } catch (error: any) {
+    console.error("[round-snapshot:public] error:", error);
     return c.json({ error: "Internal server error", message: error?.message }, 500);
   }
 });

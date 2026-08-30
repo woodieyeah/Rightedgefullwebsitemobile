@@ -2098,7 +2098,10 @@ function hasPredictionKickedOff(row?: PredictionRow | null, now = Date.now()) {
   return getFixtureUtcKickoffMs(row.fixture) <= now;
 }
 
-const PREMIUM_MATCH_FREEZE_WINDOW_MS = 24 * 60 * 60 * 1000;
+// How long before kickoff a match's plays are frozen. Once inside this window
+// the plays are snapshotted once and never change again, so what a subscriber
+// saw before kickoff is exactly what stays on the site afterwards.
+const PREMIUM_MATCH_FREEZE_WINDOW_MS = 60 * 60 * 1000;
 
 function isWithinPremiumMatchFreezeWindow(
   row?: PredictionRow | null,
@@ -2724,7 +2727,7 @@ function buildFrozenPayloadFromPlay(
         }
       : null,
     premiumPlays,
-    freezeWindowHours: 24,
+    freezeWindowHours: 1,
     tryScorers,
   };
 }
@@ -2759,7 +2762,7 @@ function buildMultiOnlyFrozenPayload(
       : null,
     premiumPlays: [],
     sgmMarkets,
-    freezeWindowHours: 24,
+    freezeWindowHours: 1,
     tryScorers,
   };
 }
@@ -3176,7 +3179,12 @@ async function postRoundSnapshot(body: {
   payload: FrozenPlayPayload;
 }, signal?: AbortSignal): Promise<FrozenSnapshot | null> {
   try {
-    const res = await protectedAdminFetch(`/api/admin/round-snapshot`, {
+    // Public write-once freeze endpoint. This used to post to the admin-only
+    // route, which meant every ordinary visitor's freeze returned 401 and no
+    // play was ever actually frozen. Plain fetch (not protectedAdminFetch) so
+    // a normal visitor's browser can perform the freeze, and so a 401 here can
+    // never be mistaken for an expired admin session.
+    const res = await fetch(`/api/round-snapshot`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -8510,8 +8518,11 @@ function PredictionsPage({
   );
   const [marketMap, setMarketMap] = useState<SgmMarketMap>({});
   // Freeze + results data for the live page (disabled in archive view).
+  // The freeze runs for every visitor, not just administrators, so a match's
+  // plays lock in an hour before kickoff whether or not an admin has the site
+  // open. The write itself is write-once and window-bound on the server.
   const frozen = useFrozenRoundData(data, marketMap, now, {
-    enableFreeze: isAdmin && !selectedArchive,
+    enableFreeze: !selectedArchive,
   });
   const sameGameMultiCards = useMemo(() => {
     if (selectedArchive) return [];
@@ -13731,16 +13742,19 @@ function MultiPage({
   }, [frozen.round, frozen.snapshots, marketMap]);
   const cards = useMemo(() => {
     const generatedCards = buildSameGameMultiCards(data, effectiveMarketMap, now);
-    if (frozen.round !== 25) return generatedCards;
     const settledMatchKeys = new Set(
       data.betLog
         .filter((bet) => bet.result === "W" || bet.result === "L")
         .map((bet) => `${bet.round}:${buildMatchLabelKey(bet.match)}`),
     );
-    return mergeSameGameMultiCards(
-      generatedCards,
-      getRound25ArchivedSameGameMultiCards(data, settledMatchKeys, now),
-    );
+    // Hardcoded per-round archives keep completed matches on the Multi page
+    // for the whole round, since the live odds feed drops a match once it
+    // finishes. Same merge the Matches page uses.
+    const archivedCards = [
+      ...getRound25ArchivedSameGameMultiCards(data, settledMatchKeys, now),
+      ...getRound26ArchivedSameGameMultiCards(data, settledMatchKeys, now),
+    ];
+    return mergeSameGameMultiCards(generatedCards, archivedCards);
   }, [data, effectiveMarketMap, frozen.round, now]);
   const roundMulti = useMemo(
     () => buildRoundMultiData(data, effectiveMarketMap, now),
