@@ -7,6 +7,10 @@ import {
 } from "../src/app/auth-session.ts";
 
 const appSource = readFileSync(new URL("../src/app/App.tsx", import.meta.url), "utf8");
+const serverSource = readFileSync(
+  new URL("../supabase/functions/server/index.tsx", import.meta.url),
+  "utf8",
+);
 const dashboardSource = readFileSync(
   new URL("../src/app/components/AdminDashboard.tsx", import.meta.url),
   "utf8",
@@ -34,14 +38,33 @@ test("protected dashboard requests fail closed on unauthorized responses", () =>
   assert.doesNotMatch(dashboardSource, /fetch\(`?\/api\/admin/);
 });
 
-test("round snapshot writes use the protected administrator route", () => {
-  assert.doesNotMatch(appSource, /fetch\(`\/api\/round-snapshot`/);
-  assert.match(appSource, /protectedAdminFetch\(`\/api\/admin\/round-snapshot`/);
-  assert.match(appSource, /if \(response\.status === 401\)[\s\S]*new Event\('adminAuthCleared'\)/);
+test("round snapshot writes use the public write-once freeze route", () => {
+  // The freeze must run for ordinary visitors so a match's plays lock in an
+  // hour before kickoff regardless of whether an administrator has the site
+  // open. It previously posted to the admin-only route, so every visitor's
+  // freeze returned 401 and no play was ever frozen -- completed matches then
+  // lost their plays when the live odds feed dropped them.
+  //
+  // A plain fetch is required here (not protectedAdminFetch) for two reasons:
+  // a visitor has no admin session, and a 401 from this call must never be
+  // mistaken for an expired admin session and clear a real subscriber's login.
+  assert.match(appSource, /fetch\(`\/api\/round-snapshot`/);
+  assert.doesNotMatch(appSource, /protectedAdminFetch\(`\/api\/admin\/round-snapshot`/);
   assert.match(appSource, /postRoundSnapshot\(b, snapshotController\.signal\)/);
-  assert.match(appSource, /enableFreeze: isAdmin && !selectedArchive/);
   assert.match(appSource, /postingKeysRef/);
   assert.match(appSource, /if \(snapshot\) postedKeysRef\.current\.add\(toPost\[index\]\.matchKey\)/);
+});
+
+test("kickoff freeze window locks plays one hour before kickoff", () => {
+  // Plays lock in an hour before kickoff and never change after that, so what
+  // a subscriber saw pre-kickoff is exactly what remains on the site.
+  assert.match(
+    appSource,
+    /const PREMIUM_MATCH_FREEZE_WINDOW_MS = 60 \* 60 \* 1000;/,
+  );
+  // Client and server windows must agree, or the client posts freezes the
+  // server rejects as outside the window.
+  assert.match(serverSource, /const PUBLIC_FREEZE_WINDOW_MS = 60 \* 60 \* 1000;/);
 });
 
 test("logout always clears local administrator state and cached data", () => {

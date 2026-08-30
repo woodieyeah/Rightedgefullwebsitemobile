@@ -49,12 +49,51 @@ test("admin session renewal preserves the immutable eight-hour deadline", () => 
 });
 
 test("sensitive diagnostics and writes are inside the protected admin namespace", () => {
+  // NOTE: /round-snapshot is deliberately NOT in this list.
+  //
+  // The kickoff freeze runs in ordinary visitors' browsers so that a match's
+  // plays lock in an hour before kickoff whether or not an administrator has
+  // the site open. While it posted to the admin-only route every such write
+  // returned 401, so no play was ever frozen and completed matches lost their
+  // plays entirely. It now posts to a public write-once route instead.
+  //
+  // That route is guarded by behaviour rather than authentication, asserted by
+  // the "public round-snapshot freeze is write-once and window-bound" test
+  // below: first write wins permanently, writes are only accepted inside the
+  // server-derived kickoff window, and payloads are size- and shape-checked.
   assert.doesNotMatch(
     serverSource,
-    /app\.(?:get|post)\("\/(?:analytics-events|analytics-debug|kv-namespace-scan|test-kv|round-snapshot)"/,
+    /app\.(?:get|post)\("\/(?:analytics-events|analytics-debug|kv-namespace-scan|test-kv)"/,
   );
   assert.match(serverSource, /app\.get\("\/admin\/analytics-events"/);
   assert.match(serverSource, /app\.get\("\/admin\/analytics-debug"/);
   assert.match(serverSource, /app\.get\("\/admin\/kv-namespace-scan"/);
+  // The admin route is retained for administrator-initiated freezes.
   assert.match(serverSource, /app\.post\("\/admin\/round-snapshot"/);
+});
+
+test("public round-snapshot freeze is write-once and window-bound", () => {
+  const handler = serverSource.slice(
+    serverSource.indexOf('app.post("/round-snapshot"'),
+    serverSource.indexOf('app.get("/round-snapshots"'),
+  );
+  assert.ok(handler.length > 0, "public /round-snapshot handler should exist");
+
+  // First write wins permanently: an existing snapshot is returned untouched
+  // so a later visitor can never overwrite a frozen play.
+  assert.match(handler, /const existing = await kv\.get\(key\)/);
+  assert.match(handler, /if \(existing\)[\s\S]*alreadyFrozen: true/);
+
+  // The freeze window is derived from the fixtures sheet on the SERVER, never
+  // taken from the request body.
+  assert.match(handler, /fetchPublishedSheetRows\(SHEET_GIDS\.fixtures2026\)/);
+  assert.match(handler, /PUBLIC_FREEZE_WINDOW_MS/);
+  assert.match(handler, /PUBLIC_FREEZE_GRACE_MS/);
+  assert.doesNotMatch(handler, /body\.kickoff/);
+
+  // Payloads are bounded and shape-checked before being made permanent.
+  assert.match(handler, /Payload too large/);
+  assert.match(handler, /Invalid play values/);
+  assert.match(handler, /Invalid premiumPlays/);
+  assert.match(handler, /Invalid tryScorers/);
 });

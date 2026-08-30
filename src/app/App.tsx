@@ -2098,7 +2098,10 @@ function hasPredictionKickedOff(row?: PredictionRow | null, now = Date.now()) {
   return getFixtureUtcKickoffMs(row.fixture) <= now;
 }
 
-const PREMIUM_MATCH_FREEZE_WINDOW_MS = 24 * 60 * 60 * 1000;
+// How long before kickoff a match's plays are frozen. Once inside this window
+// the plays are snapshotted once and never change again, so what a subscriber
+// saw before kickoff is exactly what stays on the site afterwards.
+const PREMIUM_MATCH_FREEZE_WINDOW_MS = 60 * 60 * 1000;
 
 function isWithinPremiumMatchFreezeWindow(
   row?: PredictionRow | null,
@@ -2724,7 +2727,7 @@ function buildFrozenPayloadFromPlay(
         }
       : null,
     premiumPlays,
-    freezeWindowHours: 24,
+    freezeWindowHours: 1,
     tryScorers,
   };
 }
@@ -2759,7 +2762,7 @@ function buildMultiOnlyFrozenPayload(
       : null,
     premiumPlays: [],
     sgmMarkets,
-    freezeWindowHours: 24,
+    freezeWindowHours: 1,
     tryScorers,
   };
 }
@@ -3176,7 +3179,12 @@ async function postRoundSnapshot(body: {
   payload: FrozenPlayPayload;
 }, signal?: AbortSignal): Promise<FrozenSnapshot | null> {
   try {
-    const res = await protectedAdminFetch(`/api/admin/round-snapshot`, {
+    // Public write-once freeze endpoint. This used to post to the admin-only
+    // route, which meant every ordinary visitor's freeze returned 401 and no
+    // play was ever actually frozen. Plain fetch (not protectedAdminFetch) so
+    // a normal visitor's browser can perform the freeze, and so a 401 here can
+    // never be mistaken for an expired admin session.
+    const res = await fetch(`/api/round-snapshot`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -8510,8 +8518,11 @@ function PredictionsPage({
   );
   const [marketMap, setMarketMap] = useState<SgmMarketMap>({});
   // Freeze + results data for the live page (disabled in archive view).
+  // The freeze runs for every visitor, not just administrators, so a match's
+  // plays lock in an hour before kickoff whether or not an admin has the site
+  // open. The write itself is write-once and window-bound on the server.
   const frozen = useFrozenRoundData(data, marketMap, now, {
-    enableFreeze: isAdmin && !selectedArchive,
+    enableFreeze: !selectedArchive,
   });
   const sameGameMultiCards = useMemo(() => {
     if (selectedArchive) return [];
@@ -8522,16 +8533,19 @@ function PredictionsPage({
       marketMap,
     );
     const generatedCards = buildSameGameMultiCards(data, effectiveMarketMap, now);
-    if (frozen.round !== 25) return generatedCards;
     const settledMatchKeys = new Set(
       data.betLog
         .filter((bet) => bet.result === "W" || bet.result === "L")
         .map((bet) => `${bet.round}:${buildMatchLabelKey(bet.match)}`),
     );
-    return mergeSameGameMultiCards(
-      generatedCards,
-      getRound25ArchivedSameGameMultiCards(data, settledMatchKeys, now),
-    );
+    // Hardcoded per-round archives keep completed matches showing the plays
+    // that were actually live for them, since the live odds feed stops
+    // carrying a match once it finishes.
+    const archivedCards = [
+      ...getRound25ArchivedSameGameMultiCards(data, settledMatchKeys, now),
+      ...getRound26ArchivedSameGameMultiCards(data, settledMatchKeys, now),
+    ];
+    return mergeSameGameMultiCards(generatedCards, archivedCards);
   }, [data, frozen.round, frozen.snapshots, marketMap, now, selectedArchive]);
 
   useEffect(() => {
@@ -8624,9 +8638,12 @@ function PredictionsPage({
             : null;
           // From T-24h onward the per-match snapshot always wins over live
           // recalculation, even while the market feed continues to move.
+          // Once a match completes the live feed drops it entirely, so fall
+          // back to the published Round 26 play so it stays on the card.
           const premiumMarketPlay =
-            frozenCorePlay || livePlay;
-          const premiumH2hPlay = frozenH2hPlay || liveH2hPlay;
+            frozenCorePlay || livePlay || getRound26ArchivedPremiumPlay(row, "bestbet");
+          const premiumH2hPlay =
+            frozenH2hPlay || liveH2hPlay || getRound26ArchivedPremiumPlay(row, "h2h");
           const premiumPlayReveals = buildPremiumPlayReveals([
             { play: premiumMarketPlay, label: "Core Play" },
             { play: premiumH2hPlay, label: "Best H2H" },
@@ -9695,6 +9712,117 @@ function compareBetrPreferenceForSameOffer(a: PremiumMarketPlay, b: PremiumMarke
 
 type PremiumPlayMode = "bestbet" | "h2h" | "value" | "highvariance";
 
+// Round 26 premium match plays, hardcoded from the published Round 26 Best
+// Plays sheet. Once a match finishes the live odds feed stops carrying it,
+// so the play can no longer be rebuilt from live markets and would vanish
+// from the site. These stand in for completed Round 26 matches only, so the
+// play stays exactly where it was and simply reads as completed.
+const ROUND_26_ARCHIVED_PREMIUM_PLAYS: Record<
+  string,
+  Partial<Record<PremiumPlayMode, {
+    type: PremiumMarketPlay["type"];
+    selection: string;
+    bookmaker: string;
+    odds: number;
+    modelPct: number;
+    modelEdge: number;
+    marketPoint?: number;
+  }>>
+> = {
+  [buildTeamPairKey("Panthers", "Bulldogs")]: {
+    bestbet: {
+      type: "Line",
+      selection: "Panthers -8.5",
+      bookmaker: "PlayUp",
+      odds: 1.9,
+      modelPct: 58.3,
+      modelEdge: 5.6,
+      marketPoint: -8.5,
+    },
+  },
+  [buildTeamPairKey("Cowboys", "Tigers")]: {
+    bestbet: {
+      type: "Line",
+      selection: "Tigers +12.5",
+      bookmaker: "Betr",
+      odds: 1.95,
+      modelPct: 58.3,
+      modelEdge: 7,
+      marketPoint: 12.5,
+    },
+  },
+  [buildTeamPairKey("Warriors", "Knights")]: {
+    bestbet: {
+      type: "Line",
+      selection: "Knights +11.5",
+      bookmaker: "Betr",
+      odds: 1.95,
+      modelPct: 58.3,
+      modelEdge: 7,
+      marketPoint: 11.5,
+    },
+  },
+  [buildTeamPairKey("Eels", "Sharks")]: {
+    bestbet: {
+      type: "Line",
+      selection: "Sharks -5.5",
+      bookmaker: "Sportsbet",
+      odds: 1.83,
+      modelPct: 61.5,
+      modelEdge: 6.8,
+      marketPoint: -5.5,
+    },
+    h2h: {
+      type: "Head 2 Head",
+      selection: "Sharks head-to-head",
+      bookmaker: "BetRight",
+      odds: 1.5,
+      modelPct: 68.5,
+      modelEdge: 1.8,
+    },
+  },
+};
+
+function getRound26ArchivedPremiumPlay(
+  row: PredictionRow,
+  mode: PremiumPlayMode,
+): PremiumMarketPlay | null {
+  if (row.roundNumber !== 26) return null;
+  // COMPLETED MATCHES ONLY. While a match is still upcoming or live the real
+  // live odds are the better source and must win everywhere -- otherwise this
+  // published play would override the live Core Play on the Premium Plays
+  // page and stop it matching the match card.
+  if (!isFixtureCompleted(row.fixture)) return null;
+  const entry = ROUND_26_ARCHIVED_PREMIUM_PLAYS[getPredictionPairKey(row)]?.[mode];
+  if (!entry) return null;
+  // Line cards show "model margin vs market", read off projectedValue: the
+  // model's projected margin for the SELECTED team (positive = winning by).
+  const homeMargin = row.predictedHomeScore - row.predictedAwayScore;
+  const selectionTeam = normalizeTeamName(entry.selection);
+  const projectedValue =
+    entry.type === "Line"
+      ? selectionTeam === normalizeTeamName(row.homeTeam)
+        ? homeMargin
+        : -homeMargin
+      : entry.type === "Total"
+        ? row.predictedHomeScore + row.predictedAwayScore
+        : undefined;
+  return {
+    id: `r26-archived-${getPredictionPairKey(row)}-${mode}`,
+    row,
+    type: entry.type,
+    selection: entry.selection,
+    bookmaker: entry.bookmaker,
+    odds: entry.odds,
+    modelPct: entry.modelPct,
+    modelEdge: entry.modelEdge,
+    marketImpliedPct: getImpliedWinPctFromOdds(entry.odds),
+    chooserLabel: getPremiumLabelForMode(mode),
+    marketPoint: entry.marketPoint,
+    projectedValue,
+  };
+}
+
 function getBestPremiumMarketPlayForMatch(
   row: PredictionRow,
   marketMap: SgmMarketMap,
@@ -9983,20 +10111,26 @@ function getLockedCompletedPremiumMarketPlayForMatch(row: PredictionRow): Premiu
     /panthers|penrith/.test(matchText) &&
     /rabbitohs|souths|south sydney/.test(matchText);
 
-  if (!isPanthersRabbitohs) return null;
+  if (isPanthersRabbitohs) {
+    return {
+      id: `${row.match}-locked-round-18-over-43-5`,
+      row,
+      type: "Total",
+      selection: "Over 43.5",
+      bookmaker: "Sportsbet",
+      odds: 1.91,
+      modelPct: 66.5,
+      modelEdge: 14.2,
+      marketPoint: 43.5,
+      projectedValue: row.predictedHomeScore + row.predictedAwayScore,
+    };
+  }
 
-  return {
-    id: `${row.match}-locked-round-18-over-43-5`,
-    row,
-    type: "Total",
-    selection: "Over 43.5",
-    bookmaker: "Sportsbet",
-    odds: 1.91,
-    modelPct: 66.5,
-    modelEdge: 14.2,
-    marketPoint: 43.5,
-    projectedValue: row.predictedHomeScore + row.predictedAwayScore,
-  };
+  // Round 26: once a match completes the live odds feed stops carrying it, so
+  // the Core Play could no longer be rebuilt and dropped off the site. Lock in
+  // the published Round 26 Core Plays so each one stays exactly where it was
+  // and simply reads as completed.
+  return getRound26ArchivedPremiumPlay(row, "bestbet");
 }
 
 function getOfficialPendingPremiumMarketPlayForMatch(
@@ -10771,6 +10905,17 @@ function BestBetsPage({
       }
       byKey.set(key, lockedPlay);
     }
+    // Completed Round 26 matches are dropped by the live odds feed and have no
+    // frozen snapshot, so neither loop above reaches them. Add their published
+    // Core Play directly so it stays on the page instead of disappearing.
+    for (const row of data.predictions) {
+      const key = getPredictionPairKey(row);
+      if (byKey.has(key)) continue;
+      if (archivedMatchKeys.has(key)) continue;
+      if (isHiddenPremiumBestBetRow(row)) continue;
+      const archivedPlay = getRound26ArchivedPremiumPlay(row, "bestbet");
+      if (archivedPlay) byKey.set(key, archivedPlay);
+    }
     return [...byKey.values()]
       .map((play) => withPremiumChooserMetrics(play, "Core Play"))
       .sort(comparePremiumPlaysByFixture)
@@ -10780,16 +10925,30 @@ function BestBetsPage({
   // BEST H2H: keep every qualifying match instead of collapsing the round to
   // one winner. A selection that is also a Core Play is rendered once in the
   // Core section with both labels.
-  const bestH2hPlays = useMemo(() =>
-    overlayFrozenPremiumPlaysForMode(
+  const bestH2hPlays = useMemo(() => {
+    const plays = overlayFrozenPremiumPlaysForMode(
       buildPremiumMarketPlays(data, marketMap, now, canViewStartedPremiumPlays, "h2h"),
       frozen.snapshots,
       predictionByPairKey,
       archivedMatchKeys,
       "h2h",
-    )
+    );
+    // Same as Core Plays: completed Round 26 matches fall out of the live feed
+    // and have no snapshot, so add their published H2H read back directly.
+    const seen = new Set(plays.map((play) => getPredictionPairKey(play.row)));
+    for (const row of data.predictions) {
+      const key = getPredictionPairKey(row);
+      if (seen.has(key) || archivedMatchKeys.has(key)) continue;
+      const archivedPlay = getRound26ArchivedPremiumPlay(row, "h2h");
+      if (archivedPlay) {
+        plays.push(archivedPlay);
+        seen.add(key);
+      }
+    }
+    return plays
       .sort(comparePremiumPlaysByFixture)
-      .slice(0, isAdmin ? 50 : 8),
+      .slice(0, isAdmin ? 50 : 8);
+  },
   [data, marketMap, now, canViewStartedPremiumPlays, isAdmin, frozen.snapshots, predictionByPairKey, archivedMatchKeys]);
 
   const bestH2hKeys = useMemo(
@@ -12933,6 +13092,161 @@ function getRound25ArchivedSameGameMultiCards(
     .filter((card): card is SameGameMultiCardData => Boolean(card));
 }
 
+// Round 26 same game multis, hardcoded from the published Round 26 Multis
+// sheet so completed matches keep showing the plays that were actually
+// live for that match instead of dropping off the site once the live
+// odds feed stops carrying them. Same approach as Round 25 above.
+function getRound26ArchivedSameGameMultiCards(
+  data: DashboardData,
+  settledMatchKeys: Set<string>,
+  now: number,
+): SameGameMultiCardData[] {
+  const archivedLegs: Record<string, SameGameMultiLeg[]> = {
+    [buildTeamPairKey("Sea Eagles", "Dragons")]: [
+      {
+        kind: "result",
+        label: "Sea Eagles",
+        team: "Sea Eagles",
+        marketPct: 69,
+        modelPct: 69,
+        odds: 1.45,
+      },
+      {
+        kind: "try-scorer",
+        label: "Tom Trbojevic",
+        suffix: "ANYTIME",
+        team: "Sea Eagles",
+        marketPct: 48.8,
+        modelPct: 49.8,
+        odds: 2.05,
+      },
+      {
+        kind: "try-scorer",
+        label: "Valentine Holmes",
+        suffix: "ANYTIME",
+        team: "Dragons",
+        marketPct: 38.3,
+        modelPct: 38.3,
+        odds: 2.61,
+      },
+    ],
+    [buildTeamPairKey("Titans", "Rabbitohs")]: [
+      {
+        kind: "result",
+        label: "Rabbitohs",
+        team: "Rabbitohs",
+        marketPct: 72.5,
+        modelPct: 66.7,
+        odds: 1.38,
+      },
+      {
+        kind: "try-scorer",
+        label: "Matthew Dufty",
+        suffix: "ANYTIME",
+        team: "Rabbitohs",
+        marketPct: 39,
+        modelPct: 39,
+        odds: 2.56,
+      },
+    ],
+    [buildTeamPairKey("Roosters", "Dolphins")]: [
+      {
+        kind: "result",
+        label: "Roosters",
+        team: "Roosters",
+        marketPct: 64.5,
+        modelPct: 59.2,
+        odds: 1.55,
+      },
+      {
+        kind: "try-scorer",
+        label: "James Tedesco",
+        suffix: "ANYTIME",
+        team: "Roosters",
+        marketPct: 44.5,
+        modelPct: 44.5,
+        odds: 2.25,
+      },
+    ],
+    [buildTeamPairKey("Cowboys", "Tigers")]: [
+      {
+        kind: "result",
+        label: "Cowboys",
+        team: "Cowboys",
+        marketPct: 69.4,
+        modelPct: 69.4,
+        odds: 1.44,
+      },
+      {
+        kind: "try-scorer",
+        label: "Jeremiah Nanai",
+        suffix: "ANYTIME",
+        team: "Cowboys",
+        marketPct: 32.3,
+        modelPct: 45.7,
+        odds: 3.1,
+      },
+      {
+        kind: "try-scorer",
+        label: "Jaxon Purdue",
+        suffix: "ANYTIME",
+        team: "Cowboys",
+        marketPct: 42.5,
+        modelPct: 42.5,
+        odds: 2.35,
+      },
+    ],
+    [buildTeamPairKey("Warriors", "Knights")]: [
+      {
+        kind: "result",
+        label: "Warriors",
+        team: "Warriors",
+        marketPct: 67.1,
+        modelPct: 67.1,
+        odds: 1.49,
+      },
+      {
+        kind: "try-scorer",
+        label: "Alofiana Khan-Pereira",
+        suffix: "ANYTIME",
+        team: "Warriors",
+        marketPct: 65.4,
+        modelPct: 65.5,
+        odds: 1.53,
+      },
+      {
+        kind: "try-scorer",
+        label: "Greg Marzhew",
+        suffix: "ANYTIME",
+        team: "Knights",
+        marketPct: 46.2,
+        modelPct: 46.2,
+        odds: 2.16,
+      },
+    ],
+  };
+
+  return data.predictions
+    .filter((match) => match.roundNumber === 26)
+    .map((match): SameGameMultiCardData | null => {
+      const legs = archivedLegs[getPredictionPairKey(match)];
+      if (!legs) return null;
+      const status = getMultiMatchStatus(match, settledMatchKeys, now);
+      // Only stand in for matches that have finished. While a match is still
+      // upcoming or live the generated card (real live odds) is the better
+      // source, so leave those alone.
+      if (status !== "completed") return null;
+      return {
+        key: buildMatchLabelKey(match.match),
+        match: `${match.homeTeam} V ${match.awayTeam}`,
+        fixture: match.fixture,
+        status,
+        legs,
+      };
+    })
+    .filter((card): card is SameGameMultiCardData => Boolean(card));
+}
+
 function mergeSameGameMultiCards(
   generatedCards: SameGameMultiCardData[],
   archivedCards: SameGameMultiCardData[],
@@ -13069,6 +13383,112 @@ function getRoundMultiLeg(
   return selected;
 }
 
+// Round 26 round-multi legs, hardcoded from the published Round 26 Multis
+// sheet. Once a match completes the live odds feed stops carrying it, so its
+// leg could no longer be rebuilt and silently dropped out of the round multi
+// (8 legs collapsing to 2). These stand in for completed matches only, so
+// upcoming matches keep using real live odds.
+const ROUND_26_ARCHIVED_ROUND_MULTI_LEGS: Record<string, {
+  kind: SameGameMultiLeg["kind"];
+  label: string;
+  suffix?: string;
+  team?: string;
+  marketPct: number;
+  modelPct: number;
+  odds: number;
+}> = {
+  [buildTeamPairKey("Broncos", "Storm")]: {
+    kind: "result",
+    label: "Storm",
+    team: "Storm",
+    marketPct: 58.8,
+    modelPct: 56.8,
+    odds: 1.7,
+  },
+  [buildTeamPairKey("Sea Eagles", "Dragons")]: {
+    kind: "try-scorer",
+    label: "Tom Trbojevic",
+    suffix: "ANYTIME",
+    team: "Sea Eagles",
+    marketPct: 48.8,
+    modelPct: 49.8,
+    odds: 2.05,
+  },
+  [buildTeamPairKey("Panthers", "Bulldogs")]: {
+    kind: "result",
+    label: "Panthers",
+    team: "Panthers",
+    marketPct: 76.9,
+    modelPct: 70.4,
+    odds: 1.3,
+  },
+  [buildTeamPairKey("Titans", "Rabbitohs")]: {
+    kind: "result",
+    label: "Rabbitohs",
+    team: "Rabbitohs",
+    marketPct: 72.5,
+    modelPct: 66.7,
+    odds: 1.38,
+  },
+  [buildTeamPairKey("Roosters", "Dolphins")]: {
+    kind: "result",
+    label: "Roosters",
+    team: "Roosters",
+    marketPct: 64.5,
+    modelPct: 59.2,
+    odds: 1.55,
+  },
+  [buildTeamPairKey("Cowboys", "Tigers")]: {
+    kind: "try-scorer",
+    label: "Jeremiah Nanai",
+    suffix: "ANYTIME",
+    team: "Cowboys",
+    marketPct: 32.3,
+    modelPct: 45.7,
+    odds: 3.1,
+  },
+  [buildTeamPairKey("Warriors", "Knights")]: {
+    kind: "try-scorer",
+    label: "Alofiana Khan-Pereira",
+    suffix: "ANYTIME",
+    team: "Warriors",
+    marketPct: 65.4,
+    modelPct: 65.5,
+    odds: 1.53,
+  },
+  [buildTeamPairKey("Eels", "Sharks")]: {
+    kind: "result",
+    label: "Sharks -6.5",
+    team: "Sharks",
+    marketPct: 52.6,
+    modelPct: 58.3,
+    odds: 1.9,
+  },
+};
+
+function getRound26ArchivedRoundMultiLeg(
+  match: PredictionRow,
+  status: MultiCardStatus,
+): RoundMultiLeg | null {
+  if (match.roundNumber !== 26) return null;
+  // Completed matches only -- a live match must keep using live odds.
+  if (status !== "completed") return null;
+  const entry = ROUND_26_ARCHIVED_ROUND_MULTI_LEGS[getPredictionPairKey(match)];
+  if (!entry) return null;
+  return {
+    key: `${buildMatchLabelKey(match.match)}-r26-archived`,
+    match: `${match.homeTeam} V ${match.awayTeam}`,
+    kind: entry.kind,
+    label: entry.label,
+    suffix: entry.suffix,
+    team: entry.team,
+    status,
+    marketPct: entry.marketPct,
+    modelPct: entry.modelPct,
+    odds: entry.odds,
+  };
+}
+
 function buildRoundMultiData(
   data: DashboardData,
   marketMap: SgmMarketMap,
@@ -13101,19 +13521,20 @@ function buildRoundMultiData(
 
   const legs = matches
     .map((match) => {
+      const status = getMultiMatchStatus(match, settledMatchKeys, now);
       const betrMarkets = getSgmMatchMarkets(marketMap, match).betr;
-      if (!betrMarkets) return null;
+      // A completed match is dropped by the live odds feed, so fall back to
+      // the published leg rather than losing it from the round multi.
+      if (!betrMarkets) return getRound26ArchivedRoundMultiLeg(match, status);
       const tryScorerRows = getTryScorerCandidateRows(
         data.tryScorers.filter((row) => {
           if (match.roundNumber && row.round && row.round !== match.roundNumber) return false;
           return getMatchPairKeyFromLabel(row.match) === getPredictionPairKey(match);
         }),
       );
-      return getRoundMultiLeg(
-        match,
-        betrMarkets,
-        tryScorerRows,
-        getMultiMatchStatus(match, settledMatchKeys, now),
+      return (
+        getRoundMultiLeg(match, betrMarkets, tryScorerRows, status) ||
+        getRound26ArchivedRoundMultiLeg(match, status)
       );
     })
     .filter((leg): leg is RoundMultiLeg => Boolean(leg));
@@ -13428,16 +13849,19 @@ function MultiPage({
   }, [frozen.round, frozen.snapshots, marketMap]);
   const cards = useMemo(() => {
     const generatedCards = buildSameGameMultiCards(data, effectiveMarketMap, now);
-    if (frozen.round !== 25) return generatedCards;
     const settledMatchKeys = new Set(
       data.betLog
         .filter((bet) => bet.result === "W" || bet.result === "L")
         .map((bet) => `${bet.round}:${buildMatchLabelKey(bet.match)}`),
     );
-    return mergeSameGameMultiCards(
-      generatedCards,
-      getRound25ArchivedSameGameMultiCards(data, settledMatchKeys, now),
-    );
+    // Hardcoded per-round archives keep completed matches on the Multi page
+    // for the whole round, since the live odds feed drops a match once it
+    // finishes. Same merge the Matches page uses.
+    const archivedCards = [
+      ...getRound25ArchivedSameGameMultiCards(data, settledMatchKeys, now),
+      ...getRound26ArchivedSameGameMultiCards(data, settledMatchKeys, now),
+    ];
+    return mergeSameGameMultiCards(generatedCards, archivedCards);
   }, [data, effectiveMarketMap, frozen.round, now]);
   const roundMulti = useMemo(
     () => buildRoundMultiData(data, effectiveMarketMap, now),
