@@ -8,6 +8,11 @@
 // calculations, odds feeds or historical archive behaviour.
 
 const GRAND_FINAL_ROUND = 31;
+// Approved Core Play market: Sydney Roosters at the -6.5 line. The model margin
+// (+8) beats this line by only 1.5 points, below the generic 2.5-point
+// selectivity gate, so it is published as an explicit manual selection rather
+// than by loosening the gate for every match.
+const GRAND_FINAL_ROOSTERS_LINE = -6.5;
 
 function normalizeTeam(value: string) {
   const team = String(value || "")
@@ -50,7 +55,54 @@ export type GrandFinalSameGameMultiPlan = {
   scorers: string[];
 };
 
-// Approved SGM: Sydney head-to-head + Daniel Tupou anytime + Dominic Young
+// Approved Core Play: Sydney Roosters -6.5. Scoped to the exact round, fixture,
+// market and point, so it can bypass the generic selectivity gate without
+// loosening thresholds for any other match. A real live market at that exact
+// point is still required — nothing is published if the market is absent.
+export function shouldForceGrandFinalCorePlay({
+  roundNumber,
+  homeTeam,
+  awayTeam,
+  marketType,
+  selection,
+  marketPoint,
+}: {
+  roundNumber: number;
+  homeTeam: string;
+  awayTeam: string;
+  marketType: string;
+  selection: string;
+  marketPoint?: number;
+}) {
+  const selectionTeam = normalizeTeam(selection.replace(/[+-].*$/, "").trim());
+  return isGrandFinalMatch(roundNumber, homeTeam, awayTeam) &&
+    marketType === "Line" &&
+    selectionTeam === "sydney" &&
+    Number.isFinite(marketPoint) &&
+    Math.abs(Number(marketPoint) - GRAND_FINAL_ROOSTERS_LINE) <= 0.01;
+}
+
+// Given chooser candidates already sorted best-first, return the manually
+// approved one if any. Undefined means "no override — let the generic
+// thresholds decide", which keeps every other round's behaviour unchanged.
+export function pickForcedCorePlay<T extends { isManualApproved?: boolean }>(
+  candidates: readonly T[],
+): T | undefined {
+  return candidates.find((candidate) => candidate.isManualApproved === true);
+}
+
+// A live Grand Final override must beat an older pending official selection so
+// the Premium page and the write-once freeze snapshot cannot preserve a
+// superseded play. Ordinary matches retain official-pending precedence.
+export function preferForcedGrandFinalCorePlay<T extends { isManualApproved?: boolean }>(
+  livePlay: T | null,
+  officialPendingPlay: T | null,
+): T | null {
+  if (livePlay?.isManualApproved === true) return livePlay;
+  return officialPendingPlay || livePlay;
+}
+
+// Approved SGM: Sydney head-to-head + Daniel Tupou anytime + Fletcher Sharpe
 // anytime. The H2H leg (not a line) is used for the result, and the scorer
 // legs are named explicitly rather than derived from the generic value gate.
 export function getGrandFinalSameGameMultiPlan(
@@ -62,7 +114,7 @@ export function getGrandFinalSameGameMultiPlan(
   return {
     resultLeg: "h2h",
     resultTeam: "sydney",
-    scorers: ["Daniel Tupou", "Dominic Young"],
+    scorers: ["Daniel Tupou", "Fletcher Sharpe"],
   };
 }
 

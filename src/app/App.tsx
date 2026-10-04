@@ -16,8 +16,11 @@ import {
   settleRound25SameGameMulti,
 } from "./round25-results";
 import {
+  pickForcedCorePlay,
+  preferForcedGrandFinalCorePlay,
   resolveGrandFinalSameGameMulti,
   shouldBuildRoundMulti,
+  shouldForceGrandFinalCorePlay,
 } from "./grand-final-overrides";
 import {
   Activity,
@@ -3314,13 +3317,16 @@ function useFrozenRoundData(
         continue;
       }
       const liveCorePlay = getBestPremiumMarketPlayForMatch(row, marketMap, "bestbet");
-      const corePlay =
-        getOfficialPendingPremiumMarketPlayForMatch(
-          row,
-          data.betLog,
-          marketMap,
-          liveCorePlay,
-        ) || liveCorePlay;
+      const officialPendingCorePlay = getOfficialPendingPremiumMarketPlayForMatch(
+        row,
+        data.betLog,
+        marketMap,
+        liveCorePlay,
+      );
+      const corePlay = preferForcedGrandFinalCorePlay(
+        liveCorePlay,
+        officialPendingCorePlay,
+      );
       const selectedPlays = [
         { mode: "bestbet" as const, play: corePlay },
         { mode: "h2h" as const, play: getBestPremiumMarketPlayForMatch(row, marketMap, "h2h") },
@@ -9866,21 +9872,38 @@ function getBestPremiumMarketPlayForMatch(
       const coverEdge = projectedTeamMargin + spread.point;
       const modelPct = probabilityFromEdge(coverEdge, RIGHTEDGE_TUNING.lineScale);
 
+      const selection = `${team} ${formatSgmLine(spread.point)}`;
+      const isManualApproved = shouldForceGrandFinalCorePlay({
+        roundNumber: row.roundNumber,
+        homeTeam: row.homeTeam,
+        awayTeam: row.awayTeam,
+        marketType: "Line",
+        selection,
+        marketPoint: spread.point,
+      });
+
       // Lines are ~coinflips by design — gate on the POINTS the model beats the
-      // line by (selectivity), not a fake win%.
-      if (coverEdge < RIGHTEDGE_TUNING.minLineEdgePts) return;
-      if (spread.odds < RIGHTEDGE_TUNING.minOdds || !withinHeadlineOdds(spread.odds)) return;
-      if (!hasPremiumMatchValueEdge(modelPct, spread.odds)) return;
+      // line by (selectivity), not a fake win%. The manually approved Grand
+      // Final line is the sole exception; every other match keeps all gates,
+      // and even the approved play still requires a real live market price.
+      if (!isManualApproved && coverEdge < RIGHTEDGE_TUNING.minLineEdgePts) return;
+      if (!Number.isFinite(spread.odds) || spread.odds <= 1) return;
+      if (
+        !isManualApproved &&
+        (spread.odds < RIGHTEDGE_TUNING.minOdds || !withinHeadlineOdds(spread.odds))
+      ) return;
+      if (!isManualApproved && !hasPremiumMatchValueEdge(modelPct, spread.odds)) return;
 
       candidates.push({
         id: `${row.match}-${bookKey}-line-${team}-${spread.point}`,
         row,
         type: "Line",
-        selection: `${team} ${formatSgmLine(spread.point)}`,
+        selection,
         bookmaker,
         odds: spread.odds,
         modelPct,
         modelEdge: coverEdge,
+        isManualApproved,
         marketPoint: spread.point,
         projectedValue: projectedTeamMargin,
       });
@@ -10028,6 +10051,10 @@ function getBestPremiumMarketPlayForMatch(
 
   // Overall Best Bet: adjusted confidence only. H2H can beat a line or total
   // with a smaller raw edge because line/total disagreement is less calibrated.
+  // A manually approved candidate (the Grand Final Roosters line) is always the
+  // Core Play for its match; every other match keeps the generic thresholds.
+  const forcedCorePlay = pickForcedCorePlay(scoredCandidates);
+  if (forcedCorePlay) return withPremiumChooserMetrics(forcedCorePlay, "Core Play");
   const corePlay = scoredCandidates.find(passesPremiumCoreThresholds);
   return corePlay ? withPremiumChooserMetrics(corePlay, "Core Play") : null;
 }
@@ -10244,15 +10271,15 @@ function buildPremiumMarketPlays(
     .map((row) => {
       const livePlay = getBestPremiumMarketPlayForMatch(row, marketMap, mode);
       if (mode !== "bestbet") return livePlay;
-      return (
-        getLockedCompletedPremiumMarketPlayForMatch(row) ||
-        getOfficialPendingPremiumMarketPlayForMatch(
-          row,
-          data.betLog,
-          marketMap,
-          livePlay,
-        ) || livePlay
+      const lockedCompletedPlay = getLockedCompletedPremiumMarketPlayForMatch(row);
+      if (lockedCompletedPlay) return lockedCompletedPlay;
+      const officialPendingPlay = getOfficialPendingPremiumMarketPlayForMatch(
+        row,
+        data.betLog,
+        marketMap,
+        livePlay,
       );
+      return preferForcedGrandFinalCorePlay(livePlay, officialPendingPlay);
     })
     .filter(Boolean) as PremiumMarketPlay[];
 }
