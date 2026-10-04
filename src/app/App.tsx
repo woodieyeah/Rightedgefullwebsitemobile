@@ -136,7 +136,7 @@ const NRL_COLORS: Record<
   "wests tigers": { primary: "#FF7900", secondary: "#000000" },
 };
 
-function getTeamColors(teamName: string) {
+export function getTeamColors(teamName: string) {
   if (!teamName)
     return { primary: "#16161D", secondary: "#9CA3AF" };
   const normalized = teamName.toLowerCase();
@@ -242,7 +242,7 @@ function getTeamIcon(teamName: string): React.ElementType {
   return ShieldAlert;
 }
 
-function TeamLogo({
+export function TeamLogo({
   teamName,
   className = "",
 }: {
@@ -4181,7 +4181,7 @@ function getAffiliateButtonClass(bookmaker: string | undefined, sizeClasses: str
   return `inline-flex max-w-full items-center justify-center gap-2 border ${sizeClasses} font-medium uppercase tracking-widest ${colorClasses} transition hover:opacity-90`;
 }
 
-function AffiliateMarketButton({
+export function AffiliateMarketButton({
   payload,
   bookmaker,
   odds,
