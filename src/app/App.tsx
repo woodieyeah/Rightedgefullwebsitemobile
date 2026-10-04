@@ -8,6 +8,7 @@ import { AdminDashboard } from "./components/AdminDashboard";
 import { failClosedAuthState, isVerifiedAdminSession } from "./auth-session";
 import { trackLinkedInConversion } from "../lib/linkedin";
 import { capturePostHogEvent, identifyPostHogUser } from "../lib/posthog";
+import { ModelLabPage } from "./lab/ModelLabPage";
 import {
   ROUND_25_CORE_PLAYS,
   ROUND_25_SAME_GAME_MULTIS,
@@ -14258,7 +14259,7 @@ function AppDashboard({
   const [page, setPage] = useState(() => {
     const hash = window.location.hash.replace("#", "");
     if (
-      ["matches", "best-bets", "multi", "try-scorers", "performance", "admin", "admin-results"].includes(
+      ["matches", "best-bets", "multi", "try-scorers", "performance", "admin", "admin-results", "model-lab"].includes(
         hash,
       )
     ) {
@@ -14337,6 +14338,7 @@ function AppDashboard({
           "performance",
           "admin",
           "admin-results",
+          "model-lab",
         ].includes(hash)
       ) {
         setPage(hash);
@@ -14738,6 +14740,7 @@ function AppDashboard({
               {page === "admin-results" && isAdmin && (
                 <AdminResultsPage data={data} isAdmin={isAdmin} />
               )}
+              {page === "model-lab" && isAdmin && <ModelLabPage />}
               {page === "performance" && (
                 <div className="space-y-8">
                   <ResultsPage data={data} />
@@ -15303,7 +15306,7 @@ export default function App() {
     const analyticsName = rawHash.replace(/-/g, "_");
     (window as any).trackAnalyticsEvent?.(`${analyticsName}_view`, {
       section: rawHash,
-      app_section: ["matches", "best-bets", "multi", "try-scorers", "performance", "admin", "admin-results"].includes(rawHash),
+      app_section: ["matches", "best-bets", "multi", "try-scorers", "performance", "admin", "admin-results", "model-lab"].includes(rawHash),
     });
   };
 
@@ -15362,7 +15365,7 @@ export default function App() {
 
   const checkHash = () => {
     const hash = window.location.hash.replace("#", "");
-    const appHashes = ["matches", "best-bets", "multi", "try-scorers", "performance", "admin", "admin-results"];
+    const appHashes = ["matches", "best-bets", "multi", "try-scorers", "performance", "admin", "admin-results", "model-lab"];
     const premiumHashes = ["best-bets", "try-scorers"];
     const publicHashes = ["results", "methodology", "ad-studio", "articles", "article-round-5-2026", "article-methodology", "cricket"];
 

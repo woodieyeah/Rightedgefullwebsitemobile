@@ -1,0 +1,828 @@
+{
+  "capturedAt": "2026-10-04T13:05:00+10:00",
+  "competition": "NRL",
+  "round": 31,
+  "matchKey": "newcastleknights__sydneyroosters",
+  "homeTeam": "Sydney Roosters",
+  "awayTeam": "Newcastle Knights",
+  "commenceTime": "2026-10-04T08:30:00Z",
+  "anchor": {
+    "source": "betfair_ex_au h2h midpoint (back+lay)/2, de-vigged",
+    "back": {
+      "Newcastle Knights": 3.25,
+      "Sydney Roosters": 1.42
+    },
+    "lay": {
+      "Newcastle Knights": 3.35,
+      "Sydney Roosters": 1.43
+    },
+    "midpoint": {
+      "Newcastle Knights": 3.3,
+      "Sydney Roosters": 1.425
+    },
+    "probabilities": {
+      "Newcastle Knights": 30.16,
+      "Sydney Roosters": 69.84
+    },
+    "maxSpreadPct": 3.08
+  },
+  "sharpLines": {
+    "source": "pinnacle (regions=eu,uk)",
+    "line": {
+      "team": "Sydney Roosters",
+      "point": -6.5,
+      "probabilities": {
+        "Newcastle Knights": 47.4,
+        "Sydney Roosters": 52.6
+      }
+    },
+    "total": {
+      "point": 43.5,
+      "probabilities": {
+        "Over": 51.04,
+        "Under": 48.96
+      }
+    },
+    "projectedScore": {
+      "Sydney Roosters": 25.0,
+      "Newcastle Knights": 18.5
+    },
+    "marginSdAssumed": 12.5
+  },
+  "offers": [
+    {
+      "book": "Bet Right",
+      "market": "h2h",
+      "selection": "Sydney Roosters",
+      "point": null,
+      "price": 1.45,
+      "fairPct": 69.84,
+      "edgePct": 0.88
+    },
+    {
+      "book": "SportsBet",
+      "market": "total",
+      "selection": "Over",
+      "point": 42.5,
+      "price": 1.91,
+      "fairPct": 52.85,
+      "edgePct": 0.49
+    },
+    {
+      "book": "BetOnline.ag",
+      "market": "total",
+      "selection": "Over",
+      "point": 42.5,
+      "price": 1.91,
+      "fairPct": 52.85,
+      "edgePct": 0.49
+    },
+    {
+      "book": "SportsBet",
+      "market": "h2h",
+      "selection": "Sydney Roosters",
+      "point": null,
+      "price": 1.44,
+      "fairPct": 69.84,
+      "edgePct": 0.4
+    },
+    {
+      "book": "PlayUp",
+      "market": "total",
+      "selection": "Over",
+      "point": 42.5,
+      "price": 1.9,
+      "fairPct": 52.85,
+      "edgePct": 0.22
+    },
+    {
+      "book": "Unibet (NL)",
+      "market": "total",
+      "selection": "Over",
+      "point": 42.5,
+      "price": 1.89,
+      "fairPct": 52.85,
+      "edgePct": -0.06
+    },
+    {
+      "book": "Casumo",
+      "market": "total",
+      "selection": "Over",
+      "point": 42.5,
+      "price": 1.89,
+      "fairPct": 52.85,
+      "edgePct": -0.06
+    },
+    {
+      "book": "Betr",
+      "market": "h2h",
+      "selection": "Sydney Roosters",
+      "point": null,
+      "price": 1.43,
+      "fairPct": 69.84,
+      "edgePct": -0.09
+    },
+    {
+      "book": "Grosvenor",
+      "market": "total",
+      "selection": "Over",
+      "point": 42.5,
+      "price": 1.88,
+      "fairPct": 52.85,
+      "edgePct": -0.34
+    },
+    {
+      "book": "TABtouch",
+      "market": "total",
+      "selection": "Over",
+      "point": 42.5,
+      "price": 1.88,
+      "fairPct": 52.85,
+      "edgePct": -0.34
+    },
+    {
+      "book": "Neds",
+      "market": "h2h",
+      "selection": "Sydney Roosters",
+      "point": null,
+      "price": 1.42,
+      "fairPct": 69.84,
+      "edgePct": -0.58
+    },
+    {
+      "book": "Ladbrokes",
+      "market": "h2h",
+      "selection": "Sydney Roosters",
+      "point": null,
+      "price": 1.42,
+      "fairPct": 69.84,
+      "edgePct": -0.58
+    },
+    {
+      "book": "PointsBet (AU)",
+      "market": "h2h",
+      "selection": "Sydney Roosters",
+      "point": null,
+      "price": 1.42,
+      "fairPct": 69.84,
+      "edgePct": -0.58
+    },
+    {
+      "book": "TAB",
+      "market": "h2h",
+      "selection": "Sydney Roosters",
+      "point": null,
+      "price": 1.42,
+      "fairPct": 69.84,
+      "edgePct": -0.58
+    },
+    {
+      "book": "Betfair",
+      "market": "h2h",
+      "selection": "Sydney Roosters",
+      "point": null,
+      "price": 1.42,
+      "fairPct": 69.84,
+      "edgePct": -0.58
+    },
+    {
+      "book": "PlayUp",
+      "market": "h2h",
+      "selection": "Sydney Roosters",
+      "point": null,
+      "price": 1.42,
+      "fairPct": 69.84,
+      "edgePct": -0.58
+    },
+    {
+      "book": "Betfair",
+      "market": "h2h",
+      "selection": "Newcastle Knights",
+      "point": null,
+      "price": 3.25,
+      "fairPct": 30.16,
+      "edgePct": -0.61
+    },
+    {
+      "book": "Pinnacle",
+      "market": "total",
+      "selection": "Under",
+      "point": 43.5,
+      "price": 1.96,
+      "fairPct": 50.0,
+      "edgePct": -1.02
+    },
+    {
+      "book": "Coral",
+      "market": "total",
+      "selection": "Over",
+      "point": 42.5,
+      "price": 1.85,
+      "fairPct": 52.85,
+      "edgePct": -1.21
+    },
+    {
+      "book": "Ladbrokes",
+      "market": "total",
+      "selection": "Over",
+      "point": 42.5,
+      "price": 1.85,
+      "fairPct": 52.85,
+      "edgePct": -1.21
+    },
+    {
+      "book": "Unibet",
+      "market": "h2h",
+      "selection": "Sydney Roosters",
+      "point": null,
+      "price": 1.4,
+      "fairPct": 69.84,
+      "edgePct": -1.59
+    },
+    {
+      "book": "TABtouch",
+      "market": "h2h",
+      "selection": "Sydney Roosters",
+      "point": null,
+      "price": 1.4,
+      "fairPct": 69.84,
+      "edgePct": -1.59
+    },
+    {
+      "book": "Bet Right",
+      "market": "total",
+      "selection": "Over",
+      "point": 42.5,
+      "price": 1.83,
+      "fairPct": 52.85,
+      "edgePct": -1.8
+    },
+    {
+      "book": "Coolbet",
+      "market": "total",
+      "selection": "Over",
+      "point": 42.5,
+      "price": 1.82,
+      "fairPct": 52.85,
+      "edgePct": -2.1
+    },
+    {
+      "book": "PointsBet (AU)",
+      "market": "total",
+      "selection": "Over",
+      "point": 43.5,
+      "price": 1.9,
+      "fairPct": 50.0,
+      "edgePct": -2.63
+    },
+    {
+      "book": "PointsBet (AU)",
+      "market": "total",
+      "selection": "Under",
+      "point": 43.5,
+      "price": 1.9,
+      "fairPct": 50.0,
+      "edgePct": -2.63
+    },
+    {
+      "book": "TAB",
+      "market": "total",
+      "selection": "Over",
+      "point": 42.5,
+      "price": 1.8,
+      "fairPct": 52.85,
+      "edgePct": -2.71
+    },
+    {
+      "book": "TAB",
+      "market": "total",
+      "selection": "Under",
+      "point": 42.5,
+      "price": 2.0,
+      "fairPct": 47.15,
+      "edgePct": -2.85
+    },
+    {
+      "book": "TAB",
+      "market": "h2h",
+      "selection": "Newcastle Knights",
+      "point": null,
+      "price": 3.0,
+      "fairPct": 30.16,
+      "edgePct": -3.17
+    },
+    {
+      "book": "Pinnacle",
+      "market": "total",
+      "selection": "Over",
+      "point": 43.5,
+      "price": 1.88,
+      "fairPct": 50.0,
+      "edgePct": -3.19
+    },
+    {
+      "book": "Bet Right",
+      "market": "total",
+      "selection": "Under",
+      "point": 42.5,
+      "price": 1.97,
+      "fairPct": 47.15,
+      "edgePct": -3.61
+    },
+    {
+      "book": "Neds",
+      "market": "h2h",
+      "selection": "Newcastle Knights",
+      "point": null,
+      "price": 2.95,
+      "fairPct": 30.16,
+      "edgePct": -3.74
+    },
+    {
+      "book": "Ladbrokes",
+      "market": "h2h",
+      "selection": "Newcastle Knights",
+      "point": null,
+      "price": 2.95,
+      "fairPct": 30.16,
+      "edgePct": -3.74
+    },
+    {
+      "book": "TABtouch",
+      "market": "h2h",
+      "selection": "Newcastle Knights",
+      "point": null,
+      "price": 2.95,
+      "fairPct": 30.16,
+      "edgePct": -3.74
+    },
+    {
+      "book": "Bet Right",
+      "market": "line",
+      "selection": "Sydney Roosters",
+      "point": -6.5,
+      "price": 1.85,
+      "fairPct": 50.0,
+      "edgePct": -4.05
+    },
+    {
+      "book": "SportsBet",
+      "market": "h2h",
+      "selection": "Newcastle Knights",
+      "point": null,
+      "price": 2.9,
+      "fairPct": 30.16,
+      "edgePct": -4.32
+    },
+    {
+      "book": "Unibet",
+      "market": "h2h",
+      "selection": "Newcastle Knights",
+      "point": null,
+      "price": 2.9,
+      "fairPct": 30.16,
+      "edgePct": -4.32
+    },
+    {
+      "book": "PlayUp",
+      "market": "h2h",
+      "selection": "Newcastle Knights",
+      "point": null,
+      "price": 2.9,
+      "fairPct": 30.16,
+      "edgePct": -4.32
+    },
+    {
+      "book": "Betr",
+      "market": "h2h",
+      "selection": "Newcastle Knights",
+      "point": null,
+      "price": 2.9,
+      "fairPct": 30.16,
+      "edgePct": -4.32
+    },
+    {
+      "book": "PointsBet (AU)",
+      "market": "h2h",
+      "selection": "Newcastle Knights",
+      "point": null,
+      "price": 2.85,
+      "fairPct": 30.16,
+      "edgePct": -4.93
+    },
+    {
+      "book": "Pinnacle",
+      "market": "line",
+      "selection": "Sydney Roosters",
+      "point": -6.5,
+      "price": 1.82,
+      "fairPct": 50.0,
+      "edgePct": -4.95
+    },
+    {
+      "book": "BetOnline.ag",
+      "market": "total",
+      "selection": "Under",
+      "point": 42.5,
+      "price": 1.91,
+      "fairPct": 47.15,
+      "edgePct": -5.2
+    },
+    {
+      "book": "PlayUp",
+      "market": "total",
+      "selection": "Under",
+      "point": 42.5,
+      "price": 1.9,
+      "fairPct": 47.15,
+      "edgePct": -5.48
+    },
+    {
+      "book": "BetOnline.ag",
+      "market": "line",
+      "selection": "Sydney Roosters",
+      "point": -7.5,
+      "price": 1.91,
+      "fairPct": 46.81,
+      "edgePct": -5.54
+    },
+    {
+      "book": "Bet Right",
+      "market": "h2h",
+      "selection": "Newcastle Knights",
+      "point": null,
+      "price": 2.8,
+      "fairPct": 30.16,
+      "edgePct": -5.56
+    },
+    {
+      "book": "SportsBet",
+      "market": "total",
+      "selection": "Under",
+      "point": 42.5,
+      "price": 1.89,
+      "fairPct": 47.15,
+      "edgePct": -5.76
+    },
+    {
+      "book": "Unibet (NL)",
+      "market": "total",
+      "selection": "Under",
+      "point": 42.5,
+      "price": 1.89,
+      "fairPct": 47.15,
+      "edgePct": -5.76
+    },
+    {
+      "book": "Casumo",
+      "market": "total",
+      "selection": "Under",
+      "point": 42.5,
+      "price": 1.89,
+      "fairPct": 47.15,
+      "edgePct": -5.76
+    },
+    {
+      "book": "PointsBet (AU)",
+      "market": "line",
+      "selection": "Sydney Roosters",
+      "point": -7.5,
+      "price": 1.9,
+      "fairPct": 46.81,
+      "edgePct": -5.82
+    },
+    {
+      "book": "Grosvenor",
+      "market": "total",
+      "selection": "Under",
+      "point": 42.5,
+      "price": 1.88,
+      "fairPct": 47.15,
+      "edgePct": -6.04
+    },
+    {
+      "book": "TABtouch",
+      "market": "total",
+      "selection": "Under",
+      "point": 42.5,
+      "price": 1.88,
+      "fairPct": 47.15,
+      "edgePct": -6.04
+    },
+    {
+      "book": "Coolbet",
+      "market": "total",
+      "selection": "Under",
+      "point": 42.5,
+      "price": 1.88,
+      "fairPct": 47.15,
+      "edgePct": -6.04
+    },
+    {
+      "book": "SportsBet",
+      "market": "line",
+      "selection": "Sydney Roosters",
+      "point": -8.5,
+      "price": 1.98,
+      "fairPct": 43.64,
+      "edgePct": -6.86
+    },
+    {
+      "book": "Coral",
+      "market": "total",
+      "selection": "Under",
+      "point": 42.5,
+      "price": 1.85,
+      "fairPct": 47.15,
+      "edgePct": -6.9
+    },
+    {
+      "book": "Ladbrokes",
+      "market": "total",
+      "selection": "Under",
+      "point": 42.5,
+      "price": 1.85,
+      "fairPct": 47.15,
+      "edgePct": -6.9
+    },
+    {
+      "book": "Coral",
+      "market": "line",
+      "selection": "Sydney Roosters",
+      "point": -3.5,
+      "price": 1.5,
+      "fairPct": 59.48,
+      "edgePct": -7.18
+    },
+    {
+      "book": "Ladbrokes",
+      "market": "line",
+      "selection": "Sydney Roosters",
+      "point": -3.5,
+      "price": 1.5,
+      "fairPct": 59.48,
+      "edgePct": -7.18
+    },
+    {
+      "book": "PlayUp",
+      "market": "line",
+      "selection": "Sydney Roosters",
+      "point": -7.5,
+      "price": 1.85,
+      "fairPct": 46.81,
+      "edgePct": -7.24
+    },
+    {
+      "book": "Betr",
+      "market": "line",
+      "selection": "Sydney Roosters",
+      "point": -7.5,
+      "price": 1.85,
+      "fairPct": 46.81,
+      "edgePct": -7.24
+    },
+    {
+      "book": "TAB",
+      "market": "line",
+      "selection": "Sydney Roosters",
+      "point": -8.5,
+      "price": 1.95,
+      "fairPct": 43.64,
+      "edgePct": -7.64
+    },
+    {
+      "book": "Grosvenor",
+      "market": "line",
+      "selection": "Sydney Roosters",
+      "point": -7.5,
+      "price": 1.8,
+      "fairPct": 46.81,
+      "edgePct": -8.74
+    },
+    {
+      "book": "Unibet (SE)",
+      "market": "line",
+      "selection": "Sydney Roosters",
+      "point": -7.5,
+      "price": 1.8,
+      "fairPct": 46.81,
+      "edgePct": -8.74
+    },
+    {
+      "book": "Unibet",
+      "market": "line",
+      "selection": "Sydney Roosters",
+      "point": -7.5,
+      "price": 1.8,
+      "fairPct": 46.81,
+      "edgePct": -8.74
+    },
+    {
+      "book": "TABtouch",
+      "market": "line",
+      "selection": "Sydney Roosters",
+      "point": -7.5,
+      "price": 1.8,
+      "fairPct": 46.81,
+      "edgePct": -8.74
+    },
+    {
+      "book": "Unibet (NL)",
+      "market": "line",
+      "selection": "Sydney Roosters",
+      "point": -7.5,
+      "price": 1.8,
+      "fairPct": 46.81,
+      "edgePct": -8.74
+    },
+    {
+      "book": "LeoVegas (SE)",
+      "market": "line",
+      "selection": "Sydney Roosters",
+      "point": -7.5,
+      "price": 1.8,
+      "fairPct": 46.81,
+      "edgePct": -8.74
+    },
+    {
+      "book": "Casumo",
+      "market": "line",
+      "selection": "Sydney Roosters",
+      "point": -7.5,
+      "price": 1.8,
+      "fairPct": 46.81,
+      "edgePct": -8.74
+    },
+    {
+      "book": "Coolbet",
+      "market": "line",
+      "selection": "Sydney Roosters",
+      "point": -7.5,
+      "price": 1.8,
+      "fairPct": 46.81,
+      "edgePct": -8.74
+    },
+    {
+      "book": "Coral",
+      "market": "line",
+      "selection": "Newcastle Knights",
+      "point": 3.5,
+      "price": 2.4,
+      "fairPct": 21.19,
+      "edgePct": -20.48
+    },
+    {
+      "book": "Ladbrokes",
+      "market": "line",
+      "selection": "Newcastle Knights",
+      "point": 3.5,
+      "price": 2.4,
+      "fairPct": 21.19,
+      "edgePct": -20.48
+    },
+    {
+      "book": "Pinnacle",
+      "market": "line",
+      "selection": "Newcastle Knights",
+      "point": 6.5,
+      "price": 2.02,
+      "fairPct": 14.92,
+      "edgePct": -34.59
+    },
+    {
+      "book": "Bet Right",
+      "market": "line",
+      "selection": "Newcastle Knights",
+      "point": 6.5,
+      "price": 1.95,
+      "fairPct": 14.92,
+      "edgePct": -36.37
+    },
+    {
+      "book": "Unibet (SE)",
+      "market": "line",
+      "selection": "Newcastle Knights",
+      "point": 7.5,
+      "price": 2.0,
+      "fairPct": 13.14,
+      "edgePct": -36.86
+    },
+    {
+      "book": "Unibet",
+      "market": "line",
+      "selection": "Newcastle Knights",
+      "point": 7.5,
+      "price": 2.0,
+      "fairPct": 13.14,
+      "edgePct": -36.86
+    },
+    {
+      "book": "TABtouch",
+      "market": "line",
+      "selection": "Newcastle Knights",
+      "point": 7.5,
+      "price": 2.0,
+      "fairPct": 13.14,
+      "edgePct": -36.86
+    },
+    {
+      "book": "Unibet (NL)",
+      "market": "line",
+      "selection": "Newcastle Knights",
+      "point": 7.5,
+      "price": 2.0,
+      "fairPct": 13.14,
+      "edgePct": -36.86
+    },
+    {
+      "book": "LeoVegas (SE)",
+      "market": "line",
+      "selection": "Newcastle Knights",
+      "point": 7.5,
+      "price": 2.0,
+      "fairPct": 13.14,
+      "edgePct": -36.86
+    },
+    {
+      "book": "Casumo",
+      "market": "line",
+      "selection": "Newcastle Knights",
+      "point": 7.5,
+      "price": 2.0,
+      "fairPct": 13.14,
+      "edgePct": -36.86
+    },
+    {
+      "book": "Grosvenor",
+      "market": "line",
+      "selection": "Newcastle Knights",
+      "point": 7.5,
+      "price": 1.95,
+      "fairPct": 13.14,
+      "edgePct": -38.15
+    },
+    {
+      "book": "PlayUp",
+      "market": "line",
+      "selection": "Newcastle Knights",
+      "point": 7.5,
+      "price": 1.95,
+      "fairPct": 13.14,
+      "edgePct": -38.15
+    },
+    {
+      "book": "Betr",
+      "market": "line",
+      "selection": "Newcastle Knights",
+      "point": 7.5,
+      "price": 1.95,
+      "fairPct": 13.14,
+      "edgePct": -38.15
+    },
+    {
+      "book": "BetOnline.ag",
+      "market": "line",
+      "selection": "Newcastle Knights",
+      "point": 7.5,
+      "price": 1.91,
+      "fairPct": 13.14,
+      "edgePct": -39.22
+    },
+    {
+      "book": "PointsBet (AU)",
+      "market": "line",
+      "selection": "Newcastle Knights",
+      "point": 7.5,
+      "price": 1.9,
+      "fairPct": 13.14,
+      "edgePct": -39.5
+    },
+    {
+      "book": "Coolbet",
+      "market": "line",
+      "selection": "Newcastle Knights",
+      "point": 7.5,
+      "price": 1.9,
+      "fairPct": 13.14,
+      "edgePct": -39.5
+    },
+    {
+      "book": "TAB",
+      "market": "line",
+      "selection": "Newcastle Knights",
+      "point": 8.5,
+      "price": 1.85,
+      "fairPct": 11.51,
+      "edgePct": -42.55
+    },
+    {
+      "book": "SportsBet",
+      "market": "line",
+      "selection": "Newcastle Knights",
+      "point": 8.5,
+      "price": 1.83,
+      "fairPct": 11.51,
+      "edgePct": -43.14
+    }
+  ]
+}
