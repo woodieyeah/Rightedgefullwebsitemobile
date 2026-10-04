@@ -10,22 +10,28 @@
  *     -> pick ledger with automated settlement, P&L, ROI and CLV
  *
  * VISIBILITY
- * This component is rendered only when `isAdmin` is true, exactly like the
- * existing "Results Entry" and "Admin" pages (see getAppPages). It holds no
- * secrets: the market capture it reads is public odds data. The gate exists so
- * subscribers are not shown an unvalidated model, NOT because the contents are
- * sensitive. Do not use it to display anything that would matter if leaked.
+ * Rendered only when `isAdmin` is true, exactly like Results Entry and Admin
+ * (see getAppPages). It holds no secrets — the market capture is public odds
+ * data. The gate exists so subscribers are not shown an unvalidated model.
  *
  * DATA
  * `grand-final-capture.json` is a frozen snapshot of real market data taken on
- * 2026-10-04 before kickoff. It is fixture data for the lab only. Nothing here
- * feeds the live site, the freeze snapshot, or the published plays.
+ * 2026-10-04 before kickoff. Fixture data for the lab only — nothing here feeds
+ * the live site, the freeze snapshot, or the published plays.
  *
- * STYLING
- * Uses the site's own design language: #111116 panels on #1E1E2E borders,
- * black uppercase headings, #FFEA00 eyebrows, #00E676 positive, #9CA3AF muted.
- * Do NOT introduce slate/indigo Tailwind defaults here — they are not part of
- * this product's palette and read as a foreign component pasted into the page.
+ * STYLING — READ BEFORE EDITING
+ * The app runs under `rightedge-admin-editorial-theme`, which rewrites the dark
+ * palette into the light editorial one at runtime (src/styles/theme.css). That
+ * override covers SOLID tokens only:
+ *     bg-[#111116]  bg-[#16161D]  text-white  text-[#9CA3AF]  border-[#1E1E2E]
+ *
+ * It does NOT cover opacity variants. `bg-white/5`, `bg-[#00E676]/10` and
+ * `text-white/40` pass through untouched and render as near-invisible washes on
+ * the cream background. Never use an opacity variant on this page.
+ *
+ * Structure mirrors the live match / premium-play cards: bordered panels with a
+ * header row, metric tiles of bordered #16161D with [8px] 0.18em labels,
+ * #00E676 for positive numbers, #6B7280 for tile labels, #FF2E63 for negative.
  */
 
 import { useEffect, useMemo, useState } from "react";
@@ -54,22 +60,65 @@ function fmtUnits(n: number | null, dp = 2) {
   return `${n >= 0 ? "+" : ""}${n.toFixed(dp)}u`;
 }
 
-function Panel({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+/** Panel matching GlassCard. */
+function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return <div className={`bg-[#111116] border border-[#1E1E2E] ${className}`}>{children}</div>;
 }
 
-function SectionHead({ step, title, source }: { step: string; title: string; source?: string }) {
+/** Metric tile matching the live premium-play cards. */
+function Tile({ label, value, tone = "white" }: {
+  label: string;
+  value: string;
+  tone?: "white" | "green" | "red" | "muted";
+}) {
+  const toneClass = {
+    white: "text-white",
+    green: "text-[#00E676]",
+    red: "text-[#FF2E63]",
+    muted: "text-[#6B7280]",
+  }[tone];
   return (
-    <div className="mb-4">
-      <div className="text-[10px] font-black uppercase tracking-widest text-[#FFEA00]">
-        Step {step}
+    <div className="border border-[#1E1E2E] bg-[#16161D] p-3">
+      <div className="text-[8px] font-black uppercase tracking-[0.18em] text-[#6B7280] mb-1.5">
+        {label}
       </div>
-      <h2 className="text-lg md:text-xl font-black uppercase tracking-tight text-white">{title}</h2>
-      {source && (
-        <div className="mt-1 text-[10px] font-medium uppercase tracking-widest text-[#9CA3AF]">
-          {source}
+      <div className={`text-base md:text-xl font-black ${toneClass}`}>{value}</div>
+    </div>
+  );
+}
+
+/** Square chip matching the card badges. Solid fills only — no opacity. */
+function Chip({ children, tone = "muted" }: {
+  children: React.ReactNode;
+  tone?: "muted" | "green" | "red" | "gold";
+}) {
+  const toneClass = {
+    muted: "border-[#1E1E2E] bg-[#16161D] text-[#6B7280]",
+    green: "border-[#00E676] bg-[#00E676] text-black",
+    red: "border-[#FF2E63] bg-[#FF2E63] text-white",
+    gold: "border-[#FFEA00] bg-[#FFEA00] text-black",
+  }[tone];
+  return (
+    <span className={`shrink-0 border px-2 py-1 text-[8px] font-black uppercase tracking-[0.18em] ${toneClass}`}>
+      {children}
+    </span>
+  );
+}
+
+function CardHead({ title, meta, chip }: { title: string; meta?: string; chip?: React.ReactNode }) {
+  return (
+    <div className="flex items-start justify-between gap-3 border-b border-[#1E1E2E] px-4 py-3 md:px-5">
+      <div className="min-w-0">
+        <div className="truncate text-lg md:text-2xl font-black uppercase tracking-tight text-white">
+          {title}
         </div>
-      )}
+        {meta && (
+          <div className="mt-1 text-[9px] font-black uppercase tracking-[0.18em] text-[#6B7280]">
+            {meta}
+          </div>
+        )}
+      </div>
+      {chip}
     </div>
   );
 }
@@ -143,166 +192,157 @@ export function ModelLabPage() {
   const anchor = capture.anchor as any;
   const sharp = capture.sharpLines as any;
   const topOffers = (capture.offers as any[]).slice(0, 8);
+  const probs = Object.entries(anchor.probabilities as Record<string, number>);
 
   return (
-    <div className="space-y-6 pb-24">
-      {/* ---------- page header ---------- */}
-      <div>
-        <div className="text-[10px] md:text-xs font-black uppercase tracking-widest text-[#FFEA00]">
-          Admin · Not Published
+    <div className="space-y-5 md:space-y-6 pb-24">
+      {/* ---------- page header, matching SectionHeader ---------- */}
+      <div className="mb-6 md:mb-8 border-b border-[#1E1E2E] pb-4 md:pb-5">
+        <div className="flex flex-wrap items-center gap-2 mb-3">
+          <Chip tone="gold">Admin Only</Chip>
+          <Chip>Not Published</Chip>
         </div>
-        <h1 className="text-3xl md:text-4xl font-black uppercase tracking-tight text-white">
-          Model Lab
-        </h1>
-        <p className="mt-2 text-sm font-medium text-white/55">
-          Prototype of the 2027 engine on real {capture.homeTeam} v {capture.awayTeam} market data
-          captured{" "}
+        <h2 className="text-xl md:text-2xl font-semibold text-white uppercase tracking-tight mb-1 md:mb-2">
+          Model Lab · 2027 Engine
+        </h2>
+        <div className="text-[10px] md:text-sm font-medium text-[#9CA3AF] uppercase tracking-widest">
+          {capture.homeTeam} v {capture.awayTeam} ·{" "}
           {new Date(capture.capturedAt).toLocaleString("en-AU", {
             timeZone: "Australia/Sydney",
             day: "numeric", month: "short", hour: "numeric", minute: "2-digit",
           })}{" "}
-          AEST. Nothing here feeds the live site.
-        </p>
+          AEST
+        </div>
       </div>
 
       {/* ---------- 1. true probability ---------- */}
-      <Panel className="p-5">
-        <SectionHead step="1" title="True Probability" source={anchor.source} />
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {Object.entries(anchor.probabilities as Record<string, number>).map(([team, pct]) => (
-            <div key={team} className="bg-[#16161D] border border-[#1E1E2E] p-4">
-              <div className="text-[10px] font-black uppercase tracking-widest text-[#9CA3AF]">
+      <Card className="overflow-hidden p-0">
+        <CardHead
+          title="True Probability"
+          meta="Step 1 · Betfair back/lay midpoint, de-vigged"
+          chip={<Chip tone="green">Gate Pass</Chip>}
+        />
+        <div className="grid grid-cols-1 gap-2 p-4 md:grid-cols-2 md:gap-3 md:p-5">
+          {probs.map(([team, pct]) => (
+            <div key={team} className="border border-[#1E1E2E] bg-[#16161D] p-4">
+              <div className="text-[8px] font-black uppercase tracking-[0.18em] text-[#6B7280] mb-1.5">
                 {team}
               </div>
-              <div className="mt-1 text-3xl font-black tracking-tight text-white">
+              <div className="text-2xl md:text-3xl font-black text-[#00E676]">
                 {pct.toFixed(2)}%
               </div>
-              <div className="mt-1 text-[11px] font-medium text-[#9CA3AF]">
-                back ${anchor.back[team]} · lay ${anchor.lay[team]} · fair ${(100 / pct).toFixed(2)}
+              <div className="mt-2 text-[9px] font-black uppercase tracking-[0.18em] text-[#6B7280]">
+                Back ${anchor.back[team]} · Lay ${anchor.lay[team]} · Fair ${(100 / pct).toFixed(2)}
               </div>
             </div>
           ))}
         </div>
-        <div className="mt-4 flex flex-wrap items-center gap-2 text-[10px] font-black uppercase tracking-widest">
-          <span className="text-[#9CA3AF]">Widest spread {anchor.maxSpreadPct}% · gate 5%</span>
-          <span className="px-2 py-0.5 bg-[#00E676]/10 text-[#00E676]">Pass</span>
+        <div className="border-t border-[#1E1E2E] px-4 py-3 md:px-5 text-[9px] font-black uppercase tracking-[0.18em] text-[#6B7280]">
+          Widest back/lay spread {anchor.maxSpreadPct}% · gate 5%
         </div>
-      </Panel>
+      </Card>
 
       {/* ---------- 2. sharp lines ---------- */}
-      <Panel className="p-5">
-        <SectionHead step="2" title="Sharp Lines & Projected Score" source={sharp.source} />
-        <div className="text-[11px] font-black uppercase tracking-widest text-[#9CA3AF]">
-          Line {sharp.line.team} {sharp.line.point > 0 ? "+" : ""}{sharp.line.point} · Total {sharp.total.point}
+      <Card className="overflow-hidden p-0">
+        <CardHead
+          title="Sharp Lines"
+          meta="Step 2 · Pinnacle, de-vigged"
+          chip={<Chip>Projected</Chip>}
+        />
+        <div className="px-4 pt-4 md:px-5">
+          <div className="text-2xl md:text-3xl font-black uppercase tracking-tight text-white">
+            {capture.homeTeam} {sharp.projectedScore[capture.homeTeam]}
+            <span className="text-[#6B7280] mx-2">–</span>
+            {sharp.projectedScore[capture.awayTeam]} {capture.awayTeam}
+          </div>
         </div>
-        <div className="mt-3 text-2xl md:text-3xl font-black uppercase tracking-tight text-white">
-          {capture.homeTeam} {sharp.projectedScore[capture.homeTeam]}
-          <span className="text-[#9CA3AF] mx-2">–</span>
-          {sharp.projectedScore[capture.awayTeam]} {capture.awayTeam}
+        <div className="grid grid-cols-3 gap-2 p-4 md:gap-3 md:p-5">
+          <Tile label="Line" value={`${sharp.line.point > 0 ? "+" : ""}${sharp.line.point}`} />
+          <Tile label="Total" value={String(sharp.total.point)} />
+          <Tile label="Margin SD" value={String(sharp.marginSdAssumed)} tone="muted" />
         </div>
-        <div className="mt-3 text-[10px] font-black uppercase tracking-widest text-[#FFEA00]">
-          Margin SD {sharp.marginSdAssumed} is an assumption, not fitted to NRL history
+        <div className="border-t border-[#1E1E2E] px-4 py-3 md:px-5 text-[9px] font-black uppercase tracking-[0.18em] text-[#6B7280]">
+          Margin SD is an assumption — not fitted to NRL history
         </div>
-      </Panel>
+      </Card>
 
       {/* ---------- 3. value scan ---------- */}
-      <Panel className="p-5">
-        <SectionHead
-          step="3"
+      <Card className="overflow-hidden p-0">
+        <CardHead
           title="Value Scan"
-          source={`${capture.offers.length} offers · threshold +${VALUE_THRESHOLD_PCT}%`}
+          meta={`Step 3 · ${capture.offers.length} offers · threshold +${VALUE_THRESHOLD_PCT}%`}
+          chip={<Chip tone="red">No Qualifier</Chip>}
         />
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-[10px] font-black uppercase tracking-widest text-[#9CA3AF]">
-                <th className="text-left pb-2">Market</th>
-                <th className="text-left pb-2">Selection</th>
-                <th className="text-right pb-2">Price</th>
-                <th className="text-left pb-2 pl-4">Book</th>
-                <th className="text-right pb-2">Fair</th>
-                <th className="text-right pb-2">Edge</th>
-              </tr>
-            </thead>
-            <tbody>
-              {topOffers.map((o, i) => (
-                <tr key={i} className="border-t border-[#1E1E2E]">
-                  <td className="py-2 text-[11px] font-black uppercase tracking-widest text-[#9CA3AF]">
-                    {o.market}
-                  </td>
-                  <td className="py-2 font-bold text-white whitespace-nowrap">
-                    {o.selection}
-                    {o.point != null ? ` ${o.point > 0 ? "+" : ""}${o.point}` : ""}
-                  </td>
-                  <td className="py-2 text-right font-bold text-white">${o.price}</td>
-                  <td className="py-2 pl-4 text-[#9CA3AF] whitespace-nowrap">{o.book}</td>
-                  <td className="py-2 text-right text-[#9CA3AF]">{o.fairPct}%</td>
-                  <td className={`py-2 text-right font-black ${
-                    o.edgePct >= VALUE_THRESHOLD_PCT ? "text-[#00E676]"
-                    : o.edgePct >= 0 ? "text-white" : "text-white/40"}`}>
-                    {fmtPct(o.edgePct)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div>
+          {topOffers.map((o, i) => (
+            <div
+              key={i}
+              className="flex items-center justify-between gap-3 border-b border-[#1E1E2E] px-4 py-3 md:px-5"
+            >
+              <div className="min-w-0">
+                <div className="truncate text-sm md:text-base font-black uppercase tracking-tight text-white">
+                  {o.selection}
+                  {o.point != null ? ` ${o.point > 0 ? "+" : ""}${o.point}` : ""}
+                </div>
+                <div className="mt-1 text-[9px] font-black uppercase tracking-[0.18em] text-[#6B7280]">
+                  {o.market} · {o.book} · fair {o.fairPct}%
+                </div>
+              </div>
+              <div className="flex shrink-0 items-center gap-4">
+                <div className="text-sm md:text-base font-black text-white">${o.price}</div>
+                <div className={`min-w-[64px] text-right text-sm md:text-base font-black ${
+                  o.edgePct >= VALUE_THRESHOLD_PCT ? "text-[#00E676]"
+                  : o.edgePct >= 0 ? "text-white" : "text-[#FF2E63]"}`}>
+                  {fmtPct(o.edgePct)}
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
-        <div className="mt-4 bg-[#16161D] border border-[#1E1E2E] p-3 text-[11px] font-medium text-[#9CA3AF]">
-          No offer cleared +{VALUE_THRESHOLD_PCT}%. The ledger below tracks the best candidate per
-          market so settlement can be exercised — these are not published plays.
+        <div className="px-4 py-3 md:px-5 text-[9px] font-black uppercase tracking-[0.18em] text-[#6B7280]">
+          No offer cleared the threshold · ledger tracks best candidate per market
         </div>
-      </Panel>
+      </Card>
 
       {/* ---------- 4. settlement ---------- */}
-      <Panel className="p-5">
-        <SectionHead
-          step="4"
-          title="Settlement & Profitability"
-          source="Scores arrive automatically — no manual entry"
+      <Card className="overflow-hidden p-0">
+        <CardHead
+          title="Settlement"
+          meta="Step 4 · Scores arrive automatically"
+          chip={
+            feedState === "error" ? <Chip tone="red">Feed Down</Chip>
+            : match?.status === "final" ? <Chip tone="green">Full Time</Chip>
+            : match?.status === "live" ? <Chip tone="gold">Live</Chip>
+            : <Chip>Pending</Chip>
+          }
         />
 
-        {/* Live score banner — fed automatically, never typed. */}
-        <div className="bg-[#16161D] border border-[#1E1E2E] p-4 mb-5">
+        {/* score banner */}
+        <div className="border-b border-[#1E1E2E] px-4 py-4 md:px-5">
           {feedState === "loading" && (
-            <div className="text-[11px] font-black uppercase tracking-widest text-[#9CA3AF]">
+            <div className="text-[9px] font-black uppercase tracking-[0.18em] text-[#6B7280]">
               Loading scores…
             </div>
           )}
           {feedState === "error" && (
-            <div className="text-[11px] font-black uppercase tracking-widest text-[#FF5252]">
+            <div className="text-[9px] font-black uppercase tracking-[0.18em] text-[#FF2E63]">
               Score feed unavailable · picks stay pending · nothing guessed
             </div>
           )}
           {feedState === "ok" && !match && (
-            <div className="text-[11px] font-black uppercase tracking-widest text-[#9CA3AF]">
+            <div className="text-[9px] font-black uppercase tracking-[0.18em] text-[#6B7280]">
               No score row for this match yet
             </div>
           )}
           {feedState === "ok" && match && (
             <>
-              <div className="flex items-center gap-2">
-                <span className={`inline-block w-2 h-2 rounded-full ${
-                  match.status === "final" ? "bg-[#00E676]"
-                  : match.status === "live" ? "bg-[#FFEA00] animate-pulse"
-                  : match.status === "error" ? "bg-[#FF5252]" : "bg-[#9CA3AF]"}`} />
-                <span className="text-[10px] font-black uppercase tracking-widest text-[#9CA3AF]">
-                  {match.status === "final" ? "Full Time"
-                    : match.status === "live" ? "Live"
-                    : match.status === "error" ? "Score Unreadable"
-                    : "Scheduled"}
-                </span>
-              </div>
-              <div className="mt-2 text-2xl font-black uppercase tracking-tight text-white">
+              <div className="text-2xl md:text-3xl font-black uppercase tracking-tight text-white">
                 {match.homeTeam} {match.homeScore ?? "–"}
-                <span className="text-[#9CA3AF] mx-2">–</span>
+                <span className="text-[#6B7280] mx-2">–</span>
                 {match.awayScore ?? "–"} {match.awayTeam}
               </div>
-              {match.status === "live" && (
-                <div className="mt-2 text-[10px] font-black uppercase tracking-widest text-[#FFEA00]">
-                  Live scores never settle · the ledger waits for full time
-                </div>
-              )}
-              <div className="mt-2 text-[10px] font-medium uppercase tracking-widest text-white/35">
+              <div className="mt-2 text-[9px] font-black uppercase tracking-[0.18em] text-[#6B7280]">
+                {match.status === "live" ? "Live scores never settle · ledger waits for full time · " : ""}
                 Feed{" "}
                 {match.lastUpdate
                   ? new Date(match.lastUpdate).toLocaleTimeString("en-AU", { timeZone: "Australia/Sydney" })
@@ -316,87 +356,64 @@ export function ModelLabPage() {
           )}
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-[10px] font-black uppercase tracking-widest text-[#9CA3AF]">
-                <th className="text-left pb-2">Pick</th>
-                <th className="text-right pb-2">Price</th>
-                <th className="text-left pb-2 pl-4">Book</th>
-                <th className="text-left pb-2 pl-4">Result</th>
-                <th className="text-right pb-2">Return</th>
-                <th className="text-right pb-2">P/L</th>
-              </tr>
-            </thead>
-            <tbody>
-              {settled.map((s) => (
-                <tr key={s.pick.id} className="border-t border-[#1E1E2E]">
-                  <td className="py-2.5">
-                    <div className="font-bold text-white whitespace-nowrap">
-                      {s.pick.selection}
-                      {s.pick.point != null ? ` ${s.pick.point > 0 ? "+" : ""}${s.pick.point}` : ""}
-                    </div>
-                    <div className="text-[10px] font-black uppercase tracking-widest text-[#9CA3AF]">
-                      {s.pick.market}
-                    </div>
-                  </td>
-                  <td className="py-2.5 text-right font-bold text-white">${s.pick.entryPrice}</td>
-                  <td className="py-2.5 pl-4 text-[#9CA3AF] whitespace-nowrap">{s.pick.bookmaker}</td>
-                  <td className="py-2.5 pl-4">
-                    <span className={`inline-block px-2 py-0.5 text-[10px] font-black uppercase tracking-widest ${
-                      s.outcome === "win" ? "bg-[#00E676]/10 text-[#00E676]"
-                      : s.outcome === "loss" ? "bg-[#FF5252]/10 text-[#FF5252]"
-                      : s.outcome === "pending" ? "bg-white/5 text-[#9CA3AF]"
-                      : "bg-[#FFEA00]/10 text-[#FFEA00]"}`}>
-                      {s.outcome}
-                    </span>
-                  </td>
-                  <td className="py-2.5 text-right text-white">
-                    {s.unitsReturned === null ? "—" : `${s.unitsReturned.toFixed(2)}u`}
-                  </td>
-                  <td className={`py-2.5 text-right font-black ${
-                    s.profitUnits === null ? "text-white/40"
-                    : s.profitUnits > 0 ? "text-[#00E676]"
-                    : s.profitUnits < 0 ? "text-[#FF5252]" : "text-white"}`}>
-                    {fmtUnits(s.profitUnits)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        <div className="mt-5 grid grid-cols-2 lg:grid-cols-4 gap-3">
-          {([
-            ["Staked", `${summary.stakedUnits.toFixed(2)}u`, "text-white"],
-            ["Returned", `${summary.returnedUnits.toFixed(2)}u`, "text-white"],
-            ["Profit", fmtUnits(summary.profitUnits),
-              summary.profitUnits > 0 ? "text-[#00E676]" : summary.profitUnits < 0 ? "text-[#FF5252]" : "text-white"],
-            ["ROI", summary.settled ? fmtPct(summary.roiPct) : "—",
-              summary.roiPct > 0 ? "text-[#00E676]" : summary.roiPct < 0 ? "text-[#FF5252]" : "text-white"],
-          ] as [string, string, string][]).map(([label, value, tone]) => (
-            <div key={label} className="bg-[#16161D] border border-[#1E1E2E] p-4">
-              <div className="text-[10px] font-black uppercase tracking-widest text-[#9CA3AF]">
-                {label}
+        {/* pick rows */}
+        <div>
+          {settled.map((s) => (
+            <div
+              key={s.pick.id}
+              className="flex items-center justify-between gap-3 border-b border-[#1E1E2E] px-4 py-3 md:px-5"
+            >
+              <div className="min-w-0">
+                <div className="truncate text-sm md:text-base font-black uppercase tracking-tight text-white">
+                  {s.pick.selection}
+                  {s.pick.point != null ? ` ${s.pick.point > 0 ? "+" : ""}${s.pick.point}` : ""}
+                </div>
+                <div className="mt-1 text-[9px] font-black uppercase tracking-[0.18em] text-[#6B7280]">
+                  {s.pick.market} · {s.pick.bookmaker} · ${s.pick.entryPrice}
+                </div>
               </div>
-              <div className={`mt-1 text-2xl font-black tracking-tight ${tone}`}>{value}</div>
+              <div className="flex shrink-0 items-center gap-3">
+                <Chip tone={
+                  s.outcome === "win" ? "green"
+                  : s.outcome === "loss" ? "red"
+                  : s.outcome === "pending" ? "muted" : "gold"
+                }>
+                  {s.outcome}
+                </Chip>
+                <div className={`min-w-[64px] text-right text-sm md:text-base font-black ${
+                  s.profitUnits === null ? "text-[#6B7280]"
+                  : s.profitUnits > 0 ? "text-[#00E676]"
+                  : s.profitUnits < 0 ? "text-[#FF2E63]" : "text-white"}`}>
+                  {fmtUnits(s.profitUnits)}
+                </div>
+              </div>
             </div>
           ))}
         </div>
 
-        <div className="mt-4 text-[10px] font-black uppercase tracking-widest text-[#9CA3AF]">
+        {/* totals */}
+        <div className="grid grid-cols-2 gap-2 p-4 md:grid-cols-4 md:gap-3 md:p-5">
+          <Tile label="Staked" value={`${summary.stakedUnits.toFixed(2)}u`} />
+          <Tile label="Returned" value={`${summary.returnedUnits.toFixed(2)}u`} />
+          <Tile
+            label="Profit"
+            value={fmtUnits(summary.profitUnits)}
+            tone={summary.profitUnits > 0 ? "green" : summary.profitUnits < 0 ? "red" : "white"}
+          />
+          <Tile
+            label="ROI"
+            value={summary.settled ? fmtPct(summary.roiPct) : "—"}
+            tone={summary.roiPct > 0 ? "green" : summary.roiPct < 0 ? "red" : "white"}
+          />
+        </div>
+
+        <div className="border-t border-[#1E1E2E] px-4 py-3 md:px-5 text-[9px] font-black uppercase tracking-[0.18em] text-[#6B7280]">
           {summary.settled} settled · {summary.pending} pending · {summary.wins}W–{summary.losses}L
-          {summary.pushes ? `–${summary.pushes}P` : ""} · strike rate{" "}
+          {summary.pushes ? `–${summary.pushes}P` : ""} · strike{" "}
           {summary.settled ? `${summary.strikeRatePct.toFixed(1)}%` : "—"} · avg CLV{" "}
           {summary.averageClvPct === null ? "not captured" : fmtPct(summary.averageClvPct)}
         </div>
-        {match?.status !== "final" && (
-          <div className="mt-3 bg-[#16161D] border border-[#1E1E2E] p-3 text-[11px] font-medium text-[#9CA3AF]">
-            Picks settle automatically at full time from the score feed. They stay pending until
-            then — the ledger never guesses an outcome.
-          </div>
-        )}
-      </Panel>
+      </Card>
     </div>
   );
 }
