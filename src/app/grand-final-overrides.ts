@@ -8,7 +8,6 @@
 // calculations, odds feeds or historical archive behaviour.
 
 const GRAND_FINAL_ROUND = 31;
-const GRAND_FINAL_KNIGHTS_LINE = 7.5;
 
 function normalizeTeam(value: string) {
   const team = String(value || "")
@@ -43,52 +42,6 @@ export function isGrandFinalMatch(
 // two. One-game rounds (including the Grand Final) show only the SGM.
 export function shouldBuildRoundMulti(matchCount: number) {
   return matchCount >= 2;
-}
-
-// Approved Core Play: Newcastle with the positive Grand Final line. This is a
-// narrowly scoped manual selection, so it can bypass the generic model-edge
-// gates while still requiring a real live line market and valid odds.
-export function shouldForceGrandFinalCorePlay({
-  roundNumber,
-  homeTeam,
-  awayTeam,
-  marketType,
-  selection,
-  marketPoint,
-}: {
-  roundNumber: number;
-  homeTeam: string;
-  awayTeam: string;
-  marketType: string;
-  selection: string;
-  marketPoint?: number;
-}) {
-  const selectionTeam = normalizeTeam(selection.replace(/[+-].*$/, "").trim());
-  return isGrandFinalMatch(roundNumber, homeTeam, awayTeam) &&
-    marketType === "Line" &&
-    selectionTeam === "newcastle" &&
-    Number.isFinite(marketPoint) &&
-    Math.abs(Number(marketPoint) - GRAND_FINAL_KNIGHTS_LINE) <= 0.01;
-}
-
-// Given chooser candidates already sorted best-first, return the manually
-// approved one if any. Undefined means "no override — let the generic
-// thresholds decide", which keeps every other round's behaviour unchanged.
-export function pickForcedCorePlay<T extends { isManualApproved?: boolean }>(
-  candidates: readonly T[],
-): T | undefined {
-  return candidates.find((candidate) => candidate.isManualApproved === true);
-}
-
-// A live Grand Final override must beat an older pending official selection so
-// the Premium page and the write-once freeze snapshot cannot preserve the
-// superseded play. Ordinary matches retain official-pending precedence.
-export function preferForcedGrandFinalCorePlay<T extends { isManualApproved?: boolean }>(
-  livePlay: T | null,
-  officialPendingPlay: T | null,
-): T | null {
-  if (livePlay?.isManualApproved === true) return livePlay;
-  return officialPendingPlay || livePlay;
 }
 
 export type GrandFinalSameGameMultiPlan = {

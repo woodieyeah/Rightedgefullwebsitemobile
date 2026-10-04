@@ -3,12 +3,9 @@ import test from "node:test";
 import {
   getGrandFinalSameGameMultiPlan,
   isGrandFinalMatch,
-  pickForcedCorePlay,
-  preferForcedGrandFinalCorePlay,
   resolveGrandFinalSameGameMulti,
   selectForcedScorerRows,
   shouldBuildRoundMulti,
-  shouldForceGrandFinalCorePlay,
 } from "../src/app/grand-final-overrides.ts";
 
 test("a one-game round never produces a Round Multi", () => {
@@ -26,73 +23,6 @@ test("the Grand Final is matched on round 31 Sydney v Newcastle under any team a
   // Wrong round or a different pairing are not overridden.
   assert.equal(isGrandFinalMatch(30, "Sydney", "Newcastle"), false);
   assert.equal(isGrandFinalMatch(31, "Storm", "Panthers"), false);
-});
-
-test("the Grand Final Knights line is manually approved as the forced Core Play", () => {
-  assert.equal(shouldForceGrandFinalCorePlay({
-    roundNumber: 31,
-    homeTeam: "Sydney",
-    awayTeam: "Newcastle",
-    marketType: "Line",
-    selection: "newcastle +7.5",
-    marketPoint: 7.5,
-  }), true);
-  assert.equal(shouldForceGrandFinalCorePlay({
-    roundNumber: 31,
-    homeTeam: "Sydney",
-    awayTeam: "Newcastle",
-    marketType: "Line",
-    selection: "newcastle +8.5",
-    marketPoint: 8.5,
-  }), false);
-  assert.equal(shouldForceGrandFinalCorePlay({
-    roundNumber: 31,
-    homeTeam: "Sydney",
-    awayTeam: "Newcastle",
-    marketType: "Line",
-    selection: "sydney -7.5",
-    marketPoint: -7.5,
-  }), false);
-  assert.equal(shouldForceGrandFinalCorePlay({
-    roundNumber: 30,
-    homeTeam: "Sydney",
-    awayTeam: "Newcastle",
-    marketType: "Line",
-    selection: "newcastle +7.5",
-    marketPoint: 7.5,
-  }), false);
-  // The former Over and any H2H candidate are not the forced play.
-  assert.equal(shouldForceGrandFinalCorePlay({
-    roundNumber: 31,
-    homeTeam: "Sydney",
-    awayTeam: "Newcastle",
-    marketType: "Total",
-    selection: "Over 42.5",
-    marketPoint: 42.5,
-  }), false);
-});
-
-test("a manually approved candidate wins the Core Play slot even when a generic candidate scores higher", () => {
-  const line = { id: "line", isManualApproved: false, score: 2.7 };
-  const over = { id: "over", isManualApproved: true, score: 1.8 };
-  const h2h = { id: "h2h", score: 0.4 };
-  // Candidates arrive sorted by adjusted confidence (best first).
-  assert.equal(pickForcedCorePlay([line, over, h2h]), over);
-  // Rounds without a forced play are untouched: nothing is returned so the
-  // generic chooser keeps deciding.
-  assert.equal(pickForcedCorePlay([line, h2h]), undefined);
-  assert.equal(pickForcedCorePlay([]), undefined);
-});
-
-test("a forced live Grand Final Core Play takes precedence over a stale official pending play", () => {
-  const forcedLive = { id: "knights-line", isManualApproved: true };
-  const staleOfficial = { id: "over", isManualApproved: true };
-  const normalLive = { id: "generic-live", isManualApproved: false };
-
-  assert.equal(preferForcedGrandFinalCorePlay(forcedLive, staleOfficial), forcedLive);
-  assert.equal(preferForcedGrandFinalCorePlay(normalLive, staleOfficial), staleOfficial);
-  assert.equal(preferForcedGrandFinalCorePlay(normalLive, null), normalLive);
-  assert.equal(preferForcedGrandFinalCorePlay(null, staleOfficial), staleOfficial);
 });
 
 test("the Grand Final Same Game Multi is Sydney H2H + Tupou + Young", () => {
