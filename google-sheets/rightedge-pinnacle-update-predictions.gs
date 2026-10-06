@@ -288,7 +288,11 @@ function updatePredictions() {
 
       finalProbH = cap(finalProbH, 0.05, 0.95);
       var finalProbA = 1 - finalProbH;
-      var scoreMargin = cap(blendedMargin, finalMargin - 6, finalMargin + 6);
+      // Projected scores are pure ratings output: they use the model's own
+      // margin, never the Pinnacle-blended margin. Market prices still drive
+      // the probabilities, overlays and staking below, so the scoreline stays
+      // an independent model opinion that can disagree with the market.
+      var scoreMargin = finalMargin;
 
       var hScore = Math.max(0, Math.round((totalScore + scoreMargin) / 2));
       var aScore = Math.max(0, Math.round((totalScore - scoreMargin) / 2));
