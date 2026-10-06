@@ -8556,8 +8556,14 @@ function PredictionsPage({
   const rows = useMemo(
     () => selectedArchive
       ? buildArchivedPredictionRows(selectedArchive).sort(sortPredictionsByFixture)
-      : [...data.predictions].sort(sortPredictionsByFixture),
-    [data.predictions, selectedArchive],
+      // The live view shows upcoming matches only. A finished match stays
+      // visible for three hours after kickoff (isFixtureCompleted's window) and
+      // then drops off, so a completed round does not sit above the next one.
+      // Past rounds remain available through the archive selector.
+      : [...data.predictions]
+          .filter((row) => !isFixtureCompleted(row.fixture, now))
+          .sort(sortPredictionsByFixture),
+    [data.predictions, selectedArchive, now],
   );
   const [marketMap, setMarketMap] = useState<SgmMarketMap>({});
   // Freeze + results data for the live page (disabled in archive view).
@@ -8641,7 +8647,7 @@ function PredictionsPage({
         </GlassCard>
       )}
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 md:gap-8">
+      <div className="grid grid-cols-1 gap-6 md:gap-8">
         {rows.map((row, i) => {
           const projectedHomeScore = row.predictedHomeScore
             ? Math.round(row.predictedHomeScore)
@@ -14495,17 +14501,6 @@ function AppDashboard({
       />
       <div className="grid grid-cols-1 xl:grid-cols-[300px_minmax(0,1fr)] gap-8 pb-24 xl:pb-0">
         <GlassCard className="hidden xl:block p-6 h-fit xl:sticky xl:top-6">
-          <div className="flex items-center gap-4 pb-6 border-b border-[#1E1E2E] mb-6">
-            <div>
-              <div className="text-4xl font-semibold tracking-tight text-white uppercase">
-                RightEdge
-              </div>
-              <div className="text-xs text-[#9CA3AF] font-medium tracking-widest uppercase mt-2">
-                NRL Predictions • 2026
-              </div>
-            </div>
-          </div>
-
           <div className="space-y-3">
             {getAppPages(isAdmin).map((item) => (
               <SidebarItem
