@@ -8,6 +8,7 @@ import { AdminDashboard } from "./components/AdminDashboard";
 import { failClosedAuthState, isVerifiedAdminSession } from "./auth-session";
 import { trackLinkedInConversion } from "../lib/linkedin";
 import { capturePostHogEvent, identifyPostHogUser } from "../lib/posthog";
+import { resolveInternationalTeam } from "./teams/international-teams";
 import { ModelLabPage } from "./lab/ModelLabPage";
 import {
   ROUND_25_CORE_PLAYS,
@@ -70,6 +71,11 @@ import {
   Mail,
   X,
   Users,
+  Feather,
+  TreePine,
+  Heart,
+  Music,
+  Mountain,
 } from "lucide-react";
 import {
   Area,
@@ -139,6 +145,10 @@ const NRL_COLORS: Record<
 export function getTeamColors(teamName: string) {
   if (!teamName)
     return { primary: "#16161D", secondary: "#9CA3AF" };
+  // Nations are checked first and return null unless confident, so NRL clubs
+  // (notably the New Zealand Warriors) keep their own colours.
+  const nation = resolveInternationalTeam(teamName);
+  if (nation) return { primary: nation.primary, secondary: nation.secondary };
   const normalized = teamName.toLowerCase();
   for (const [key, value] of Object.entries(NRL_COLORS)) {
     if (normalized.includes(key)) return value;
@@ -222,6 +232,10 @@ const NRL_TEAMS_FULL: Record<string, string> = {
 
 function getFullTeamName(name: string): string {
   if (!name || name === "—" || name === "-") return name;
+  // Nations are displayed by COUNTRY NAME, never by nickname. This also stops
+  // "New Zealand" being shortened to "Warriors" by the NRL club lookup below.
+  const nation = resolveInternationalTeam(name);
+  if (nation) return nation.name;
   const normalized = name.toLowerCase().trim();
   for (const [key, fullName] of Object.entries(
     NRL_TEAMS_FULL,
@@ -233,8 +247,17 @@ function getFullTeamName(name: string): string {
   return name;
 }
 
+const INTERNATIONAL_ICONS: Record<string, React.ElementType> = {
+  star: Star, bird: Bird, shield: Shield, crown: Crown, cat: Cat,
+  waves: Waves, feather: Feather, anchor: Anchor, treePine: TreePine,
+  sunrise: Sunrise, flame: Flame, dog: Dog, heart: Heart, mountain: Mountain,
+  music: Music, sparkles: Sparkles,
+};
+
 function getTeamIcon(teamName: string): React.ElementType {
   if (!teamName) return ShieldAlert;
+  const nation = resolveInternationalTeam(teamName);
+  if (nation) return INTERNATIONAL_ICONS[nation.icon] ?? ShieldAlert;
   const normalized = teamName.toLowerCase();
   for (const [key, value] of Object.entries(NRL_MASCOTS)) {
     if (normalized.includes(key)) return value;
