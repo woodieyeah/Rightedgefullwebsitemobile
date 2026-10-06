@@ -2838,6 +2838,7 @@ async function fetchBlueBetNrlOddsRaw(options: { includeOrigin?: boolean } = {})
         (
           categoryName === "nrl" ||
           categoryName === "nrl matches" ||
+          categoryName === "nrl finals" ||
           (includeOrigin && categoryName.includes("state of origin"))
         )
       );
@@ -3288,6 +3289,47 @@ function allowOddsForceRefresh(c: any) {
 
   return true;
 }
+
+// Live + final scores for the admin Model Lab. Read-only passthrough of the
+// odds provider's scores feed. Does NOT touch published plays, freeze
+// snapshots, or any subscriber-facing data. Cached briefly so repeated polls
+// from an open lab page cannot burn the shared API quota.
+const SCORES_CACHE_MS = 60 * 1000;
+
+app.get("/scores", async (c) => {
+  try {
+    const apiKey = Deno.env.get("ODDS_API_KEY");
+    if (!apiKey) return c.json({ error: "scores unavailable" }, 503);
+
+    const daysFrom = Math.min(3, Math.max(1, Number(c.req.query("daysFrom") || 1)));
+    const cacheKey = `scores_cache:${daysFrom}`;
+    const cacheTimeKey = `${cacheKey}:time`;
+    const now = Date.now();
+
+    const cachedTime = await kv.get(cacheTimeKey);
+    if (cachedTime && now - Number(cachedTime) < SCORES_CACHE_MS) {
+      const cached = await kv.get(cacheKey);
+      if (cached) return c.json(JSON.parse(cached));
+    }
+
+    const url = `https://api.the-odds-api.com/v4/sports/${NRL_SPORT_KEY}/scores/` +
+      `?apiKey=${apiKey}&daysFrom=${daysFrom}`;
+    const response = await fetch(url);
+    if (!response.ok) {
+      const cached = await kv.get(cacheKey);
+      if (cached) return c.json(JSON.parse(cached));
+      return c.json({ error: "scores fetch failed" }, 502);
+    }
+
+    const payload = { fetchedAt: new Date().toISOString(), events: await response.json() };
+    await kv.set(cacheKey, JSON.stringify(payload));
+    await kv.set(cacheTimeKey, String(now));
+    return c.json(payload);
+  } catch (error) {
+    console.error("[Scores] error", error);
+    return c.json({ error: "scores unavailable" }, 500);
+  }
+});
 
 app.get("/live-odds", async (c) => {
   try {
