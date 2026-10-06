@@ -9,6 +9,8 @@ import { failClosedAuthState, isVerifiedAdminSession } from "./auth-session";
 import { trackLinkedInConversion } from "../lib/linkedin";
 import { capturePostHogEvent, identifyPostHogUser } from "../lib/posthog";
 import { resolveInternationalTeam } from "./teams/international-teams";
+import { fetchCompetitionFixtures, selectCurrentFixtures } from "./rlwc/fixtures";
+import { adaptFixtures } from "./rlwc/adapt";
 import { ModelLabPage } from "./lab/ModelLabPage";
 import {
   ROUND_25_CORE_PLAYS,
@@ -7412,12 +7414,19 @@ function FeaturedMatchPreview({
 
   const featuredWinPct = getPredictedWinnerWinPct(row);
 
+  // A fixture with no model run yet has zeroed projections. Render those as
+  // "—" rather than "0", so an unmodelled match never shows a fabricated
+  // nil-all scoreline or a 0.00% win probability.
+  const hasProjection = Boolean(row.predictedHomeScore || row.predictedAwayScore);
   const homeScore = Math.round(row.predictedHomeScore);
   const awayScore = Math.round(row.predictedAwayScore);
-  const homeWinsProjection = homeScore > awayScore;
-  const awayWinsProjection = awayScore > homeScore;
+  const homeWinsProjection = hasProjection && homeScore > awayScore;
+  const awayWinsProjection = hasProjection && awayScore > homeScore;
+  // The timezone label comes from the fixture: RLWC spans AEDT, AWST and NZDT,
+  // so a hardcoded "AEST" would mislabel most of the tournament.
+  const fixtureTzLabel = row.fixture?.tz || "AEST";
   const fixtureMeta = row.fixture
-    ? `${row.fixture.day} ${row.fixture.dateLabel} @ ${row.fixture.aedt} AEST`
+    ? `${row.fixture.day} ${row.fixture.dateLabel} @ ${row.fixture.aedt} ${fixtureTzLabel}`
     : "Time TBC";
 
   const ScoreRow = ({
@@ -7426,7 +7435,7 @@ function FeaturedMatchPreview({
     isWinner,
   }: {
     team: string;
-    score: number;
+    score: number | null;
     isWinner: boolean;
   }) => {
     const colors = getTeamColors(team);
@@ -7456,7 +7465,7 @@ function FeaturedMatchPreview({
             isWinner ? "text-white" : "text-[#9CA3AF]"
           }`}
         >
-          {score}
+          {score ?? "—"}
         </div>
       </div>
     );
@@ -7478,13 +7487,13 @@ function FeaturedMatchPreview({
           <div className="overflow-hidden border border-[#1E1E2E] bg-[#0A0A0F]/40">
             <ScoreRow
               team={row.homeTeam}
-              score={homeScore}
-              isWinner={homeWinsProjection || homeScore === awayScore}
+              score={hasProjection ? homeScore : null}
+              isWinner={hasProjection && (homeWinsProjection || homeScore === awayScore)}
             />
             <ScoreRow
               team={row.awayTeam}
-              score={awayScore}
-              isWinner={awayWinsProjection || homeScore === awayScore}
+              score={hasProjection ? awayScore : null}
+              isWinner={hasProjection && (awayWinsProjection || homeScore === awayScore)}
             />
           </div>
 
@@ -7494,7 +7503,7 @@ function FeaturedMatchPreview({
                 Win prob
               </div>
               <div className="text-xl font-semibold text-[#00E676]">
-                {formatPercent(featuredWinPct, 2)}
+                {featuredWinPct ? formatPercent(featuredWinPct, 2) : "—"}
               </div>
             </div>
             <div className="border border-[#1E1E2E] bg-[#16161D] p-4">
@@ -15621,6 +15630,27 @@ export default function App() {
         fixtureRows,
         tryScorerRows,
       );
+
+      // RLWC fixtures come from Supabase, not the sheet. Merged in after the
+      // sheet build so NRL data is untouched and an RLWC failure cannot affect
+      // it — fetchCompetitionFixtures returns [] on any error.
+      try {
+        const rlwcFixtures = await fetchCompetitionFixtures("rlwc", publicAnonKey);
+        const upcoming = selectCurrentFixtures(rlwcFixtures);
+        if (upcoming.length) {
+          const adapted = adaptFixtures(upcoming);
+          dashboardData.predictions = [
+            ...dashboardData.predictions,
+            ...(adapted.predictions as unknown as PredictionRow[]),
+          ];
+          dashboardData.fixtures = [
+            ...dashboardData.fixtures,
+            ...(adapted.fixtures as unknown as FixtureRow[]),
+          ];
+        }
+      } catch {
+        // RLWC is additive; never let it break the NRL pages.
+      }
 
       setData(dashboardData);
     } catch (err: any) {
