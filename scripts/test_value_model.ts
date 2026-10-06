@@ -15,6 +15,7 @@
  */
 
 import { resolveSharpAnchor } from "../src/model/sharp-anchor.ts";
+import { projectScoreline } from "../src/model/projected-score.ts";
 
 const KEY = process.env.ODDS_API_KEY;
 if (!KEY) { console.error("ODDS_API_KEY not set"); process.exit(1); }
@@ -93,15 +94,18 @@ const pct = (n: number) => `${n >= 0 ? "+" : ""}${n.toFixed(2)}%`;
     const totalOutcomes = totalsBook?.markets.find((m: any) => m.key === "totals")?.outcomes;
 
     if (spreadOutcomes && totalOutcomes) {
-      const homeSpread = spreadOutcomes.find((o: any) => o.name === ev.home_team)?.point;
-      const total = totalOutcomes[0]?.point;
-      if (Number.isFinite(homeSpread) && Number.isFinite(total)) {
-        const margin = -Number(homeSpread);
-        const home = (Number(total) + margin) / 2;
-        const away = (Number(total) - margin) / 2;
-        console.log(`  line ${ev.home_team} ${homeSpread} (${spreadsBook.title}), total ${total} (${totalsBook.title})`);
-        console.log(`  => ${ev.home_team} ${home.toFixed(1)} - ${away.toFixed(1)} ${ev.away_team}  (margin ${margin > 0 ? "+" : ""}${margin.toFixed(1)})`);
-      } else console.log(`  line/total points missing -> no projection`);
+      // Shared derivation: src/model/projected-score.ts (22 tests). Keeping the
+      // arithmetic here would be a second implementation to drift out of sync.
+      const projection = projectScoreline({
+        homeTeam: ev.home_team,
+        spreads: spreadOutcomes,
+        totals: totalOutcomes,
+      });
+      if (projection) {
+        const sign = projection.margin > 0 ? "+" : "";
+        console.log(`  line ${ev.home_team} ${-projection.margin} (${spreadsBook.title}), total ${projection.total} (${totalsBook.title})`);
+        console.log(`  => ${ev.home_team} ${projection.home.toFixed(1)} - ${projection.away.toFixed(1)} ${ev.away_team}  (margin ${sign}${projection.margin.toFixed(1)})`);
+      } else console.log(`  line/total points missing or incoherent -> no projection`);
     } else console.log(`  no spreads/totals available -> no projection`);
     console.log();
   }
