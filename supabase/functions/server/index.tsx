@@ -2833,15 +2833,23 @@ async function fetchBlueBetNrlOddsRaw(options: { includeOrigin?: boolean } = {})
       const categoryName = String(category?.CategoryName || category?.Category || "").toLowerCase();
       const masterCategoryName = String(category?.MasterCategoryName || "").toLowerCase();
 
-      return (
+      const isNrl =
         masterCategoryName === "nrl" &&
         (
           categoryName === "nrl" ||
           categoryName === "nrl matches" ||
           categoryName === "nrl finals" ||
           (includeOrigin && categoryName.includes("state of origin"))
-        )
-      );
+        );
+
+      // Rugby League World Cup sits under the "World" master category, not
+      // "NRL". Matched exactly: "Rugby League World Cup 2026" is the futures
+      // group, and the women's tournament is a separate competition.
+      const isWorldCup =
+        masterCategoryName === "world" &&
+        categoryName === "rugby league world cup";
+
+      return isNrl || isWorldCup;
     });
 
   const masterEventsById = new Map<string, any>();

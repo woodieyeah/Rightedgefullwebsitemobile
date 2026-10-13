@@ -39,6 +39,23 @@ async function runImporter(categories: any[], options?: { includeOrigin?: boolea
   return { requestedIds, ids: odds.map((event: any) => event.id) };
 }
 
+/** Run the importer against a full MasterCategories hierarchy. */
+async function runImporterWithHierarchy(masterCategories: any[]) {
+  const requestedIds: string[] = [];
+  const fetchBlueBetJson = async (path: string) => {
+    if (path.startsWith("/MasterCategory?")) return { MasterCategories: masterCategories };
+    const id = new URL(path, "https://fixture.invalid").searchParams.get("MasterEventId")!;
+    requestedIds.push(id);
+    return { id, bookmakers: [{ key: "betr" }] };
+  };
+  const fetchOdds = new Function(
+    "fetchBlueBetJson", "asBlueBetArray", "buildBlueBetEventOdds",
+    `${importer}\nreturn fetchBlueBetNrlOddsRaw;`,
+  )(fetchBlueBetJson, (value: any) => Array.isArray(value) ? value : [], (payload: any) => payload);
+  const odds = await fetchOdds();
+  return { requestedIds, ids: odds.map((event: any) => event.id) };
+}
+
 test("Betr imports exact NRL Finals alongside regular matches, not specials, futures or NRLW", async () => {
   const categories = [
     category("NRL", "regular"),
@@ -75,4 +92,90 @@ test("Betr deduplicates finals matches and ignores non-match events", async () =
   const result = await runImporter(categories);
   assert.deepEqual(result.requestedIds, ["same-game", "finals-only"]);
   assert.deepEqual(result.ids, ["same-game", "finals-only"]);
+});
+
+// ---------------------------------------------------------------------------
+// Rugby League World Cup.
+//
+// RLWC sits under the "World" master category, not "NRL", so the original
+// filter excluded it entirely and every RLWC card reported "market not
+// currently in the Betr feed" while Betr was in fact pricing all five matches.
+// ---------------------------------------------------------------------------
+
+const rlwcEvent = (id: string, name = "Australia v New Zealand") => ({
+  MasterEventId: id,
+  MasterEventName: name,
+});
+
+test("Betr imports Rugby League World Cup matches under the World category", async () => {
+  const result = await runImporterWithHierarchy([
+    {
+      MasterCategoryName: "World",
+      Categories: [
+        { CategoryName: "Rugby League World Cup", MasterEvents: [rlwcEvent("rlwc-opener")] },
+      ],
+    },
+  ]);
+  assert.deepEqual(result.ids, ["rlwc-opener"]);
+});
+
+test("Betr imports NRL and World Cup together", async () => {
+  const result = await runImporterWithHierarchy([
+    { MasterCategoryName: "NRL", Categories: [category("NRL Finals", "nrl-finals")] },
+    {
+      MasterCategoryName: "World",
+      Categories: [
+        { CategoryName: "Rugby League World Cup", MasterEvents: [rlwcEvent("rlwc-opener")] },
+      ],
+    },
+  ]);
+  assert.deepEqual(result.ids.sort(), ["nrl-finals", "rlwc-opener"]);
+});
+
+test("Betr excludes World Cup futures and women's World Cup", async () => {
+  // Futures are outright markets with no fixture, and the women's tournament is
+  // a different competition that RightEdge does not publish.
+  const result = await runImporterWithHierarchy([
+    {
+      MasterCategoryName: "World",
+      Categories: [
+        { CategoryName: "Rugby League World Cup", MasterEvents: [rlwcEvent("keep")] },
+        { CategoryName: "Rugby League World Cup 2026", MasterEvents: [rlwcEvent("futures-group")] },
+        { CategoryName: "World Cup Women 2026", MasterEvents: [rlwcEvent("womens")] },
+        { CategoryName: "World Cup Futures 2026", MasterEvents: [rlwcEvent("futures")] },
+      ],
+    },
+  ]);
+  assert.deepEqual(result.ids, ["keep"]);
+});
+
+test("Betr ignores a World Cup outright inside the match category", async () => {
+  const result = await runImporterWithHierarchy([
+    {
+      MasterCategoryName: "World",
+      Categories: [
+        {
+          CategoryName: "Rugby League World Cup",
+          MasterEvents: [
+            rlwcEvent("real-match"),
+            { MasterEventId: "winner", MasterEventName: "World Cup Winner" },
+          ],
+        },
+      ],
+    },
+  ]);
+  assert.deepEqual(result.ids, ["real-match"]);
+});
+
+test("a World Cup category under the wrong parent is excluded", async () => {
+  // Guards against matching on category name alone.
+  const result = await runImporterWithHierarchy([
+    {
+      MasterCategoryName: "Soccer",
+      Categories: [
+        { CategoryName: "Rugby League World Cup", MasterEvents: [rlwcEvent("wrong-parent")] },
+      ],
+    },
+  ]);
+  assert.deepEqual(result.ids, []);
 });

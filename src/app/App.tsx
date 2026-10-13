@@ -6352,7 +6352,7 @@ function OfficialPlayCard({ row }: { row: PredictionRow }) {
         <div className="text-[10px] md:text-sm font-medium text-[#9CA3AF] uppercase tracking-widest mb-4 md:mb-6">
           {row.match} •{" "}
           {row.fixture
-            ? `${row.fixture.day} ${row.fixture.dateLabel} @ ${row.fixture.aedt} AEST`
+            ? `${row.fixture.day} ${row.fixture.dateLabel} @ ${row.fixture.aedt} ${row.fixture.tz || "AEST"}`
             : "Time TBC"}
         </div>
         {(row.predictedHomeScore || row.predictedAwayScore) && (
@@ -8796,7 +8796,7 @@ function PredictionsPage({
                     <div className="flex min-w-0 flex-wrap items-center gap-2">
                       <span>
                         {row.fixture
-                          ? `${row.fixture.day} ${row.fixture.dateLabel} @ ${row.fixture.aedt} AEST`
+                          ? `${row.fixture.day} ${row.fixture.dateLabel} @ ${row.fixture.aedt} ${row.fixture.tz || "AEST"}`
                           : "TBC"}
                       </span>
                       <span className={`inline-flex shrink-0 border px-2 py-0.5 text-[8px] font-black uppercase tracking-widest ${fixtureStatus.className}`}>
@@ -8885,7 +8885,7 @@ function PredictionsPage({
                     <div className="flex min-w-0 flex-wrap items-center gap-2">
                       <span>
                         {row.fixture
-                          ? `${row.fixture.day} ${row.fixture.dateLabel} @ ${row.fixture.aedt} AEST`
+                          ? `${row.fixture.day} ${row.fixture.dateLabel} @ ${row.fixture.aedt} ${row.fixture.tz || "AEST"}`
                           : "TBC"}
                       </span>
                       <span className={`inline-flex shrink-0 border px-2 py-0.5 text-[8px] font-black uppercase tracking-widest ${fixtureStatus.className}`}>
@@ -10594,7 +10594,7 @@ function PremiumMarketPlayCard({
           <div className="mb-2 flex flex-wrap items-center gap-2 text-[10px] uppercase font-black text-white/45 tracking-widest">
             <span>
               {row.fixture
-                ? `${row.fixture.day} ${row.fixture.dateLabel} @ ${row.fixture.aedt} AEST`
+                ? `${row.fixture.day} ${row.fixture.dateLabel} @ ${row.fixture.aedt} ${row.fixture.tz || "AEST"}`
                 : "Time TBC"}
             </span>
             <span className={`inline-flex shrink-0 border px-2 py-0.5 text-[8px] font-black uppercase tracking-widest ${fixtureStatus.className}`}>
@@ -13809,7 +13809,7 @@ function SameGameMultiCard({
 }) {
   const estimatedPrice = isPremium ? getEstimatedSgmPrice(card.legs) : null;
   const kickoff = card.fixture
-    ? `${card.fixture.day} ${card.fixture.dateLabel} @ ${card.fixture.aedt} AEST`
+    ? `${card.fixture.day} ${card.fixture.dateLabel} @ ${card.fixture.aedt} ${card.fixture.tz || "AEST"}`
     : "KICKOFF TBC";
 
   return (
