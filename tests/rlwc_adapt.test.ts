@@ -25,6 +25,13 @@ const opener: PublicFixture = {
   status: "scheduled",
   home_score: null,
   away_score: null,
+  // Unmodelled by default; the modelled case is covered explicitly below.
+  projected_home_score: null,
+  projected_away_score: null,
+  home_win_probability: null,
+  away_win_probability: null,
+  model_version: null,
+  prediction_at: null,
 };
 
 const perth: PublicFixture = {
@@ -130,4 +137,76 @@ test("an empty batch adapts to empty lists", () => {
   const out = adaptFixtures([]);
   assert.deepEqual(out.predictions, []);
   assert.deepEqual(out.fixtures, []);
+});
+
+// ---------------------------------------------------------------------------
+// A modelled fixture carries the model's numbers through to the card.
+// ---------------------------------------------------------------------------
+
+const modelled: PublicFixture = {
+  ...opener,
+  // Real output for the opener: TAB line -3.5, total 38.5.
+  projected_home_score: 21,
+  projected_away_score: 17.5,
+  home_win_probability: 0.5818,
+  away_win_probability: 0.4182,
+  model_version: "rlwc-consensus-v1",
+  prediction_at: "2026-10-13T00:34:07Z",
+};
+
+test("a modelled fixture carries its projected score", () => {
+  const p = adaptPrediction(modelled);
+  assert.equal(p.predictedHomeScore, 21);
+  assert.equal(p.predictedAwayScore, 17.5);
+});
+
+test("the predicted winner follows the projected score", () => {
+  assert.equal(adaptPrediction(modelled).predictedWinner, "Australia");
+});
+
+test("an away-favoured projection names the away team", () => {
+  const p = adaptPrediction({
+    ...modelled,
+    projected_home_score: 18,
+    projected_away_score: 20.5,
+    home_win_probability: 0.439,
+    away_win_probability: 0.561,
+  });
+  assert.equal(p.predictedWinner, "New Zealand");
+});
+
+test("model odds are the inverse of the win probability", () => {
+  const p = adaptPrediction(modelled);
+  assert.ok(Math.abs(p.modelHomeOdds - 1 / 0.5818) < 0.001);
+  assert.ok(Math.abs(p.modelAwayOdds - 1 / 0.4182) < 0.001);
+});
+
+test("a modelled fixture still advertises no play", () => {
+  // Edge requires the two-book agreement gate and is never published here.
+  const p = adaptPrediction(modelled);
+  assert.equal(p.bestBet, "");
+  assert.equal(p.bestEdge, 0);
+  assert.equal(p.marketHomeOdds, 0);
+  assert.equal(p.stake, 0);
+});
+
+test("probabilities alone name a winner even with no projected score", () => {
+  const p = adaptPrediction({
+    ...modelled,
+    projected_home_score: null,
+    projected_away_score: null,
+  });
+  assert.equal(p.predictedWinner, "Australia");
+  assert.equal(p.predictedHomeScore, 0, "no projection renders as an em dash");
+});
+
+test("a dead-even projection names no winner", () => {
+  const p = adaptPrediction({
+    ...modelled,
+    projected_home_score: 20,
+    projected_away_score: 20,
+    home_win_probability: 0.5,
+    away_win_probability: 0.5,
+  });
+  assert.equal(p.predictedWinner, "");
 });

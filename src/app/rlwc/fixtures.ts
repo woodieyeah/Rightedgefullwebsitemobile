@@ -32,6 +32,15 @@ export interface PublicFixture {
   status: "scheduled" | "live" | "final" | "abandoned" | "postponed";
   home_score: number | null;
   away_score: number | null;
+  // Latest model output, null until the prediction worker has run for this
+  // fixture. The projected score is the MODEL's view, entirely separate from
+  // home_score/away_score, which are the actual result.
+  projected_home_score: number | null;
+  projected_away_score: number | null;
+  home_win_probability: number | null;
+  away_win_probability: number | null;
+  model_version: string | null;
+  prediction_at: string | null;
 }
 
 /**

@@ -7401,12 +7401,16 @@ function FeaturedMatchPreview({
     : selectedIsAway
       ? row.awayOverlay
       : 0;
+  // An edge of exactly zero means no market odds were published for this
+  // fixture, not a genuine zero-edge quote. Render it as an em dash so an
+  // absent edge is never mistaken for a measured one.
+  const hasMarketOdds = Boolean(row.marketHomeOdds || row.marketAwayOdds);
   const selectedEdgeLabel =
-    selectedIsHome || selectedIsAway
+    (selectedIsHome || selectedIsAway) && hasMarketOdds
       ? `${selectedEdge >= 0 ? "+" : ""}${formatPercent(selectedEdge, 2)}`
       : "—";
   const selectedEdgeClass =
-    !selectedIsHome && !selectedIsAway
+    (!selectedIsHome && !selectedIsAway) || !hasMarketOdds
       ? "text-[#9CA3AF]"
       : selectedEdge >= 0
         ? "text-[#00E676]"

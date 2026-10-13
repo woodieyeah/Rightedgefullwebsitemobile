@@ -93,20 +93,46 @@ export function adaptFixture(fixture: PublicFixture): AdaptedFixture {
 /**
  * Convert a fixture into a prediction row.
  *
- * Every model field is zero and bestBet is empty until a model actually runs.
- * The card renders "—" for absent projections, which is the truthful display.
+ * Model fields are populated from the prediction when one exists, and left at
+ * zero otherwise. The card renders "—" for absent projections, which is the
+ * truthful display for a fixture the model has not priced.
+ *
+ * Only the projected score and win probabilities are published. Edge is
+ * deliberately not carried: it is only trustworthy when two independent books
+ * agree, and that gate lives server-side in the prediction worker.
  */
 export function adaptPrediction(fixture: PublicFixture): AdaptedPrediction {
+  const homeScore = fixture.projected_home_score;
+  const awayScore = fixture.projected_away_score;
+  const homeProb = fixture.home_win_probability;
+  const awayProb = fixture.away_win_probability;
+
+  const hasProjection = homeScore !== null && awayScore !== null;
+  const hasProbabilities = homeProb !== null && awayProb !== null;
+
+  // Model odds are the inverse of the de-vigged probability.
+  const modelHomeOdds = hasProbabilities && homeProb > 0 ? 1 / homeProb : 0;
+  const modelAwayOdds = hasProbabilities && awayProb > 0 ? 1 / awayProb : 0;
+
+  let predictedWinner = "";
+  if (hasProjection && homeScore !== awayScore) {
+    predictedWinner = homeScore > awayScore ? fixture.home_team : fixture.away_team;
+  } else if (hasProbabilities && homeProb !== awayProb) {
+    predictedWinner = homeProb > awayProb ? fixture.home_team : fixture.away_team;
+  }
+
   return {
     match: `${fixture.home_team} v ${fixture.away_team}`,
     roundNumber: toRoundNumber(fixture),
     homeTeam: fixture.home_team,
     awayTeam: fixture.away_team,
-    predictedWinner: "",
-    predictedHomeScore: 0,
-    predictedAwayScore: 0,
-    modelHomeOdds: 0,
-    modelAwayOdds: 0,
+    predictedWinner,
+    predictedHomeScore: hasProjection ? homeScore : 0,
+    predictedAwayScore: hasProjection ? awayScore : 0,
+    modelHomeOdds,
+    modelAwayOdds,
+    // Market odds and overlays stay empty: publishing an edge requires the
+    // two-book agreement gate, which is not satisfied for every fixture.
     marketHomeOdds: 0,
     marketAwayOdds: 0,
     homeOverlay: 0,
