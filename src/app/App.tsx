@@ -12129,16 +12129,36 @@ function TryScorersPage({
   isPremium?: boolean;
   isAdmin?: boolean;
 }) {
+  const now = useMinuteNow();
+
+  // Try-scorer rows carry no kickoff time, so a finished match is
+  // indistinguishable from an upcoming one without joining to its fixture.
+  // Without this the completed Grand Final kept showing live Best Bet and Value
+  // signals days after it was played. Fails open: a row whose fixture cannot be
+  // resolved is kept, so a naming mismatch shows too much rather than silently
+  // hiding premium plays.
+  const liveTryScorers = useMemo(() => {
+    const kickoffByPair = new Map<string, FixtureRow>();
+    for (const fixture of data.fixtures) {
+      kickoffByPair.set(buildTeamPairKey(fixture.homeTeam, fixture.awayTeam), fixture);
+    }
+    return data.tryScorers.filter((row) => {
+      const fixture = kickoffByPair.get(getMatchPairKeyFromLabel(row.match));
+      if (!fixture) return true;
+      return !isFixtureCompleted(fixture, now);
+    });
+  }, [data.tryScorers, data.fixtures, now]);
+
   const availableRounds = useMemo(
     () =>
       Array.from(
         new Set(
-          data.tryScorers
+          liveTryScorers
             .map((row) => row.round)
             .filter((round) => Number.isFinite(round) && round > 0),
         ),
       ).sort((a, b) => b - a),
-    [data.tryScorers],
+    [liveTryScorers],
   );
 
   const latestRound = availableRounds[0] || 0;
@@ -12161,8 +12181,8 @@ function TryScorersPage({
 
   const roundFilteredRows =
     selectedRound === "all"
-      ? data.tryScorers
-      : data.tryScorers.filter((row) => row.round === selectedRound);
+      ? liveTryScorers
+      : liveTryScorers.filter((row) => row.round === selectedRound);
 
   const predictedWinnerByMatch = data.predictions.reduce((map, prediction) => {
     if (prediction.predictedWinner) {
