@@ -1,0 +1,11 @@
+project_id = "spahmuawycgohcznathc"
+
+# The deployed function's entrypoint is index.tsx, not the CLI's default
+# index.ts, and verify_jwt is false because the public API is called by the
+# browser without a user JWT. Both must be declared here or a CLI deploy either
+# fails to find the source or silently re-enables JWT verification and breaks
+# every /api/* call.
+[functions.make-server-3b84b96c]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/server/index.tsx"

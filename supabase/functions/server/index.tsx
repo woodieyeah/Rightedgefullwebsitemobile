@@ -2276,6 +2276,19 @@ app.get("/admin/kv-namespace-scan", async (c) => {
 
 function normalizeNrlTeamName(team: string) {
   const t = String(team || "").toLowerCase();
+  // International sides share city and nickname words with NRL clubs: "New
+  // Zealand" contains the Warriors' city, so an RLWC fixture was published as
+  // "Australia v New Zealand Warriors". Nations are matched exactly and
+  // returned untouched before any substring rule runs. A club's own label
+  // ("New Zealand Warriors") is longer than the nation, so it never matches
+  // here and still normalises below.
+  const INTERNATIONAL_SIDES = new Set([
+    "australia", "new zealand", "samoa", "tonga", "england", "fiji",
+    "papua new guinea", "cook islands", "lebanon", "france", "wales",
+    "ireland", "scotland", "italy", "jamaica", "greece",
+  ]);
+  if (INTERNATIONAL_SIDES.has(t.trim())) return String(team || "").trim();
+
   if (t.includes("new south wales") || /\bnsw\b/.test(t) || t.includes("blues")) return "New South Wales Blues";
   if (t.includes("queensland maroons") || /\bqld\b/.test(t) || t.includes("maroons")) return "Queensland Maroons";
   if (t.includes("bronco") || t.includes("brisbane")) return "Brisbane Broncos";
