@@ -72,9 +72,13 @@ async function main() {
     `https://web20-api.bluebet.com.au/MasterEvent?MasterEventId=${MASTER_EVENT_ID}&GroupTypeCode=G20`, BETR);
   const anytimeMarket = (g20.Events ?? []).find((e: any) =>
     String(e.EventName ?? "").startsWith("Anytime Tryscorer"));
-  const trbojevic = (anytimeMarket?.Outcomes ?? []).find((o: any) =>
-    o.OutcomeName === "Tom Trbojevic");
-  if (!trbojevic?.Price) throw new Error("Trbojevic anytime price unavailable");
+  const betrScorerPrice = (name: string) => {
+    const o = (anytimeMarket?.Outcomes ?? []).find((x: any) => x.OutcomeName === name);
+    if (!o?.Price) throw new Error(`Betr anytime price unavailable for ${name}`);
+    return Number(o.Price);
+  };
+  const trbojevicPrice = betrScorerPrice("Tom Trbojevic");
+  const bostockPrice = betrScorerPrice("Jack Bostock");
 
   const tab = await getJson(
     "https://webapi.tab.com.au/v1/tab-info-service/sports/Rugby%20League/competitions/World%20Cup/matches/Australia%20v%20New%20Zealand?jurisdiction=QLD");
@@ -86,6 +90,11 @@ async function main() {
   };
 
   // ---- SGM price from Betr's correlation model ----------------------------
+  // Three legs: the match result plus two try scorers in COMPLEMENTARY
+  // positions. Trbojevic is a fullback, so a second fullback (Walsh) is
+  // treated by Betr as a substitute and earns only a -27% correlation
+  // discount; Bostock, a centre, earns -42% and produces a materially
+  // likelier combination despite being the longer standalone price.
   const sgmRes = await fetch("https://web20-api.bluebet.com.au/SameGameMultiPrice", {
     method: "POST",
     headers: { ...BETR, "Content-Type": "application/json" },
@@ -95,9 +104,12 @@ async function main() {
         { EventId: MATCH_RESULT_EVENT, OutcomeId: 1, MarketType: "WIN", FixedWin: ausH2h.Price,
           FixedMarketId: 0, MarketTypeDesc: "Match Result (Australia v New Zealand)",
           GroupByHeader: "Match Result", Points: 0, BetDetailTypeCode: "W", OutcomeName: "Australia" },
-        { EventId: ANYTIME_TRY_EVENT, OutcomeId: 6, MarketType: "TSCORER", FixedWin: trbojevic.Price,
+        { EventId: ANYTIME_TRY_EVENT, OutcomeId: 6, MarketType: "TSCORER", FixedWin: trbojevicPrice,
           FixedMarketId: 0, MarketTypeDesc: "Anytime Tryscorer (Australia v New Zealand)",
           GroupByHeader: "Anytime Tryscorer", Points: 0, BetDetailTypeCode: "TS", OutcomeName: "Tom Trbojevic" },
+        { EventId: ANYTIME_TRY_EVENT, OutcomeId: 35, MarketType: "TSCORER", FixedWin: bostockPrice,
+          FixedMarketId: 0, MarketTypeDesc: "Anytime Tryscorer (Australia v New Zealand)",
+          GroupByHeader: "Anytime Tryscorer", Points: 0, BetDetailTypeCode: "TS", OutcomeName: "Jack Bostock" },
       ],
     }),
   });
@@ -116,12 +128,13 @@ async function main() {
     },
     {
       kind: "sgm", market: "sgm",
-      selection: "Australia + Tom Trbojevic anytime try", point: null,
+      selection: "Australia + Tom Trbojevic & Jack Bostock anytime tries", point: null,
       entryOdds: Number(sgm.Price), entryBookmaker: "Betr",
       modelProbability: 1 / Number(sgm.Price),
       legs: [
         { label: "Australia", market: "h2h", odds: Number(ausH2h.Price) },
-        { label: "Tom Trbojevic", market: "anytime_try", odds: Number(trbojevic.Price) },
+        { label: "Tom Trbojevic", market: "anytime_try", odds: trbojevicPrice },
+        { label: "Jack Bostock", market: "anytime_try", odds: bostockPrice },
       ],
     },
     {

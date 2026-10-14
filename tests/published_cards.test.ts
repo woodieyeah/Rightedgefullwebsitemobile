@@ -143,6 +143,32 @@ test("a published multi becomes a multi card", () => {
   assert.equal(card.match, "Australia V New Zealand");
 });
 
+test("a three-leg multi keeps all three legs", () => {
+  // Betr prices Australia + Trbojevic + Bostock at $5.00 against a $8.66
+  // product — a 42% correlation discount, because Bostock (centre) is
+  // complementary to Trbojevic (fullback) rather than a substitute.
+  const threeLeg: PublicPick = {
+    ...sgmPick,
+    selection: "Australia + Tom Trbojevic & Jack Bostock anytime tries",
+    entry_odds: 5.00,
+    model_probability: 0.20,
+    legs: [
+      { selection: "Australia", market: "h2h", odds: 1.65, result: "pending" },
+      { selection: "Tom Trbojevic", market: "anytime_try", odds: 2.10, result: "pending" },
+      { selection: "Jack Bostock", market: "anytime_try", odds: 2.50, result: "pending" },
+    ] as any,
+  };
+  const card = buildPublishedMultiCard(row(), threeLeg)!;
+  assert.equal(card.legs.length, 3);
+  assert.equal(card.price, 5.00);
+  assert.equal(card.legs[0].kind, "result");
+  assert.equal(card.legs[1].kind, "try-scorer");
+  assert.equal(card.legs[2].kind, "try-scorer");
+  // Must stay below the product of its legs.
+  const product = card.legs.reduce((p, l) => p * l.odds, 1);
+  assert.ok(card.price < product, `${card.price} must be below ${product.toFixed(2)}`);
+});
+
 test("the card carries the bookmaker's real price, not the estimate", () => {
   // The page's generic estimate multiplies legs and applies a 0.83 factor:
   // 1.65 * 2.10 * 0.83 = 2.88. Betr's actual correlated price is 2.80.
