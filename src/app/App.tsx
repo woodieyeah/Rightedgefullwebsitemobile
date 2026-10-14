@@ -15,9 +15,16 @@ import {
   fetchCompetitionPicks,
   picksByFixture,
   selectCorePlay,
+  selectSgm,
   selectTryScorers,
 } from "./rlwc/picks";
 import { applyCorePlay, toTryScorerRows } from "./rlwc/apply-picks";
+import {
+  buildPublishedMultiCard,
+  buildPublishedPremiumPlay,
+  type PublishedMultiCard,
+  type PublishedPremiumPlay,
+} from "./rlwc/published-cards";
 import { ModelLabPage } from "./lab/ModelLabPage";
 import {
   ROUND_25_CORE_PLAYS,
@@ -1485,6 +1492,12 @@ type DashboardData = {
   averageEdge: number;
   strongestBet: string;
   tryScorers: TryScorerRow[];
+  // Editorially published picks (currently RLWC). These bypass the generic
+  // value and try-scorer gates, which are tuned for sheet-derived NRL rows:
+  // the published brief is "plays that win", not "plays with measurable edge",
+  // and a published multi carries the bookmaker's real correlated price.
+  publishedPremiumPlays?: PublishedPremiumPlay[];
+  publishedMultiCards?: PublishedMultiCard[];
 };
 
 const appPages = [
@@ -11004,6 +11017,28 @@ function BestBetsPage({
       .slice(0, isAdmin ? 50 : 8);
   }, [data, marketMap, now, canViewStartedPremiumPlays, isAdmin, frozen.snapshots, archivedMatchKeys, predictionByPairKey]);
 
+  // Editorially published plays (RLWC) are added after the generic pipeline.
+  // They deliberately skip the value gate above: the published brief is "plays
+  // that win", not "plays with measurable edge", and no book currently beats
+  // the exchange anchor, so a real published pick would never surface.
+  const matchReadsWithPublished = useMemo(() => {
+    const published = data.publishedPremiumPlays ?? [];
+    if (!published.length) return matchReads;
+
+    const existing = new Set(matchReads.map((play) => getPredictionPairKey(play.row)));
+    const extra = published
+      .filter((play) => {
+        const key = getPredictionPairKey(play.row as PredictionRow);
+        if (existing.has(key) || archivedMatchKeys.has(key)) return false;
+        return canViewStartedPremiumPlays || !hasPredictionKickedOff(play.row as PredictionRow, now);
+      })
+      .map((play) =>
+        withPremiumChooserMetrics(play as unknown as PremiumMarketPlay, "Core Play"),
+      );
+
+    return [...matchReads, ...extra].sort(comparePremiumPlaysByFixture);
+  }, [matchReads, data.publishedPremiumPlays, archivedMatchKeys, canViewStartedPremiumPlays, now]);
+
   // BEST H2H: keep every qualifying match instead of collapsing the round to
   // one winner. A selection that is also a Core Play is rendered once in the
   // Core section with both labels.
@@ -11119,7 +11154,7 @@ function BestBetsPage({
               Loading live line and total prices...
             </div>
           </GlassCard>
-        ) : matchReads.length === 0 ? (
+        ) : matchReadsWithPublished.length === 0 ? (
           <GlassCard className="p-4 md:p-8 text-center border-l-4 border-l-white/20">
             <div className="text-white/50 font-bold uppercase tracking-widest text-[10px] md:text-base">
               No play clears the conservative Core Play threshold right now.
@@ -11127,7 +11162,7 @@ function BestBetsPage({
           </GlassCard>
         ) : (
           <div className="grid grid-cols-1 gap-5 md:gap-6">
-            {matchReads.map((play) => (
+            {matchReadsWithPublished.map((play) => (
               <PremiumMarketPlayCard
                 key={play.id}
                 play={play}
@@ -13834,7 +13869,16 @@ function SameGameMultiCard({
   isPremium: boolean;
   onRequestAccess: (targetHash?: string) => void;
 }) {
-  const estimatedPrice = isPremium ? getEstimatedSgmPrice(card.legs) : null;
+  // A published card carries the bookmaker's own correlated price. The generic
+  // estimate multiplies legs and applies a flat 0.83 factor, which overstates
+  // the payout: $1.65 x $2.10 x 0.83 = $2.88 where Betr actually prices $2.80.
+  const publishedPrice =
+    "price" in card && Number.isFinite((card as { price?: number }).price)
+      ? (card as { price: number }).price
+      : null;
+  const estimatedPrice = isPremium
+    ? publishedPrice ?? getEstimatedSgmPrice(card.legs)
+    : null;
   const kickoff = card.fixture
     ? `${card.fixture.day} ${card.fixture.dateLabel} @ ${card.fixture.aedt} ${card.fixture.tz || "AEST"}`
     : "KICKOFF TBC";
@@ -14002,7 +14046,23 @@ function MultiPage({
       ...getRound25ArchivedSameGameMultiCards(data, settledMatchKeys, now),
       ...getRound26ArchivedSameGameMultiCards(data, settledMatchKeys, now),
     ];
-    return mergeSameGameMultiCards(generatedCards, archivedCards);
+    const merged = mergeSameGameMultiCards(generatedCards, archivedCards);
+
+    // Editorially published multis (RLWC) are appended after the generic
+    // builder. That builder needs two try scorers rated 25%+ by the model,
+    // which the opener's de-vigged reads (max ~22%) never reach — and the
+    // three-leg combination it would produce is the longshot that was
+    // rejected. A published card also carries the bookmaker's own correlated
+    // price instead of the page's multiply-and-discount estimate.
+    const published = data.publishedMultiCards ?? [];
+    if (!published.length) return merged;
+
+    const existingKeys = new Set(merged.map((card) => buildMatchLabelKey(card.match)));
+    const extra = published.filter(
+      (card) => !existingKeys.has(buildMatchLabelKey(card.match)),
+    ) as unknown as SameGameMultiCardData[];
+
+    return [...merged, ...extra];
   }, [data, effectiveMarketMap, frozen.round, now]);
   const roundMulti = useMemo(
     () => buildRoundMultiData(data, effectiveMarketMap, now),
@@ -15692,6 +15752,25 @@ export default function App() {
             ) as unknown as TryScorerRow[];
           });
 
+          // Premium Plays and Multi apply gates tuned for sheet-derived NRL
+          // rows: a positive-edge requirement and a 25%+ try-scorer floor.
+          // Neither fits an editorially published pick, so published plays are
+          // carried separately and merged into those pages directly.
+          const publishedPremiumPlays: PublishedPremiumPlay[] = [];
+          const publishedMultiCards: PublishedMultiCard[] = [];
+          for (let index = 0; index < upcoming.length; index++) {
+            const fixturePicks = picksForFixture.get(upcoming[index].id);
+            if (!fixturePicks?.length) continue;
+            const prediction = predictions[index];
+            if (!prediction) continue;
+
+            const play = buildPublishedPremiumPlay(prediction, selectCorePlay(fixturePicks));
+            if (play) publishedPremiumPlays.push(play);
+
+            const multi = buildPublishedMultiCard(prediction, selectSgm(fixturePicks));
+            if (multi) publishedMultiCards.push(multi);
+          }
+
           dashboardData.predictions = [
             ...dashboardData.predictions,
             ...predictions,
@@ -15705,6 +15784,12 @@ export default function App() {
               ...dashboardData.tryScorers,
               ...rlwcTryScorers,
             ];
+          }
+          if (publishedPremiumPlays.length) {
+            dashboardData.publishedPremiumPlays = publishedPremiumPlays;
+          }
+          if (publishedMultiCards.length) {
+            dashboardData.publishedMultiCards = publishedMultiCards;
           }
         }
       } catch {
