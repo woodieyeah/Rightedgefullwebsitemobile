@@ -19,6 +19,7 @@ import {
   selectTryScorers,
 } from "./rlwc/picks";
 import { applyCorePlay, toTryScorerRows } from "./rlwc/apply-picks";
+import { buildMatchCardPlayLabel, shouldShowEdge } from "./rlwc/match-card-play";
 import {
   buildPublishedMultiCard,
   buildPublishedPremiumPlay,
@@ -8713,8 +8714,19 @@ function PredictionsPage({
           // recalculation, even while the market feed continues to move.
           // Once a match completes the live feed drops it entirely, so fall
           // back to the published Round 26 play so it stays on the card.
+          // An editorially published play (RLWC) takes precedence over live
+          // recalculation: it is the selection actually published, and the
+          // generic builder cannot produce it because it requires a positive
+          // value edge the published brief does not ask for.
+          const publishedPlayForRow = (data.publishedPremiumPlays ?? []).find(
+            (candidate) =>
+              getPredictionPairKey(candidate.row as PredictionRow) === matchPairKey,
+          ) as unknown as PremiumMarketPlay | undefined;
           const premiumMarketPlay =
-            frozenCorePlay || livePlay || getRound26ArchivedPremiumPlay(row, "bestbet");
+            frozenCorePlay ||
+            publishedPlayForRow ||
+            livePlay ||
+            getRound26ArchivedPremiumPlay(row, "bestbet");
           const premiumH2hPlay =
             frozenH2hPlay || liveH2hPlay || getRound26ArchivedPremiumPlay(row, "h2h");
           const premiumPlayReveals = buildPremiumPlayReveals([
@@ -9207,7 +9219,7 @@ function PublicPremiumPlayRevealCard({
           </div>
         </div>
       </div>
-      <div className="mt-4 grid grid-cols-3 gap-2">
+      <div className={`mt-4 grid gap-2 ${shouldShowEdge(play) ? "grid-cols-3" : "grid-cols-2"}`}>
         <div className="border border-[#1E1E2E] bg-[#16161D] px-2 py-2">
           <div className="text-[7px] font-black uppercase tracking-widest text-[#6B7280]">
             Model
@@ -9216,14 +9228,16 @@ function PublicPremiumPlayRevealCard({
             {formatPercent(play.modelPct, 1)}
           </div>
         </div>
-        <div className="border border-[#1E1E2E] bg-[#16161D] px-2 py-2">
-          <div className="text-[7px] font-black uppercase tracking-widest text-[#6B7280]">
-            Edge
+        {shouldShowEdge(play) && (
+          <div className="border border-[#1E1E2E] bg-[#16161D] px-2 py-2">
+            <div className="text-[7px] font-black uppercase tracking-widest text-[#6B7280]">
+              Edge
+            </div>
+            <div className="mt-1 text-sm font-black text-[#00E676]">
+              {formatPremiumMatchEdge(play.modelPct, play.odds)}
+            </div>
           </div>
-          <div className="mt-1 text-sm font-black text-[#00E676]">
-            {formatPremiumMatchEdge(play.modelPct, play.odds)}
-          </div>
-        </div>
+        )}
         <div className="border border-[#1E1E2E] bg-[#16161D] px-2 py-2">
           <div className="text-[7px] font-black uppercase tracking-widest text-[#6B7280]">
             Odds
@@ -9302,9 +9316,7 @@ function MatchPremiumSignalStrip({
     ? `${proofMatchPlaySelection}${proofMatchPlay.odds ? ` @ $${proofMatchPlay.odds.toFixed(2)}` : ""}`.trim()
     : settledBet
       ? `${settledBet.selection || settledBet.side || "Premium play"} ${settledBet.oddsTaken ? `@ $${settledBet.oddsTaken.toFixed(2)}` : ""}`.trim()
-      : play
-        ? `${play.selection} ${play.odds ? `@ $${play.odds.toFixed(2)}` : ""}`.trim()
-        : "Premium match play";
+      : buildMatchCardPlayLabel(play ?? null);
 
   if (matchCompleted) {
     const fallbackMatchPlay = settledBet
@@ -10588,12 +10600,18 @@ function PremiumMarketPlayCard({
     : play.chooserLabel
       ? [play.chooserLabel]
       : [];
+  const showEdge = shouldShowEdge(play);
   const detail =
     play.type === "Line"
       ? `Model margin ${play.projectedValue && play.projectedValue > 0 ? "+" : ""}${Math.round(play.projectedValue || 0)} vs market ${formatSgmLine(play.marketPoint || 0)}`
       : play.type === "Total"
         ? `Model total ${Math.round(play.projectedValue || 0)} vs market ${play.marketPoint}`
-        : `Model winner ${formatPercent(play.modelPct, 1)} vs market ${formatPercent(getImpliedWinPctFromOdds(play.odds), 1)}`;
+        : showEdge
+          ? `Model winner ${formatPercent(play.modelPct, 1)} vs market ${formatPercent(getImpliedWinPctFromOdds(play.odds), 1)}`
+          // Without a positive edge the comparison states that the market
+          // rates the selection higher than we do, which contradicts the
+          // recommendation. Report the model's read on its own.
+          : `Model winner ${formatPercent(play.modelPct, 1)}`;
 
   return (
     <GlassCard className="p-4 md:p-6 border-l-4 border-l-[#00E676]">
@@ -10651,7 +10669,7 @@ function PremiumMarketPlayCard({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-2.5 md:gap-3">
+      <div className={`grid grid-cols-2 gap-2.5 md:gap-3 ${showEdge ? "md:grid-cols-5" : "md:grid-cols-4"}`}>
         <div className="min-w-0 bg-[#1E232B] p-2.5 md:p-3">
           <div className="text-[9px] font-black text-white/45 uppercase tracking-widest mb-1">
             Score
@@ -10668,14 +10686,16 @@ function PremiumMarketPlayCard({
             {formatPercent(play.modelPct, 1)}
           </div>
         </div>
-        <div className="min-w-0 bg-[#1E232B] p-2.5 md:p-3">
-          <div className="text-[9px] font-black text-white/45 uppercase tracking-widest mb-1">
-            Edge
+        {showEdge && (
+          <div className="min-w-0 bg-[#1E232B] p-2.5 md:p-3">
+            <div className="text-[9px] font-black text-white/45 uppercase tracking-widest mb-1">
+              Edge
+            </div>
+            <div className="text-base md:text-lg font-black text-[#00E676]">
+              {edgeLabel}
+            </div>
           </div>
-          <div className="text-base md:text-lg font-black text-[#00E676]">
-            {edgeLabel}
-          </div>
-        </div>
+        )}
         <div className="min-w-0 bg-[#1E232B] p-2.5 md:p-3">
           <div className="text-[9px] font-black text-white/45 uppercase tracking-widest mb-1">
             Odds
