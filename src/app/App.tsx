@@ -11,6 +11,13 @@ import { capturePostHogEvent, identifyPostHogUser } from "../lib/posthog";
 import { resolveInternationalTeam } from "./teams/international-teams";
 import { fetchCompetitionFixtures, selectCurrentFixtures } from "./rlwc/fixtures";
 import { adaptFixtures } from "./rlwc/adapt";
+import {
+  fetchCompetitionPicks,
+  picksByFixture,
+  selectCorePlay,
+  selectTryScorers,
+} from "./rlwc/picks";
+import { applyCorePlay, toTryScorerRows } from "./rlwc/apply-picks";
 import { ModelLabPage } from "./lab/ModelLabPage";
 import {
   ROUND_25_CORE_PLAYS,
@@ -15658,14 +15665,47 @@ export default function App() {
         const upcoming = selectCurrentFixtures(rlwcFixtures);
         if (upcoming.length) {
           const adapted = adaptFixtures(upcoming);
+
+          // Published picks ride on the same rows the NRL cards use, so the
+          // play, the multi and the try scorers all render through the
+          // existing card path. Returns [] on any failure.
+          const picks = await fetchCompetitionPicks("rlwc", publicAnonKey);
+          const picksForFixture = picksByFixture(picks);
+
+          const predictions = (adapted.predictions as unknown as PredictionRow[]).map(
+            (prediction, index) => {
+              const fixturePicks = picksForFixture.get(upcoming[index]?.id ?? "");
+              if (!fixturePicks?.length) return prediction;
+              return applyCorePlay(prediction, selectCorePlay(fixturePicks));
+            },
+          );
+
+          const rlwcTryScorers = upcoming.flatMap((fixture, index) => {
+            const fixturePicks = picksForFixture.get(fixture.id);
+            if (!fixturePicks?.length) return [];
+            const prediction = predictions[index];
+            if (!prediction) return [];
+            return toTryScorerRows(
+              selectTryScorers(fixturePicks),
+              prediction.match,
+              prediction.roundNumber,
+            ) as unknown as TryScorerRow[];
+          });
+
           dashboardData.predictions = [
             ...dashboardData.predictions,
-            ...(adapted.predictions as unknown as PredictionRow[]),
+            ...predictions,
           ];
           dashboardData.fixtures = [
             ...dashboardData.fixtures,
             ...(adapted.fixtures as unknown as FixtureRow[]),
           ];
+          if (rlwcTryScorers.length) {
+            dashboardData.tryScorers = [
+              ...dashboardData.tryScorers,
+              ...rlwcTryScorers,
+            ];
+          }
         }
       } catch {
         // RLWC is additive; never let it break the NRL pages.
