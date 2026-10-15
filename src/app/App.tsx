@@ -22,6 +22,7 @@ import {
 import { applyCorePlay, toTryScorerRows } from "./rlwc/apply-picks";
 import { buildMatchCardPlayLabel, shouldShowEdge } from "./rlwc/match-card-play";
 import { teamNameFromSelection } from "../model/line-cover";
+import { fetchHeadshots, headshotFor, type HeadshotIndex } from "./rlwc/headshots";
 import {
   buildTrackerFromPicks,
   formatRate,
@@ -1510,6 +1511,9 @@ type DashboardData = {
   // Every published pick including settled ones, for the result trackers.
   // The card-facing fields above carry only pending picks.
   publishedPickLedger?: SettledPublicPick[];
+  // Player portraits keyed by normalised name, for multi legs and try-scorer
+  // rows. Absent or incomplete simply means the avatar falls back.
+  headshots?: HeadshotIndex;
 };
 
 const appPages = [
@@ -8918,6 +8922,7 @@ function PredictionsPage({
                   {matchSameGameMultiCard && (isPremium || rowKickedOff || matchCompleted) && (
                     <MatchSameGameMultiCard
                       sameGameMultiCard={matchSameGameMultiCard}
+                      headshots={data.headshots}
                     />
                   )}
                 </div>
@@ -9036,6 +9041,7 @@ function PredictionsPage({
                     {matchSameGameMultiCard && (isPremium || rowKickedOff) && (
                       <MatchSameGameMultiCard
                         sameGameMultiCard={matchSameGameMultiCard}
+                        headshots={data.headshots}
                       />
                     )}
                     {!matchCompleted && !isPremium && (
@@ -9125,8 +9131,10 @@ function getProofMarketLabel(market: RoundProofMatchPlay["market"] | PremiumMark
 
 function MatchSameGameMultiCard({
   sameGameMultiCard,
+  headshots,
 }: {
   sameGameMultiCard: SameGameMultiCardData | RoundProofSameGameMulti;
+  headshots?: HeadshotIndex;
 }) {
   const isSettled = "result" in sameGameMultiCard;
   const overallResult = isSettled ? sameGameMultiCard.result : null;
@@ -9178,7 +9186,16 @@ function MatchSameGameMultiCard({
               <span className="text-[9px] font-medium tabular-nums text-[#6B7280]">
                 {String(index + 1).padStart(2, "0")}
               </span>
-              <TeamLogo teamName={leg.team} className="h-[22px] w-[22px] rounded-[4px] text-[8px]" />
+              {leg.kind === "try-scorer" ? (
+                <PlayerAvatar
+                  playerName={leg.label}
+                  teamName={leg.team}
+                  headshots={headshots}
+                  className="h-[22px] w-[22px] rounded-full"
+                />
+              ) : (
+                <TeamLogo teamName={leg.team} className="h-[22px] w-[22px] rounded-[4px] text-[8px]" />
+              )}
               <span className="min-w-0 truncate text-[11px] font-black uppercase tracking-wide text-white">
                 {leg.label}{leg.suffix ? ` · ${leg.suffix}` : ""}
               </span>
@@ -12447,7 +12464,12 @@ function TryScorersPage({
                         >
                           <td className="px-2 py-4">
                             <div className="flex min-w-0 items-center gap-2">
-                              <TeamLogo teamName={row.team} className="w-5 h-5 text-[8px]" />
+                              <PlayerAvatar
+                                playerName={row.player}
+                                teamName={row.team}
+                                headshots={data.headshots}
+                                className="w-5 h-5 rounded-full text-[8px]"
+                              />
                               <span className="min-w-0 truncate text-sm font-black text-white">{row.player}</span>
                             </div>
                           </td>
@@ -13787,10 +13809,12 @@ function RoundMultiCard({
   multi,
   isPremium,
   onRequestAccess,
+  headshots,
 }: {
   multi: RoundMultiData;
   isPremium: boolean;
   onRequestAccess: (targetHash?: string) => void;
+  headshots?: HeadshotIndex;
 }) {
   return (
     <article className="border border-[#1E1E2E] bg-[#111116]">
@@ -13856,7 +13880,14 @@ function RoundMultiCard({
                 </>
               ) : (
                 <>
-                  {leg.team ? (
+                  {leg.kind === "try-scorer" ? (
+                    <PlayerAvatar
+                      playerName={leg.label}
+                      teamName={leg.team}
+                      headshots={headshots}
+                      className="h-[22px] w-[22px] rounded-full"
+                    />
+                  ) : leg.team ? (
                     <TeamLogo teamName={leg.team} className="h-[22px] w-[22px] rounded-[4px] text-[8px]" />
                   ) : (
                     <span className="h-[22px] w-[22px]" aria-hidden="true" />
@@ -13922,10 +13953,12 @@ function SameGameMultiCard({
   card,
   isPremium,
   onRequestAccess,
+  headshots,
 }: {
   card: SameGameMultiCardData;
   isPremium: boolean;
   onRequestAccess: (targetHash?: string) => void;
+  headshots?: HeadshotIndex;
 }) {
   // A published card carries the bookmaker's own correlated price. The generic
   // estimate multiplies legs and applies a flat 0.83 factor, which overstates
@@ -14006,7 +14039,14 @@ function SameGameMultiCard({
                   <span className="text-[11px] font-medium tabular-nums text-[#9CA3AF]">
                     {String(index + 1).padStart(2, "0")}
                   </span>
-                  {leg.team ? (
+                  {leg.kind === "try-scorer" ? (
+                    <PlayerAvatar
+                      playerName={leg.label}
+                      teamName={leg.team}
+                      headshots={headshots}
+                      className="h-[22px] w-[22px] rounded-full"
+                    />
+                  ) : leg.team ? (
                     <TeamLogo teamName={leg.team} className="h-[22px] w-[22px] rounded-[4px] text-[8px]" />
                   ) : (
                     <span className="h-[22px] w-[22px]" aria-hidden="true" />
@@ -14142,6 +14182,53 @@ function PublishedResultTracker({
   );
 }
 
+/**
+ * A player's portrait, falling back to the team crest and then to nothing.
+ *
+ * Headshots are decoration: an unknown player, a missing index or an image
+ * that fails to load must never stop a published selection rendering. The
+ * fallback is handled in state rather than by swapping the src, so a broken
+ * URL cannot loop.
+ */
+function PlayerAvatar({
+  playerName,
+  teamName,
+  headshots,
+  className = "",
+}: {
+  playerName: string;
+  teamName?: string;
+  headshots?: HeadshotIndex;
+  className?: string;
+}) {
+  const url = headshotFor(headshots, playerName);
+  const [failed, setFailed] = useState(false);
+
+  if (!url || failed) {
+    return teamName ? <TeamLogo teamName={teamName} className={className} /> : null;
+  }
+
+  return (
+    <span
+      className={`shrink-0 inline-block overflow-hidden bg-[#1E232B] ${className}`}
+      title={playerName}
+    >
+      <img
+        src={url}
+        alt={playerName}
+        loading="lazy"
+        onError={() => setFailed(true)}
+        // The source is a 640x420 portrait with substantial headroom and
+        // shoulders, so a plain cover fit leaves the face only a few pixels
+        // tall. Scaling up inside a clipping wrapper and anchoring near the
+        // top crops to the head, which is the only part legible at 22px.
+        // The wrapper clips the overflow, so the circle stays a circle.
+        className="h-full w-full object-cover scale-[1.6] origin-[50%_18%]"
+      />
+    </span>
+  );
+}
+
 function MultiPage({
   data,
   onRequestAccess,
@@ -14221,6 +14308,7 @@ function MultiPage({
           multi={roundMulti}
           isPremium={isPremium}
           onRequestAccess={onRequestAccess}
+          headshots={data.headshots}
         />
       ) : null}
       <section className="flex flex-col gap-5">
@@ -14243,6 +14331,7 @@ function MultiPage({
               <SameGameMultiCard
                 key={card.key}
                 card={card}
+                headshots={data.headshots}
                 isPremium={isPremium}
                 onRequestAccess={onRequestAccess}
               />
@@ -15933,6 +16022,13 @@ export default function App() {
           if (allPicks.length) {
             dashboardData.publishedPickLedger =
               allPicks as unknown as SettledPublicPick[];
+          }
+
+          // Player portraits for multi legs and try-scorer rows. Returns {}
+          // on any failure, and every avatar falls back on its own.
+          const headshots = await fetchHeadshots("rlwc", publicAnonKey);
+          if (Object.keys(headshots).length) {
+            dashboardData.headshots = headshots;
           }
         }
       } catch {
