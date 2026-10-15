@@ -21,6 +21,7 @@ import {
 } from "./rlwc/picks";
 import { applyCorePlay, toTryScorerRows } from "./rlwc/apply-picks";
 import { buildMatchCardPlayLabel, shouldShowEdge } from "./rlwc/match-card-play";
+import { teamNameFromSelection } from "../model/line-cover";
 import {
   buildTrackerFromPicks,
   formatRate,
@@ -9228,7 +9229,11 @@ function PublicPremiumPlayRevealCard({
       </div>
       <div className="flex items-center gap-3">
         <TeamLogo
-          teamName={play.type === "Total" ? row.predictedWinner : play.selection}
+          teamName={
+            play.type === "Total"
+              ? row.predictedWinner
+              : teamNameFromSelection(play.selection)
+          }
           className="h-9 w-9 shrink-0 rounded-sm"
         />
         <div className="min-w-0">
@@ -10666,12 +10671,16 @@ function PremiumMarketPlayCard({
           <div className="flex items-center gap-2.5 md:gap-3">
             {originBadge ? (
               <OriginTeamBadge
-                teamName={play.selection}
+                teamName={teamNameFromSelection(play.selection)}
                 className="h-9 w-9 rounded-sm text-[10px] md:h-11 md:w-11 md:text-xs shadow-[2px_2px_0_0_rgba(255,255,255,0.1)]"
               />
             ) : (
               <TeamLogo
-                teamName={play.type === "Total" ? row.predictedWinner : play.selection}
+                teamName={
+                  play.type === "Total"
+                    ? row.predictedWinner
+                    : teamNameFromSelection(play.selection)
+                }
                 className="w-9 h-9 md:w-11 md:h-11 rounded-sm shadow-[2px_2px_0_0_rgba(255,255,255,0.1)]"
               />
             )}

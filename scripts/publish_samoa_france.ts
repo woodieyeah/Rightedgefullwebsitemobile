@@ -17,6 +17,10 @@
  */
 
 import { buildPickRows, type PublishedPick } from "../src/model/published-picks.ts";
+import {
+  coverProbabilityFromBands,
+  parseMarginBands,
+} from "../src/model/line-cover.ts";
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -164,15 +168,39 @@ async function main() {
     { name: "Francis Manuleleua", model: 0.435 },
   ];
 
+  // ---- Independent cover probability for the line -------------------------
+  // The projected scoreline is solved FROM the handicap, so it cannot rate the
+  // handicap. Betr's winning-margin ladder is a separate market and gives an
+  // independent read.
+  const g19 = await getJson(
+    `https://web20-api.bluebet.com.au/MasterEvent?MasterEventId=${MASTER_EVENT_ID}&GroupTypeCode=G19`,
+    BETR,
+  );
+  const marginEvent = (g19.Events ?? []).find((e: any) =>
+    String(e.EventName ?? "").startsWith("Samoa - Winning Margin"),
+  );
+  const bands = parseMarginBands(
+    (marginEvent?.Outcomes ?? []).map((o: any) => ({
+      name: String(o.OutcomeName),
+      price: Number(o.Price),
+    })),
+  );
+  const coverProbability = coverProbabilityFromBands(bands, Math.abs(linePoint));
+  console.log(
+    `margin ladder: ${bands.length} band(s) -> cover ${Math.abs(linePoint)} = ` +
+      (coverProbability === null ? "unavailable" : `${(coverProbability * 100).toFixed(1)}%`),
+  );
+
   const picks: PublishedPick[] = [
     {
       kind: "core", market: "line", selection: "Samoa", point: linePoint,
       entryOdds: Number(samoaLine.returnWin), entryBookmaker: "TAB",
-      // Two books within 1.0 point at an identical price; TAB's -47.5 beats
-      // Betr's -48.5. No independent model read: the projection is derived
-      // from this same line, so quoting it as confirmation would be circular.
-      modelProbability: null,
-    },
+      // Read off Betr's winning-margin ladder, which prices the margin
+      // directly and is therefore independent of the handicap itself.
+      // Null when the ladder is unavailable — never a guess.
+      modelProbability: coverProbability,
+      marketProbability: coverProbability === null ? null : 1 / Number(samoaLine.returnWin) / 1.05,
+    } as PublishedPick & { marketProbability: number | null },
     {
       kind: "sgm", market: "sgm",
       selection: "Brian To'o 2+ tries + Francis Manuleleua anytime try", point: null,
@@ -215,7 +243,8 @@ async function main() {
     const pick = picks[i];
     const mp = (rows[i] as any).market_probability;
     const model = pick.modelProbability === null ? "—" : `${(pick.modelProbability * 100).toFixed(1)}%`;
-    const market = mp === undefined ? "—" : `${(mp * 100).toFixed(1)}%`;
+    const market =
+      mp === undefined || mp === null ? "—" : `${(mp * 100).toFixed(1)}%`;
     const point = pick.point === null ? "" : ` ${pick.point}`;
     console.log(
       `  [${pick.kind.padEnd(11)}] ${(pick.selection + point).padEnd(52)} ` +
