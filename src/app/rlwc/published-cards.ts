@@ -130,12 +130,12 @@ export function buildPublishedMultiCard(
   if (legs.length < 2) return null;
 
   const product = legs.reduce((p, l) => p * l.odds, 1);
-  if (!Number.isFinite(product) || pick.entry_odds >= product) {
-    // Correlated legs must price below independent multiplication. A price at
-    // or above the product means the legs are mismatched or the quote is
-    // stale, and publishing it would overstate the payout.
-    return null;
-  }
+  // The book's correlated price may sit either side of the product:
+  // positively correlated legs price below it, negatively correlated legs
+  // (two players competing for the same pool of tries) price above it.
+  // Reject only an implausible gap, which means a mismatched or stale quote.
+  const ratio = pick.entry_odds / product;
+  if (!Number.isFinite(ratio) || ratio < 0.4 || ratio > 1.6) return null;
 
   return {
     key: `published-${pick.id}`,

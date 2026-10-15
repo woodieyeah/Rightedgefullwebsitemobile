@@ -60,7 +60,6 @@ export interface PickRow {
   stake_units: number;
   result_status: "pending";
   units_returned: null;
-  profit_units: null;
   settled_at: null;
   published: boolean;
   published_at: string;
@@ -91,11 +90,27 @@ export function buildPickRows(fixtureId: string, picks: PublishedPick[]): PickRo
         throw new Error(`an SGM needs at least two legs: ${pick.selection}`);
       }
       const product = legs.reduce((p, l) => p * l.odds, 1);
-      if (pick.entryOdds >= product) {
+      // The bookmaker's own correlated price is authoritative and may land
+      // either side of the product.
+      //
+      // Positively correlated legs price BELOW it: Australia win + Trbojevic
+      // + Bostock multiplies to $8.66 and prices at $5.00, because Australia
+      // winning makes Australian try scorers more likely.
+      //
+      // Negatively correlated legs price ABOVE it: To'o to score 2+ tries +
+      // Manuleleua anytime multiplies to $4.74 and prices at $5.35, because
+      // both compete for the same pool of Samoan tries, so To'o taking two
+      // makes one for Manuleleua less likely.
+      //
+      // Only an implausible gap signals a mismatched or stale quote. The
+      // bounds are deliberately wide — the guard catches a wrong leg being
+      // priced, not a legitimate correlation adjustment.
+      const ratio = pick.entryOdds / product;
+      if (!Number.isFinite(ratio) || ratio < 0.4 || ratio > 1.6) {
         throw new Error(
-          `SGM price $${pick.entryOdds} must be below the product of its legs ` +
-            `($${product.toFixed(2)}) — correlated legs price lower, so this is ` +
-            `a mismatched or stale quote`,
+          `SGM price $${pick.entryOdds} is implausible against its legs ` +
+            `($${product.toFixed(2)}, ratio ${ratio.toFixed(2)}) — likely a ` +
+            `mismatched or stale quote`,
         );
       }
     }
@@ -120,7 +135,8 @@ export function buildPickRows(fixtureId: string, picks: PublishedPick[]): PickRo
       stake_units: 1,
       result_status: "pending",
       units_returned: null,
-      profit_units: null,
+      // profit_units is a generated column (units_returned - stake_units);
+      // the database rejects any attempt to insert a value for it.
       settled_at: null,
       published: true,
       published_at: capturedAt,

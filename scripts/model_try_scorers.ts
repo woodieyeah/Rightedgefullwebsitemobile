@@ -25,8 +25,16 @@
 const UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0 Safari/537.36";
 
+/**
+ * Fixture to model. Defaults to tonight's match; override with --match.
+ *   npx tsx scripts/model_try_scorers.ts --match "Samoa v France"
+ */
+const matchArg = process.argv.indexOf("--match");
+const MATCH_NAME = matchArg >= 0 ? process.argv[matchArg + 1] : "Samoa v France";
+
 const TAB_MATCH =
-  "https://webapi.tab.com.au/v1/tab-info-service/sports/Rugby%20League/competitions/World%20Cup/matches/Australia%20v%20New%20Zealand?jurisdiction=QLD";
+  "https://webapi.tab.com.au/v1/tab-info-service/sports/Rugby%20League" +
+  `/competitions/World%20Cup/matches/${encodeURIComponent(MATCH_NAME)}?jurisdiction=QLD`;
 
 const SHEET_TRY_SCORERS =
   "https://docs.google.com/spreadsheets/d/e/2PACX-1vTKzRm_dhMcH-2sf_Yf3O6hqQE0_t13TeanTOJF0wwHSTv8Lb8gmR9zlJ1TceW106fM3e6-LHBVCjF8/pub?single=true&output=csv&gid=222068410";
@@ -49,7 +57,8 @@ const POSITION_BASE_RATE: Record<string, number> = {
 
 interface Candidate {
   player: string;
-  team: "Aus" | "NZ";
+  /** Short code taken from the feed's "(Sam)" / "(Fra)" suffix. */
+  team: string;
   price: number;
   position: string | null;
   baseRate: number | null;
@@ -59,7 +68,7 @@ interface Candidate {
 
 function normaliseName(name: string): string {
   return name
-    .replace(/\((?:Aus|NZ)\)/gi, "")
+    .replace(/\([A-Za-z]{2,4}\)/g, "")
     .replace(/[^a-z\s-]/gi, "")
     .trim()
     .toLowerCase();
@@ -120,32 +129,92 @@ async function main() {
   const positions = await loadPositions();
 
   // ---- 1. De-vig the market ------------------------------------------------
+  // Team codes come from the feed's own "(Sam)" / "(Fra)" suffix rather than
+  // being hardcoded, so this runs on any fixture.
   const raw = (market.propositions ?? [])
     .filter((p: any) => Number(p.returnWin) > 0)
-    .map((p: any) => ({
-      player: String(p.name),
-      team: /\(NZ\)/i.test(String(p.name)) ? ("NZ" as const) : ("Aus" as const),
-      price: Number(p.returnWin),
-    }));
+    .map((p: any) => {
+      const code = String(p.name).match(/\(([A-Za-z]{2,4})\)/)?.[1] ?? "?";
+      return {
+        player: String(p.name),
+        team: code,
+        price: Number(p.returnWin),
+      };
+    });
 
   const impliedSum = raw.reduce((s: number, r: any) => s + 1 / r.price, 0);
-  console.log(`To Score a Try: ${raw.length} runners, book ${(impliedSum * 100).toFixed(1)}%`);
+  console.log(`${MATCH_NAME} — To Score a Try: ${raw.length} runners, book ${(impliedSum * 100).toFixed(1)}%`);
 
   // Anytime-tryscorer markets are not mutually exclusive, so the book does not
   // normalise to 1. Scale so the probabilities sum to the expected number of
   // try SCORERS implied by the projected tries, not to 100%.
-  const projectedTries = { Aus: 3.7, NZ: 3.2 };
-  console.log(`Projected tries: Australia ${projectedTries.Aus}, New Zealand ${projectedTries.NZ}`);
+  //
+  // Projected tries are DERIVED from this fixture's own line and total rather
+  // than hardcoded: solving home+away=total and home-away=margin gives each
+  // side's projected points, and dividing by points-per-try gives tries.
+  // A hardcoded pair would be silently wrong on every other match.
+  const lineMarket = (match.markets ?? []).find((m: any) => m.betOption === "Line");
+  const totalMarket = (match.markets ?? []).find(
+    (m: any) => m.betOption === "Total Points Over/Under",
+  );
+  if (!lineMarket || !totalMarket) {
+    throw new Error("line or total market unavailable — cannot project tries");
+  }
+
+  const teams = [...new Set(raw.map((r: any) => r.team))] as string[];
+  const homeCode = teams[0];
+
+  // TAB's line propositions carry the full team name ("Samoa -47.5") while
+  // try-scorer props use a short code ("(Sam)"), so match on the code being a
+  // prefix of the line's team name. The total's number appears only in its
+  // name ("Over 58.5"), not as its own field.
+  const lineProps = lineMarket.propositions ?? [];
+  const homeProp = lineProps.find((p: any) =>
+    String(p.name).toLowerCase().startsWith(homeCode.toLowerCase()),
+  );
+  const totalProp = (totalMarket.propositions ?? []).find((p: any) =>
+    /^over/i.test(String(p.name)),
+  );
+
+  const totalPoints = Number(String(totalProp?.name ?? "").match(/[\d.]+/)?.[0]);
+  const homeHandicap = Number(
+    homeProp?.line ?? String(homeProp?.name ?? "").match(/[-+][\d.]+/)?.[0],
+  );
+  if (!Number.isFinite(totalPoints) || !Number.isFinite(homeHandicap)) {
+    throw new Error("could not read the line or total — refusing to guess");
+  }
+
+  // The handicap is signed from the team's own perspective, so the margin is
+  // its negation. Look it up by name, never by array position.
+  const homeMargin = -homeHandicap;
+  const POINTS_PER_TRY = 5.4;
+  const projectedPoints: Record<string, number> = {
+    [homeCode]: (totalPoints + homeMargin) / 2,
+  };
+  for (const t of teams) {
+    if (t !== homeCode) projectedPoints[t] = (totalPoints - homeMargin) / 2;
+  }
+
+  const projectedTries: Record<string, number> = {};
+  for (const t of teams) {
+    projectedTries[t] = Math.max(projectedPoints[t], 0) / POINTS_PER_TRY;
+  }
+
+  console.log(
+    `Line ${homeCode} ${homeHandicap > 0 ? "+" : ""}${homeHandicap}, total ${totalPoints} -> ` +
+      teams.map((t) => `${t} ${projectedPoints[t].toFixed(1)}pts / ${projectedTries[t].toFixed(1)} tries`).join(", "),
+  );
   console.log();
 
   const candidates: Candidate[] = [];
 
-  for (const team of ["Aus", "NZ"] as const) {
+  for (const team of teams) {
     const squad = raw.filter((r: any) => r.team === team);
+    if (!squad.length) continue;
     const teamImplied = squad.reduce((s: number, r: any) => s + 1 / r.price, 0);
     // Distinct scorers is slightly below total tries because of doubles.
     const expectedScorers = projectedTries[team] * 0.88;
-    const scale = expectedScorers / teamImplied;
+    const scale = teamImplied > 0 ? expectedScorers / teamImplied : 0;
 
     // Positional model: base rate scaled so the squad's total matches the same
     // expected number of scorers. This is what makes it independent of price.
@@ -177,7 +246,7 @@ async function main() {
     const diff =
       c.modelProb === null ? "   -  " : `${((c.modelProb - c.marketProb) * 100 >= 0 ? "+" : "")}${((c.modelProb - c.marketProb) * 100).toFixed(1)}`.padStart(6);
     console.log(
-      `${c.player.replace(/\s*\((?:Aus|NZ)\)/i, "").padEnd(28)}  ${c.team.padEnd(4)}  $${c.price.toFixed(2).padStart(5)}  ` +
+      `${c.player.replace(/\s*\([A-Za-z]{2,4}\)/, "").padEnd(28)}  ${c.team.padEnd(4)}  $${c.price.toFixed(2).padStart(5)}  ` +
         `${(c.marketProb * 100).toFixed(1).padStart(6)}%  ${model}  ${diff}   ${c.position ?? "unknown"}`,
     );
   }

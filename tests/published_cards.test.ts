@@ -178,10 +178,33 @@ test("the card carries the bookmaker's real price, not the estimate", () => {
   assert.notEqual(card.price, estimate);
 });
 
-test("the real price sits below the product of the legs", () => {
+test("a positively correlated multi prices below the product of its legs", () => {
   const card = buildPublishedMultiCard(row(), sgmPick)!;
   const product = card.legs.reduce((p, l) => p * l.odds, 1);
   assert.ok(card.price! < product, `${card.price} must be below ${product}`);
+});
+
+test("a negatively correlated multi priced above its legs still renders", () => {
+  // Two Samoan try markets compete for the same pool of tries, so the
+  // combination is rarer than independence implies and Betr prices it ABOVE
+  // the product: $2.00 x $2.37 = $4.74, quoted $5.35.
+  const negative: PublicPick = {
+    ...sgmPick,
+    selection: "Brian To'o 2+ tries + Francis Manuleleua anytime",
+    entry_odds: 5.35,
+    legs: [
+      { selection: "Brian To'o 2+ tries", market: "player_2_tries", odds: 2.00, result: "pending" },
+      { selection: "Francis Manuleleua", market: "anytime_try", odds: 2.37, result: "pending" },
+    ] as any,
+  };
+  const card = buildPublishedMultiCard(row(), negative)!;
+  assert.ok(card, "a real quote above the product must not be discarded");
+  assert.equal(card.price, 5.35);
+});
+
+test("a wildly mispriced multi is still rejected", () => {
+  const broken: PublicPick = { ...sgmPick, entry_odds: 40 };
+  assert.equal(buildPublishedMultiCard(row(), broken), null);
 });
 
 test("legs keep their order and prices", () => {

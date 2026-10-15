@@ -98,9 +98,16 @@ test("the SGM carries Betr's own price, not the product of its legs", () => {
 test("every row starts pending with no settlement", () => {
   for (const row of buildPickRows(FIXTURE_ID, picks)) {
     assert.equal(row.result_status, "pending");
-    assert.equal(row.profit_units, null);
     assert.equal(row.units_returned, null);
     assert.equal(row.settled_at, null);
+  }
+});
+
+test("profit_units is never written: the database generates it", () => {
+  // It is a generated column (units_returned - stake_units). Sending any
+  // value, including null, is rejected outright by Postgres.
+  for (const row of buildPickRows(FIXTURE_ID, picks)) {
+    assert.ok(!("profit_units" in row), "profit_units must not be in the payload");
   }
 });
 
@@ -160,13 +167,38 @@ test("an SGM with fewer than two legs is rejected", () => {
   );
 });
 
-test("an SGM priced above the product of its legs is rejected", () => {
-  // Positively correlated legs must price BELOW independent multiplication.
-  // A higher price means the legs were mismatched or the price is stale.
+test("an SGM priced far from the product of its legs is rejected", () => {
+  // The book's own price is authoritative and may land either side of the
+  // product: positively correlated legs price BELOW it (Australia +
+  // Trbojevic + Bostock: $8.66 -> $5.00), negatively correlated legs price
+  // ABOVE it (To'o 2+ tries + Manuleleua anytime: $4.74 -> $5.35, because
+  // To'o taking two of Samoa's tries makes one for Manuleleua less likely).
+  //
+  // Only an implausible gap indicates a mismatched or stale quote.
   assert.throws(
-    () => buildPickRows(FIXTURE_ID, [{ ...picks[1], entryOdds: 4.0 }]),
-    /below/i,
+    () => buildPickRows(FIXTURE_ID, [{ ...picks[1], entryOdds: 12.0 }]),
+    /implausible/i,
   );
+});
+
+test("a correlated multi priced below its legs is accepted", () => {
+  const rows = buildPickRows(FIXTURE_ID, [{ ...picks[1], entryOdds: 2.80 }]);
+  assert.equal(rows[0].entry_odds, 2.80);
+});
+
+test("a negatively correlated multi priced above its legs is accepted", () => {
+  // Tonight's real quote: two Samoan try markets competing for the same pool
+  // of tries. $2.00 x $2.37 = $4.74, and Betr quotes $5.35.
+  const negative = {
+    ...picks[1],
+    entryOdds: 5.35,
+    legs: [
+      { label: "Brian To'o 2+ tries", market: "player_2_tries", odds: 2.00 },
+      { label: "Francis Manuleleua", market: "anytime_try", odds: 2.37 },
+    ],
+  };
+  const rows = buildPickRows(FIXTURE_ID, [negative]);
+  assert.equal(rows[0].entry_odds, 5.35);
 });
 
 // ---------------------------------------------------------------------------
