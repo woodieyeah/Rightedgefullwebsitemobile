@@ -58,6 +58,35 @@ test("the core play becomes the card's best bet", () => {
   assert.equal(row.side, "Home");
 });
 
+test("a line play carries its handicap into the label", () => {
+  // "Samoa @ $1.90" without the line reads as a head-to-head, and Samoa's
+  // actual head-to-head is $1.01. Omitting the point misrepresents the bet.
+  const linePick: PublicPick = {
+    ...corePick, market: "line", selection: "Australia", point: -3.5, entry_odds: 1.85,
+  };
+  const row = applyCorePlay(prediction(), linePick);
+  assert.equal(row.bestBet, "Australia -3.5");
+});
+
+test("a positive handicap keeps its plus sign", () => {
+  const linePick: PublicPick = {
+    ...corePick, market: "line", selection: "New Zealand", point: 3.5, entry_odds: 1.95,
+  };
+  const row = applyCorePlay(prediction(), linePick);
+  assert.equal(row.bestBet, "New Zealand +3.5");
+});
+
+test("a pick-em line renders zero rather than dropping it", () => {
+  const linePick: PublicPick = {
+    ...corePick, market: "line", selection: "Australia", point: 0, entry_odds: 1.9,
+  };
+  assert.equal(applyCorePlay(prediction(), linePick).bestBet, "Australia 0");
+});
+
+test("a head-to-head has no point and renders plainly", () => {
+  assert.equal(applyCorePlay(prediction(), corePick).bestBet, "Australia");
+});
+
 test("the entry price lands on the side that was backed", () => {
   const row = applyCorePlay(prediction(), corePick);
   assert.equal(row.marketHomeOdds, 1.65);

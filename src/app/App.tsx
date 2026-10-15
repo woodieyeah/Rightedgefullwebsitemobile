@@ -1924,7 +1924,15 @@ function formatSignedCurrency(value: number, decimals = 2) {
   return `${value >= 0 ? "+" : "-"}${formatCurrency(abs, decimals)}`;
 }
 
-function formatPercent(value: number, decimals = 2) {
+/**
+ * Render a percentage, or an em dash when the value is absent.
+ *
+ * Absence is meaningful: a play published on book agreement has no model
+ * probability, and rendering that as "0.0%" would claim the model rates it at
+ * zero. Null and NaN both read as "no value", never as a number.
+ */
+function formatPercent(value: number | null | undefined, decimals = 2) {
+  if (value === null || value === undefined || !Number.isFinite(value)) return "—";
   return `${value.toFixed(decimals)}%`;
 }
 
@@ -9062,8 +9070,11 @@ type PremiumMarketPlay = {
   selection: string;
   bookmaker: string;
   odds: number;
-  modelPct: number;
-  modelEdge: number;
+  // Null on a published pick carried by book agreement rather than a model
+  // read — the Samoa line's projection is derived FROM that line, so quoting
+  // it as a model probability would be circular.
+  modelPct: number | null;
+  modelEdge: number | null;
   marketImpliedPct?: number;
   rawEdgePct?: number;
   adjustedScore?: number;
@@ -10620,8 +10631,11 @@ function PremiumMarketPlayCard({
           ? `Model winner ${formatPercent(play.modelPct, 1)} vs market ${formatPercent(getImpliedWinPctFromOdds(play.odds), 1)}`
           // Without a positive edge the comparison states that the market
           // rates the selection higher than we do, which contradicts the
-          // recommendation. Report the model's read on its own.
-          : `Model winner ${formatPercent(play.modelPct, 1)}`;
+          // recommendation. Report the model's read on its own, and say
+          // nothing at all when there is no model read to report.
+          : play.modelPct === null || play.modelPct === undefined
+            ? ""
+            : `Model winner ${formatPercent(play.modelPct, 1)}`;
 
   return (
     <GlassCard className="p-4 md:p-6 border-l-4 border-l-[#00E676]">

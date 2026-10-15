@@ -73,6 +73,41 @@ test("a published core play becomes a premium play", () => {
   assert.equal(play.type, "Head 2 Head");
 });
 
+test("a published play surfaces without a model probability", () => {
+  // The Samoa line is published on book agreement alone: the projected
+  // scoreline is derived FROM that line, so quoting it as a model read would
+  // be circular. A null probability must not drop the play from the page.
+  const noModel: PublicPick = {
+    ...corePick, market: "line", selection: "Samoa", point: -47.5,
+    entry_odds: 1.90, entry_bookmaker: "TAB",
+    model_probability: null, market_probability: null,
+  };
+  const play = buildPublishedPremiumPlay(row(), noModel)!;
+  assert.ok(play, "a play with no model read must still render");
+  assert.equal(play.selection, "Samoa -47.5");
+  assert.equal(play.type, "Line");
+  assert.equal(play.odds, 1.90);
+});
+
+test("a play with no model probability reports no model percentage", () => {
+  const noModel: PublicPick = {
+    ...corePick, market: "line", selection: "Samoa", point: -47.5,
+    entry_odds: 1.90, model_probability: null, market_probability: null,
+  };
+  const play = buildPublishedPremiumPlay(row(), noModel)!;
+  assert.equal(play.modelPct, null);
+  assert.equal(play.modelEdge, null);
+});
+
+test("a play with no model probability still hides edge", () => {
+  const noModel: PublicPick = {
+    ...corePick, market: "line", selection: "Samoa", point: -47.5,
+    entry_odds: 1.90, model_probability: null, market_probability: null,
+  };
+  const play = buildPublishedPremiumPlay(row(), noModel)!;
+  assert.equal(play.isManualApproved, true);
+});
+
 test("a published play surfaces even without a positive edge", () => {
   // The whole reason this path exists. Against the Betfair anchor the play is
   // flat-to-negative — $1.65 is 60.6% raw against a 58.1% fair read — so the

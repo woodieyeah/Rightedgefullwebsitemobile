@@ -40,9 +40,10 @@ export interface PublishedPremiumPlay {
   selection: string;
   bookmaker: string;
   odds: number;
-  modelPct: number;
-  modelEdge: number;
-  marketImpliedPct: number;
+  /** Null when the pick was published on book agreement rather than a model read. */
+  modelPct: number | null;
+  modelEdge: number | null;
+  marketImpliedPct: number | null;
   isManualApproved: true;
   marketPoint?: number;
 }
@@ -89,17 +90,23 @@ export function buildPublishedPremiumPlay(
   if (!pick) return null;
   if (!MATCH_MARKETS.has(pick.market)) return null;
   if (!Number.isFinite(pick.entry_odds) || pick.entry_odds <= 1) return null;
-  if (pick.model_probability === null || !Number.isFinite(pick.model_probability)) {
-    return null;
-  }
 
-  const modelPct = pick.model_probability * 100;
+  // A null model probability does NOT disqualify a published pick. Some are
+  // published on book agreement alone — the Samoa line is corroborated by two
+  // books, while the projected scoreline is derived FROM that line and so
+  // cannot confirm it. Dropping those would silently hide a real selection.
+  const hasModel =
+    pick.model_probability !== null && Number.isFinite(pick.model_probability);
+  const modelPct = hasModel ? pick.model_probability! * 100 : null;
+
   // Prefer the stored de-vigged figure; fall back to raw implied only for
   // two-way markets, where the overround is small and symmetric.
   const marketPct =
     pick.market_probability !== null && Number.isFinite(pick.market_probability)
       ? pick.market_probability * 100
-      : (1 / pick.entry_odds) * 100;
+      : hasModel
+        ? (1 / pick.entry_odds) * 100
+        : null;
 
   return {
     id: `published-${pick.id}`,
@@ -109,7 +116,7 @@ export function buildPublishedPremiumPlay(
     bookmaker: pick.entry_bookmaker,
     odds: pick.entry_odds,
     modelPct,
-    modelEdge: modelPct - marketPct,
+    modelEdge: modelPct !== null && marketPct !== null ? modelPct - marketPct : null,
     marketImpliedPct: marketPct,
     // Marks the play as editorially approved so the page's value gate is
     // bypassed, exactly as manually approved plays already are.

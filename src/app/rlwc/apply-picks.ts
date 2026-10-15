@@ -56,7 +56,7 @@ function confidenceFor(probability: number | null): "Lean" | "Value" | "Strong" 
   return "Lean";
 }
 
-/** Place a head-to-head pick onto the row the card renders. */
+/** Place a head-to-head, line or total pick onto the row the card renders. */
 export function applyCorePlay<T extends AdaptedPredictionLike>(
   row: T,
   pick: PublicPick | null,
@@ -70,9 +70,18 @@ export function applyCorePlay<T extends AdaptedPredictionLike>(
   // Fail closed: an unmatched name must never be assigned to a side.
   if (!isHome && !isAway) return row;
 
+  // The handicap is part of the selection, not decoration. "Samoa @ $1.90"
+  // reads as a head-to-head when the real head-to-head is $1.01; the $1.90 is
+  // a 47.5-point line. A zero point is a genuine pick-em and is rendered.
+  const label = pick.selection.trim();
+  const bestBet =
+    pick.point === null || pick.point === undefined
+      ? label
+      : `${label} ${pick.point > 0 ? "+" : ""}${pick.point}`;
+
   return {
     ...row,
-    bestBet: pick.selection.trim(),
+    bestBet,
     side: isHome ? "Home" : "Away",
     stake: 1,
     marketHomeOdds: isHome ? pick.entry_odds : row.marketHomeOdds,

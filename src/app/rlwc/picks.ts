@@ -113,8 +113,12 @@ export function selectTryScorers(picks: PublicPick[]): PublicPick[] {
 }
 
 /**
- * Format a pick's selection with its line, e.g. "Australia -3.5".
- * A zero point is a real pick-em line and is rendered; null is omitted.
+ * Render a selection with its handicap or total line.
+ *
+ * The point is NOT optional decoration. "Samoa @ $1.90" reads as a
+ * head-to-head, and Samoa's real head-to-head is $1.01 — the $1.90 is a
+ * 47.5-point handicap. Dropping the point misrepresents the bet entirely.
+ * A zero point is a real pick-em line and is rendered; only null is omitted.
  */
 export function describeSelection(pick: PublicPick): string {
   if (pick.point === null || pick.point === undefined) return pick.selection;
