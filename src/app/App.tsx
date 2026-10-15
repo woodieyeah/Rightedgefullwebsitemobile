@@ -9191,7 +9191,7 @@ function MatchSameGameMultiCard({
                   playerName={leg.label}
                   teamName={leg.team}
                   headshots={headshots}
-                  className="h-[22px] w-[22px] rounded-full"
+                  className="h-[22px] w-[22px]"
                 />
               ) : (
                 <TeamLogo teamName={leg.team} className="h-[22px] w-[22px] rounded-[4px] text-[8px]" />
@@ -12468,7 +12468,7 @@ function TryScorersPage({
                                 playerName={row.player}
                                 teamName={row.team}
                                 headshots={data.headshots}
-                                className="w-5 h-5 rounded-full text-[8px]"
+                                className="w-5 h-5 text-[8px]"
                               />
                               <span className="min-w-0 truncate text-sm font-black text-white">{row.player}</span>
                             </div>
@@ -13885,7 +13885,7 @@ function RoundMultiCard({
                       playerName={leg.label}
                       teamName={leg.team}
                       headshots={headshots}
-                      className="h-[22px] w-[22px] rounded-full"
+                      className="h-[22px] w-[22px]"
                     />
                   ) : leg.team ? (
                     <TeamLogo teamName={leg.team} className="h-[22px] w-[22px] rounded-[4px] text-[8px]" />
@@ -14044,7 +14044,7 @@ function SameGameMultiCard({
                       playerName={leg.label}
                       teamName={leg.team}
                       headshots={headshots}
-                      className="h-[22px] w-[22px] rounded-full"
+                      className="h-[22px] w-[22px]"
                     />
                   ) : leg.team ? (
                     <TeamLogo teamName={leg.team} className="h-[22px] w-[22px] rounded-[4px] text-[8px]" />
@@ -14210,7 +14210,7 @@ function PlayerAvatar({
 
   return (
     <span
-      className={`shrink-0 inline-block overflow-hidden bg-[#1E232B] ${className}`}
+      className={`shrink-0 inline-block overflow-hidden ${className}`}
       title={playerName}
     >
       <img
@@ -14222,8 +14222,9 @@ function PlayerAvatar({
         // shoulders, so a plain cover fit leaves the face only a few pixels
         // tall. Scaling up inside a clipping wrapper and anchoring near the
         // top crops to the head, which is the only part legible at 22px.
-        // The wrapper clips the overflow, so the circle stays a circle.
-        className="h-full w-full object-cover scale-[1.6] origin-[50%_18%]"
+        // A square frame shows more of the image than a circle did, so the
+        // scale is slightly lower to avoid cropping into the forehead.
+        className="h-full w-full object-cover scale-[1.45] origin-[50%_20%]"
       />
     </span>
   );
