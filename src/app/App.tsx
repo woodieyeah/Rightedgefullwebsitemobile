@@ -15,11 +15,18 @@ import {
   fetchCompetitionPicks,
   picksByFixture,
   selectCorePlay,
+  selectPendingPicks,
   selectSgm,
   selectTryScorers,
 } from "./rlwc/picks";
 import { applyCorePlay, toTryScorerRows } from "./rlwc/apply-picks";
 import { buildMatchCardPlayLabel, shouldShowEdge } from "./rlwc/match-card-play";
+import {
+  buildTrackerFromPicks,
+  formatRate,
+  formatUnits,
+  type SettledPublicPick,
+} from "./rlwc/result-trackers";
 import {
   buildPublishedMultiCard,
   buildPublishedPremiumPlay,
@@ -1499,6 +1506,9 @@ type DashboardData = {
   // and a published multi carries the bookmaker's real correlated price.
   publishedPremiumPlays?: PublishedPremiumPlay[];
   publishedMultiCards?: PublishedMultiCard[];
+  // Every published pick including settled ones, for the result trackers.
+  // The card-facing fields above carry only pending picks.
+  publishedPickLedger?: SettledPublicPick[];
 };
 
 const appPages = [
@@ -11168,6 +11178,11 @@ function BestBetsPage({
             Every play that clears the conservative Core Play threshold
           </div>
         </div>
+        <PublishedResultTracker
+          picks={data.publishedPickLedger ?? []}
+          section="core"
+          title="Core Play record"
+        />
         {isLoadingMarkets ? (
           <GlassCard className="p-4 md:p-8 text-center border-l-4 border-l-white/20">
             <div className="text-white/50 font-bold uppercase tracking-widest text-[10px] md:text-base">
@@ -14032,6 +14047,78 @@ function SameGameMultiCard({
   );
 }
 
+function PublishedResultTracker({
+  picks,
+  section,
+  title,
+}: {
+  picks: SettledPublicPick[];
+  section: "core" | "sgm";
+  title: string;
+}) {
+  const tracker = buildTrackerFromPicks(picks, section);
+  // Nothing settled and nothing pending means there is no record to show.
+  if (tracker.settled === 0 && tracker.pending === 0) return null;
+
+  const profitPositive = tracker.profitUnits >= 0;
+  const profitColour = tracker.settled === 0
+    ? "text-white/60"
+    : profitPositive ? "text-[#00E676]" : "text-[#FF2E63]";
+
+  return (
+    <div className="border border-[#1E1E2E] bg-[#111116] px-4 py-3.5">
+      <div className="mb-3 flex items-baseline justify-between gap-3">
+        <div className="text-[10px] font-black uppercase tracking-widest text-white/45">
+          {title}
+        </div>
+        <div className="text-[9px] font-black uppercase tracking-widest text-[#6B7280]">
+          1 unit per play
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4">
+        <div className="min-w-0 bg-[#16161D] px-2.5 py-2">
+          <div className="text-[8px] font-black uppercase tracking-widest text-[#6B7280]">
+            Record
+          </div>
+          <div className="mt-1 text-base font-black text-white">
+            {tracker.wins}-{tracker.losses}
+            {tracker.pushes ? `-${tracker.pushes}` : ""}
+          </div>
+        </div>
+        <div className="min-w-0 bg-[#16161D] px-2.5 py-2">
+          <div className="text-[8px] font-black uppercase tracking-widest text-[#6B7280]">
+            Profit
+          </div>
+          <div className={`mt-1 text-base font-black ${profitColour}`}>
+            {tracker.settled === 0 ? "—" : formatUnits(tracker.profitUnits)}
+          </div>
+        </div>
+        <div className="min-w-0 bg-[#16161D] px-2.5 py-2">
+          <div className="text-[8px] font-black uppercase tracking-widest text-[#6B7280]">
+            ROI
+          </div>
+          <div className={`mt-1 text-base font-black ${profitColour}`}>
+            {formatRate(tracker.roiPct)}
+          </div>
+        </div>
+        <div className="min-w-0 bg-[#16161D] px-2.5 py-2">
+          <div className="text-[8px] font-black uppercase tracking-widest text-[#6B7280]">
+            Strike
+          </div>
+          <div className="mt-1 text-base font-black text-white">
+            {formatRate(tracker.strikeRatePct, 0)}
+          </div>
+        </div>
+      </div>
+      {tracker.pending > 0 && (
+        <div className="mt-2.5 text-[9px] font-black uppercase tracking-widest text-[#6B7280]">
+          {tracker.pending} awaiting result
+        </div>
+      )}
+    </div>
+  );
+}
+
 function MultiPage({
   data,
   onRequestAccess,
@@ -14122,6 +14209,11 @@ function MultiPage({
             Leg one is the model's read on the match. The rest are markets the model prices ahead of the book.
           </p>
         </div>
+        <PublishedResultTracker
+          picks={data.publishedPickLedger ?? []}
+          section="sgm"
+          title="Same Game Multi record"
+        />
         {cards.length ? (
           <div className="flex flex-col gap-5">
             {cards.map((card) => (
@@ -15749,8 +15841,10 @@ export default function App() {
           // Published picks ride on the same rows the NRL cards use, so the
           // play, the multi and the try scorers all render through the
           // existing card path. Returns [] on any failure.
-          const picks = await fetchCompetitionPicks("rlwc", publicAnonKey);
-          const picksForFixture = picksByFixture(picks);
+          const allPicks = await fetchCompetitionPicks("rlwc", publicAnonKey);
+          // Cards show only picks that can still be backed; settled ones live
+          // on in the result trackers below.
+          const picksForFixture = picksByFixture(selectPendingPicks(allPicks));
 
           const predictions = (adapted.predictions as unknown as PredictionRow[]).map(
             (prediction, index) => {
@@ -15810,6 +15904,12 @@ export default function App() {
           }
           if (publishedMultiCards.length) {
             dashboardData.publishedMultiCards = publishedMultiCards;
+          }
+          // The full ledger, settled rows included, feeds the Core Play and
+          // Multi result trackers.
+          if (allPicks.length) {
+            dashboardData.publishedPickLedger =
+              allPicks as unknown as SettledPublicPick[];
           }
         }
       } catch {

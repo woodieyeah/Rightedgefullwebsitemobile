@@ -66,6 +66,16 @@ export async function fetchCompetitionPicks(
   }
 }
 
+/**
+ * Only picks still awaiting a result belong on a match card.
+ *
+ * A settled pick stays in the ledger and the result trackers, but showing it
+ * as a live selection would advertise a bet that can no longer be placed.
+ */
+export function selectPendingPicks(picks: PublicPick[]): PublicPick[] {
+  return picks.filter((pick) => pick.result_status === "pending");
+}
+
 /** Group picks by fixture so a card can look up its own. */
 export function picksByFixture(picks: PublicPick[]): Map<string, PublicPick[]> {
   const byFixture = new Map<string, PublicPick[]>();
