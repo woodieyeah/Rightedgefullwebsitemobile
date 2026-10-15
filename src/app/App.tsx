@@ -5032,7 +5032,7 @@ function PublicNav({
         <button
           type="button"
           onClick={() => setPage("home")}
-          className="text-[17px] font-semibold tracking-tight text-white transition hover:opacity-80 sm:text-[18px]"
+          className="text-[15px] font-semibold tracking-tight text-white transition hover:opacity-80 sm:text-[16px]"
         >
           RightEdge
         </button>
@@ -6589,16 +6589,16 @@ function TryScorerTicker({ data }: { data: DashboardData | null }) {
   const renderPlay = (row: TryScorerRow, index: number, copy: string) => (
     <React.Fragment key={`${copy}-${getTryScorerKey(row)}-${index}`}>
       <span className="inline-flex items-center gap-2 whitespace-nowrap">
-        <span className="text-[13px] font-medium text-white uppercase tracking-[0.02em]">
+        <span className="text-[12px] font-medium text-white uppercase tracking-[0.02em]">
           {row.player}
         </span>
-        <span className="text-[13px] font-medium text-[#9CA3AF]">
+        <span className="text-[12px] font-medium text-[#9CA3AF]">
           · MODEL <span className="text-[#00E676]">{formatPercent(row.statsInsiderPct, 0)}</span>
         </span>
-        <span className="text-[13px] font-medium text-[#9CA3AF]">
+        <span className="text-[12px] font-medium text-[#9CA3AF]">
           · MARKET {formatPercent(row.marketImpliedPct, 0)}
         </span>
-        <span className="text-[13px] font-medium text-[#9CA3AF]">
+        <span className="text-[12px] font-medium text-[#9CA3AF]">
           · ${row.bestOdds.toFixed(2)}
         </span>
       </span>
@@ -8544,7 +8544,7 @@ function MatchesUpgradeBanner({
       <span aria-hidden="true" className="absolute inset-y-0 left-0 w-1 bg-[#4ADE80]" />
       <div className="flex flex-col gap-2.5 md:flex-row md:items-center md:justify-between md:gap-5">
         <div className="min-w-0 flex-1">
-          <div className="text-[15px] font-bold leading-snug text-white md:text-base">
+          <div className="text-[13px] font-bold leading-snug text-white md:text-base">
             You're seeing the model's predictions. Premium subscribers see which ones it backs.
           </div>
           <div className="mt-0.5 text-[11px] leading-relaxed text-[#9CA3AF] md:text-xs">
@@ -11914,7 +11914,7 @@ function OriginPage({
                 </div>
               </div>
               <div className="border-l-2 border-l-[#00E676] bg-[#111116] px-4 py-3">
-                <p className="text-[12px] md:text-sm font-medium leading-relaxed text-white/70">
+                <p className="text-[11px] md:text-sm font-medium leading-relaxed text-white/70">
                   {rationale}
                 </p>
               </div>
@@ -13783,7 +13783,7 @@ function RoundMultiCard({
               </span>
             ) : null}
           </div>
-          <h2 className="text-[22px] font-black uppercase leading-none tracking-tight text-white">
+          <h2 className="text-[19px] font-black uppercase leading-none tracking-tight text-white">
             Round {multi.roundNumber} Multi
           </h2>
         </div>
@@ -13792,7 +13792,7 @@ function RoundMultiCard({
             Price · {multi.legs.length} Legs
           </div>
           <div
-            className="mt-1 text-[32px] font-black leading-none tabular-nums text-white"
+            className="mt-1 text-[28px] font-black leading-none tabular-nums text-white"
             style={{ fontVariantNumeric: "tabular-nums" }}
           >
             {isPremium ? `$${multi.price.toFixed(2)}` : "—"}
@@ -13850,7 +13850,7 @@ function RoundMultiCard({
                     </span>
                     <span className="flex items-baseline gap-3">
                       <span className="text-[11px] font-medium tabular-nums text-[#9CA3AF]">Market {marketValue}</span>
-                      <span className="text-[15px] font-medium tabular-nums text-[#147A42]">Model {modelValue}</span>
+                      <span className="text-[13px] font-medium tabular-nums text-[#147A42]">Model {modelValue}</span>
                     </span>
                   </span>
                 </>
@@ -13932,7 +13932,7 @@ function SameGameMultiCard({
               </div>
             ) : null}
           </div>
-          <h2 className="truncate text-[22px] font-black uppercase leading-none tracking-tight text-white">
+          <h2 className="truncate text-[19px] font-black uppercase leading-none tracking-tight text-white">
             {card.match}
           </h2>
           <div className="mt-2 text-xs font-medium uppercase tracking-wider text-[#9CA3AF]">
@@ -13945,7 +13945,7 @@ function SameGameMultiCard({
               Est. Price · {card.legs.length} Legs
             </div>
             <div
-              className="mt-1 text-[32px] font-black leading-none tabular-nums text-white"
+              className="mt-1 text-[28px] font-black leading-none tabular-nums text-white"
               style={{ fontVariantNumeric: "tabular-nums" }}
             >
               ${estimatedPrice.toFixed(2)}
@@ -13989,7 +13989,7 @@ function SameGameMultiCard({
                     <span className="h-[22px] w-[22px]" aria-hidden="true" />
                   )}
                   <span className="flex min-w-0 items-baseline gap-2 overflow-hidden">
-                    <span className="min-w-0 truncate text-[15px] font-black uppercase tracking-tight text-white">
+                    <span className="min-w-0 truncate text-[13px] font-black uppercase tracking-tight text-white">
                       {leg.label}
                     </span>
                     {leg.suffix ? (
@@ -14000,7 +14000,7 @@ function SameGameMultiCard({
                   </span>
                   <span
                     aria-label={`Model ${modelValue}`}
-                    className="min-w-[82px] text-right text-[15px] font-medium tabular-nums text-[#9CA3AF]"
+                    className="min-w-[82px] text-right text-[13px] font-medium tabular-nums text-[#9CA3AF]"
                     style={{ fontVariantNumeric: "tabular-nums" }}
                   >
                     Model {modelValue}
@@ -14202,7 +14202,7 @@ function MultiPage({
       ) : null}
       <section className="flex flex-col gap-5">
         <div>
-          <h2 className="text-[22px] font-black uppercase leading-none tracking-tight text-white">
+          <h2 className="text-[19px] font-black uppercase leading-none tracking-tight text-white">
             Same Game Multis
           </h2>
           <p className="mt-2 text-xs font-medium text-[#9CA3AF]">
@@ -14830,7 +14830,7 @@ function AppDashboard({
             <div className="flex justify-between items-start xl:block">
               {page === "multi" ? (
                 <div>
-                  <h1 className="text-[18px] font-black uppercase leading-none tracking-tight text-white md:text-4xl">
+                  <h1 className="text-[16px] font-black uppercase leading-none tracking-tight text-white md:text-4xl">
                     {pageTitle.title}
                   </h1>
                   <div className="mt-2 text-[10px] font-black uppercase tracking-widest text-[#9CA3AF] md:text-sm">
@@ -14845,7 +14845,7 @@ function AppDashboard({
                   <div className="text-[10px] md:text-xs uppercase tracking-widest text-[#9CA3AF] font-medium mb-1 md:mb-2">
                     {pageTitle.title}
                   </div>
-                  <h1 className="text-[18px] md:text-4xl font-semibold tracking-tight text-white uppercase leading-none">
+                  <h1 className="text-[16px] md:text-4xl font-semibold tracking-tight text-white uppercase leading-none">
                     {pageTitle.subtitle}
                   </h1>
                 </div>

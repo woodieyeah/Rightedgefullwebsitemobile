@@ -1,7 +1,18 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  --font-size: 16px;
+  /**
+   * Root type scale. Every Tailwind rem utility keys off this — not just text
+   * (text-sm, text-2xl) but all spacing too: p-4, gap-6, mb-8, space-y-6 and
+   * the max-w-*xl containers. The app uses rem spacing throughout with no
+   * hardcoded pixel padding, so this single value drives overall density.
+   *
+   * 14px rather than the 16px default: at 16 the interface read as though it
+   * were zoomed. Arbitrary pixel sizes (text-[22px] and friends) do NOT scale
+   * with this, so they are set proportionally in the markup; micro-labels at
+   * 8-11px are deliberately left alone, being already at the legibility floor.
+   */
+  --font-size: 14px;
   --background: #0A0A0F;
   --foreground: #FFFFFF;
   --card: #111116;
