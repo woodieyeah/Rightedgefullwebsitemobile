@@ -58,30 +58,64 @@ async function supabase(path: string, init: RequestInit = {}): Promise<any> {
   return text.trim() ? JSON.parse(text) : null;
 }
 
-/** Pull try scorers from a match centre page's embedded summaries. */
-async function fetchTryScorers(matchCentreUrl: string): Promise<string[] | null> {
+/**
+ * Pull try scorers and the list of players who actually took the field.
+ *
+ * The match centre embeds both: a `tries.summaries` list of "Player 19'"
+ * entries, and a squad list in which each player carries a position. The feed
+ * distinguishes a used interchange ("Interchange") from an unused one
+ * ("Reserve"), which is what decides a refund: a player named in the squad
+ * but never used has his try-scorer bets voided, not lost.
+ *
+ * `isOnField` is deliberately NOT used for this — it is a live snapshot of
+ * who is on the paddock, so a player who scored and was then substituted
+ * reads false. Deine Mariner scored at 2' and came off injured at 10'.
+ */
+async function fetchMatchDetail(
+  matchCentreUrl: string,
+): Promise<{ tryScorers: string[] | null; playersUsed: string[] | undefined }> {
   try {
     const res = await fetch(`https://www.nrl.com${matchCentreUrl}`, {
       headers: { "User-Agent": UA },
     });
-    if (!res.ok) return null;
+    if (!res.ok) return { tryScorers: null, playersUsed: undefined };
     const html = await res.text();
 
     // The page HTML-escapes its JSON, so decode the entities we need first.
-    const decoded = html.replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+    const decoded = html.replace(/&quot;/g, '"').replace(/&#39;/g, "\u2019");
 
     // Each team block carries: "tries":{"summaries":["Jack Bostock 19'", ...]
     const scorers: string[] = [];
     const blocks = decoded.matchAll(/"tries":\{"summaries":\[(.*?)\]/g);
     for (const block of blocks) {
-      for (const entry of block[1].matchAll(/"([^"]+?)\s+\d+'"/g)) {
+      for (const entry of block[1].matchAll(/"([^"]+?)\s+\d+.?"/g)) {
         scorers.push(entry[1].trim());
       }
     }
-    // An empty list is ambiguous (no tries vs not reported); treat as absent.
-    return scorers.length ? scorers : null;
+
+    // Squad list: every player carries a position. "Reserve" means named but
+    // not in the matchday 17; everyone else took the field or was available
+    // on the bench as a used interchange.
+    const used: string[] = [];
+    let sawPositions = false;
+    const players = decoded.matchAll(
+      /"firstName":"([^"]*)","lastName":"([^"]*)","position":"([^"]*)"/g,
+    );
+    for (const p of players) {
+      sawPositions = true;
+      const position = p[3].trim();
+      if (position.toLowerCase() === "reserve") continue;
+      used.push(`${p[1]} ${p[2]}`.trim());
+    }
+
+    return {
+      // An empty list is ambiguous (no tries vs not reported); treat as absent.
+      tryScorers: scorers.length ? scorers : null,
+      // Only claim participation data when the squad actually parsed.
+      playersUsed: sawPositions && used.length ? used : undefined,
+    };
   } catch {
-    return null;
+    return { tryScorers: null, playersUsed: undefined };
   }
 }
 
@@ -100,14 +134,17 @@ async function fetchResults(round: number): Promise<Map<string, MatchResult>> {
     if (!home || !away) continue;
 
     const final = fixture.matchState === "FullTime";
-    const tryScorers = final ? await fetchTryScorers(fixture.matchCentreUrl ?? "") : null;
+    const detail = final
+      ? await fetchMatchDetail(fixture.matchCentreUrl ?? "")
+      : { tryScorers: null, playersUsed: undefined };
 
     byKey.set(matchKey(home, away), {
       homeTeam: home,
       awayTeam: away,
       homeScore: Number(fixture.homeTeam?.score),
       awayScore: Number(fixture.awayTeam?.score),
-      tryScorers,
+      tryScorers: detail.tryScorers,
+      playersUsed: detail.playersUsed,
       final,
     });
   }

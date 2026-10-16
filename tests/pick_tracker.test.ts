@@ -22,6 +22,135 @@ import {
 const AUS_TRIES = ["Jack Bostock", "Tom Trbojevic", "Reece Walsh"];
 
 // ---------------------------------------------------------------------------
+// Multiple-try markets and non-participants
+//
+// Samoa v France exposed two real gaps. "Brian To'o 2+ tries" is a distinct
+// market from anytime, so counting a name once is not enough; and Clayton
+// Faulalo was named #19 but never took the field, which books settle as a
+// void refund, not a loss. Both are decided from the official try list and
+// an explicit participation list.
+// ---------------------------------------------------------------------------
+
+const SAMOA_TRIES = [
+  "Deine Mariner", "Benaiah Ioelu", "Jermaine McEwen", "Sualauvi Fa'alogo",
+  "Hamiso Tabuai-Fidow", "Sualauvi Fa'alogo", "Stephen Crichton", "Shawn Blore",
+  "Sualauvi Fa'alogo", "Sualauvi Fa'alogo", "Chanel Harris-Tavita",
+  "Izack Tago", "Francis Molo", "Benaiah Ioelu",
+];
+const SAMOA_RESULT = {
+  homeTeam: "Samoa", awayTeam: "France", homeScore: 78, awayScore: 4,
+  tryScorers: SAMOA_TRIES, final: true,
+};
+
+test("a 2+ tries pick wins when the player scored twice", () => {
+  const s = settleSinglePick(
+    { market: "player_2_tries", selection: "Benaiah Ioelu", point: null, odds: 4.5, stake: 1 },
+    SAMOA_RESULT,
+  );
+  assert.equal(s.status, "win");
+});
+
+test("a 2+ tries pick loses on a single try, which an anytime pick would win", () => {
+  const two = settleSinglePick(
+    { market: "player_2_tries", selection: "Stephen Crichton", point: null, odds: 4.5, stake: 1 },
+    SAMOA_RESULT,
+  );
+  const any = settleSinglePick(
+    { market: "anytime_try", selection: "Stephen Crichton", point: null, odds: 1.65, stake: 1 },
+    SAMOA_RESULT,
+  );
+  assert.equal(two.status, "loss");
+  assert.equal(any.status, "win");
+});
+
+test("a 2+ tries pick loses when the player did not score at all", () => {
+  const s = settleSinglePick(
+    { market: "player_2_tries", selection: "Brian To'o", point: null, odds: 2, stake: 1 },
+    SAMOA_RESULT,
+  );
+  assert.equal(s.status, "loss");
+});
+
+test("a 2+ tries pick needs the try list, not just a final score", () => {
+  const s = settleSinglePick(
+    { market: "player_2_tries", selection: "Brian To'o", point: null, odds: 2, stake: 1 },
+    { ...SAMOA_RESULT, tryScorers: null },
+  );
+  assert.equal(s.status, "pending");
+});
+
+test("a named player who never took the field voids and refunds the stake", () => {
+  const s = settleSinglePick(
+    { market: "anytime_try", selection: "Clayton Faulalo", point: null, odds: 1.75, stake: 1 },
+    { ...SAMOA_RESULT, playersUsed: ["Stephen Crichton", "Brian To'o"] },
+  );
+  assert.equal(s.status, "void");
+  assert.equal(s.unitsReturned, 1);
+  assert.equal(s.profitUnits, 0);
+});
+
+test("a player who did take the field and failed to score still loses", () => {
+  const s = settleSinglePick(
+    { market: "anytime_try", selection: "Brian To'o", point: null, odds: 1.9, stake: 1 },
+    { ...SAMOA_RESULT, playersUsed: ["Brian To'o", "Stephen Crichton"] },
+  );
+  assert.equal(s.status, "loss");
+});
+
+test("without a participation list a non-scorer loses rather than voiding", () => {
+  // Absent data must not silently refund every losing try-scorer pick.
+  const s = settleSinglePick(
+    { market: "anytime_try", selection: "Clayton Faulalo", point: null, odds: 1.75, stake: 1 },
+    SAMOA_RESULT,
+  );
+  assert.equal(s.status, "loss");
+});
+
+test("a scorer is never voided even if the participation list omits them", () => {
+  const s = settleSinglePick(
+    { market: "anytime_try", selection: "Francis Molo", point: null, odds: 4, stake: 1 },
+    { ...SAMOA_RESULT, playersUsed: ["Brian To'o"] },
+  );
+  assert.equal(s.status, "win");
+});
+
+test("a curly apostrophe in the feed still matches a straight one in the pick", () => {
+  // The feed writes "Brian To’o"; picks are stored "Brian To'o". Treating
+  // these as different players silently converted a loss into a refund.
+  const curly = { ...SAMOA_RESULT, playersUsed: ["Brian To\u2019o"] };
+  const s = settleSinglePick(
+    { market: "player_2_tries", selection: "Brian To'o 2+ tries", point: null, odds: 2, stake: 1 },
+    curly,
+  );
+  assert.equal(s.status, "loss");
+});
+
+test("an accented name matches its unaccented spelling", () => {
+  const s = settleSinglePick(
+    { market: "anytime_try", selection: "Cesar Rouge", point: null, odds: 6, stake: 1 },
+    { ...SAMOA_RESULT, tryScorers: ["C\u00e9sar Roug\u00e9"] },
+  );
+  assert.equal(s.status, "win");
+});
+
+test("a void leg voids the whole multi and refunds it", () => {
+  const s = settleMultiPick(
+    {
+      odds: 5.35,
+      stake: 1,
+      legs: [
+        { market: "player_2_tries", selection: "Brian To'o", point: null },
+        { market: "anytime_try", selection: "Clayton Faulalo", point: null },
+      ],
+    },
+    { ...SAMOA_RESULT, playersUsed: ["Brian To'o"] },
+  );
+  assert.equal(s.status, "void");
+  assert.equal(s.profitUnits, 0);
+});
+
+
+// ---------------------------------------------------------------------------
 // Single-pick settlement
 // ---------------------------------------------------------------------------
 

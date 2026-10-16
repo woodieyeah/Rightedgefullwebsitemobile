@@ -14218,13 +14218,15 @@ function PlayerAvatar({
         alt={playerName}
         loading="lazy"
         onError={() => setFailed(true)}
-        // The source is a 640x420 portrait with substantial headroom and
-        // shoulders, so a plain cover fit leaves the face only a few pixels
-        // tall. Scaling up inside a clipping wrapper and anchoring near the
-        // top crops to the head, which is the only part legible at 22px.
-        // A square frame shows more of the image than a circle did, so the
-        // scale is slightly lower to avoid cropping into the forehead.
-        className="h-full w-full object-cover scale-[1.45] origin-[50%_20%]"
+        // No zoom. Measured across the stored portraits (640x420, decoded
+        // alpha channel): the head starts 0.5-2.1% from the top and the
+        // shoulders begin around 60-67%, so the source is already a
+        // head-and-shoulders crop. Any scale above 1 pushes the crown of the
+        // head outside the frame — scale 1.45 put it at -7.3%, which is why
+        // heads were being cut off. object-cover on a square shows the full
+        // height and the middle 65.6% of width, and every subject is centred
+        // within 3% of the midline, so the face lands dead centre.
+        className="h-full w-full object-cover object-top"
       />
     </span>
   );

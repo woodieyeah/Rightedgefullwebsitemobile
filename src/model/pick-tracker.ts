@@ -23,12 +23,21 @@ export interface MatchResult {
   awayScore: number;
   /** Official try scorers. `null` means not yet reported — not "nobody scored". */
   tryScorers: string[] | null;
+  /**
+   * Players who actually took the field.
+   *
+   * A player named in the squad but never used has his try-scorer bets
+   * refunded, not lost — standard book practice. `undefined` means the
+   * information is unavailable, in which case a non-scorer simply loses:
+   * absent data must never silently refund every losing pick.
+   */
+  playersUsed?: string[];
   /** The feed's own completion flag. A live score must never settle a pick. */
   final: boolean;
 }
 
 export interface SinglePick {
-  market: "h2h" | "line" | "total" | "anytime_try" | "first_try";
+  market: "h2h" | "line" | "total" | "anytime_try" | "first_try" | "player_2_tries";
   selection: string;
   point: number | null;
   odds: number;
@@ -54,7 +63,38 @@ export interface SettledPick {
   legStatuses: SettlementStatus[];
 }
 
-const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
+/**
+ * Normalise a name or team for comparison.
+ *
+ * Sources disagree on typography: the NRL feed writes "Brian To’o" with a
+ * curly apostrophe and "César Rougé" with accents, while picks are stored
+ * with plain ASCII. Folding both to a common form is what stops a loss being
+ * silently settled as a refund because the two spellings never matched.
+ */
+const norm = (s: string) =>
+  s
+    .normalize("NFD")
+    // Strip combining accents.
+    .replace(/[\u0300-\u036f]/g, "")
+    // Unify curly quotes and dashes with their ASCII equivalents.
+    .replace(/[\u2018\u2019\u02bc\u02bb]/g, "'")
+    .replace(/[\u2013\u2014]/g, "-")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+
+/**
+ * Drop a trailing market from a selection label.
+ *
+ * Picks are labelled for display ("Brian To'o 2+ tries") while the official
+ * try list holds bare names, so the two only compare after the market is
+ * removed. Shared with the headshot lookup, which has the same problem.
+ */
+const stripMarketSuffix = (s: string) =>
+  s
+    .replace(/\s+\d+\+?\s*tr(y|ies)\b.*$/i, "")
+    .replace(/\s+(anytime|first|last)\s+tr(y|ies)\b.*$/i, "")
+    .trim();
 
 function outcome(status: SettlementStatus, odds: number, stake: number): SettledPick {
   if (status === "pending") {
@@ -85,11 +125,24 @@ function legStatus(
   const home = norm(result.homeTeam);
   const away = norm(result.awayTeam);
 
-  if (market === "anytime_try" || market === "first_try") {
+  if (market === "anytime_try" || market === "first_try" || market === "player_2_tries") {
     // An absent list is "not yet reported", which must not settle as a loss.
     if (!result.tryScorers) return "pending";
-    const scored = result.tryScorers.some((name) => norm(name) === pick);
-    return scored ? "win" : "loss";
+
+    // The selection may carry its market ("Brian To'o 2+ tries"); the try
+    // list holds bare names, so compare on the name alone.
+    const name = norm(stripMarketSuffix(selection));
+    const tries = result.tryScorers.filter((scorer) => norm(scorer) === name).length;
+    const required = market === "player_2_tries" ? 2 : 1;
+    if (tries >= required) return "win";
+
+    // A named player who never took the field is refunded, not lost. Only
+    // void on positive evidence of non-participation: an absent list leaves
+    // the pick a plain loss.
+    if (result.playersUsed && !result.playersUsed.some((p) => norm(p) === name)) {
+      return "void";
+    }
+    return "loss";
   }
 
   if (market === "h2h") {

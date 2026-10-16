@@ -160,6 +160,31 @@ test("other market suffixes are stripped too", () => {
   assert.ok(findHeadshot(index, "Francis Manuleleua first tryscorer"));
 });
 
+// ---------------------------------------------------------------------------
+// Abbreviated first names
+//
+// TAB shortens a long name to fit its market: "Dallin Watene-Zelezniak" is
+// listed as "Dallin W-Zelezniak (Ton)". The surname fragment after the hyphen
+// is still unique, so the player is identifiable — but only when the match is
+// unambiguous.
+// ---------------------------------------------------------------------------
+
+test("an abbreviated hyphenated surname still resolves", () => {
+  const idx = {
+    "dallin watenezelezniak": "https://img/dwz.png",
+    "dominic young": "https://img/young.png",
+  };
+  assert.equal(findHeadshot(idx, "Dallin W-Zelezniak (Ton)"), "https://img/dwz.png");
+});
+
+test("an abbreviation matching two players resolves to neither", () => {
+  const idx = {
+    "dallin watenezelezniak": "https://img/a.png",
+    "darren wilsonzelezniak": "https://img/b.png",
+  };
+  assert.equal(findHeadshot(idx, "D W-Zelezniak"), null);
+});
+
 test("stripping a suffix never invents a match", () => {
   // The suffix stripper must not reduce an unknown name to a known one.
   assert.equal(findHeadshot(index, "Nobody Here 2+ tries"), null);

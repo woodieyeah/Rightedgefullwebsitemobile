@@ -145,5 +145,22 @@ export function findHeadshot(
   if (surname.length < 4) return null;
 
   const matches = Object.keys(index).filter((k) => k.endsWith(` ${surname}`));
-  return matches.length === 1 ? index[matches[0]] : null;
+  if (matches.length === 1) return index[matches[0]];
+
+  // TAB abbreviates a long first name into the surname to fit its market:
+  // "Dallin Watene-Zelezniak" is listed as "Dallin W-Zelezniak", which
+  // normalises to "dallin wzelezniak" and matches no stored key. The tail
+  // after the abbreviated initial is still distinctive, so match on that —
+  // but only when exactly one player ends that way, so an abbreviation can
+  // never resolve to the wrong face.
+  const abbreviated = surname.match(/^[a-z](.{3,})$/);
+  if (abbreviated) {
+    const tail = abbreviated[1];
+    const tailMatches = Object.keys(index).filter((k) =>
+      k.split(" ").slice(-1)[0].endsWith(tail),
+    );
+    if (tailMatches.length === 1) return index[tailMatches[0]];
+  }
+
+  return null;
 }
