@@ -91,11 +91,16 @@ export function picksByFixture(picks: PublicPick[]): Map<string, PublicPick[]> {
 /**
  * The single play a card headlines.
  *
- * Preference order: the head-to-head Core Play, then a line or total, then a
- * multi. Try-scorer picks are shown in their own strip, never as the headline.
+ * Match markets only, in preference order. A same-game multi is deliberately
+ * excluded: it is a structurally different bet with a far longer price and a
+ * much lower strike rate, and it has its own section and its own tracker.
+ * Falling back to one here would headline a 20% three-leg multi as the main
+ * play on a fixture that was published without a core play on purpose.
+ *
+ * Try-scorer picks are shown in their own strip, never as the headline.
  */
 export function selectCorePlay(picks: PublicPick[]): PublicPick | null {
-  const order: PublicPick["market"][] = ["h2h", "line", "total", "sgm"];
+  const order: PublicPick["market"][] = ["h2h", "line", "total"];
   for (const market of order) {
     const found = picks.find((p) => p.market === market);
     if (found) return found;

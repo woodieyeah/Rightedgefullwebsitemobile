@@ -54,9 +54,14 @@ test("a try scorer is never the headline play", () => {
   assert.equal(selectCorePlay(tryOnly), null);
 });
 
-test("a multi headlines only when no match play exists", () => {
+test("a multi never headlines as the core play", () => {
+  // Superseded: this previously asserted that a multi could headline when no
+  // match play existed. It is a different product with its own section and
+  // tracker, and England v Tonga was published without a core play on
+  // purpose — surfacing its 20% three-leg multi as the headline misrepresents
+  // the card.
   const sgmOnly = opener.filter((p) => p.market === "sgm");
-  assert.equal(selectCorePlay(sgmOnly)!.market, "sgm");
+  assert.equal(selectCorePlay(sgmOnly), null);
 });
 
 test("no picks yields no headline", () => {
@@ -134,4 +139,42 @@ test("a pick-em line renders zero rather than being dropped", () => {
 
 test("a selection with no line renders plainly", () => {
   assert.equal(describeSelection(opener[0]), "Australia");
+});
+
+// ---------------------------------------------------------------------------
+// A multi is not a core play
+//
+// selectCorePlay fell through to "sgm" when a fixture had no match play, so
+// England v Tonga — deliberately published WITHOUT a core play, because the
+// line rated the wrong side of its price — would have surfaced its 20%
+// three-leg multi as the headline play.
+// ---------------------------------------------------------------------------
+
+const sgmOnly: PublicPick = {
+  id: "s1", fixture_id: "f9", match_key: "england__tonga", competition: "rlwc",
+  market: "sgm", selection: "Tonga + two scorers", point: null,
+  entry_odds: 4.9, entry_bookmaker: "betr",
+  model_probability: null, market_probability: 0.204,
+  result_status: "pending", profit_units: null,
+  published_at: "2026-10-17T00:00:00Z",
+  legs: [
+    { leg_index: 0, market: "h2h", selection: "Tonga", point: null, leg_odds: 1.67 },
+    { leg_index: 1, market: "anytime_try", selection: "Jojo Fifita", point: null, leg_odds: 2.25 },
+  ] as never,
+};
+
+test("a fixture with only a multi has no core play", () => {
+  assert.equal(selectCorePlay([sgmOnly]), null);
+});
+
+test("the multi is still available to the multi section", () => {
+  assert.equal(selectSgm([sgmOnly])?.id, "s1");
+});
+
+test("a real match play is still chosen when present", () => {
+  const line: PublicPick = {
+    ...sgmOnly, id: "l1", market: "line", selection: "Tonga", point: -2.5,
+    entry_odds: 1.9, legs: [] as never,
+  };
+  assert.equal(selectCorePlay([sgmOnly, line])?.id, "l1");
 });

@@ -76,10 +76,24 @@ function typeFor(market: string): "Line" | "Total" | "Head 2 Head" {
   return "Head 2 Head";
 }
 
+/**
+ * Label a selection with its handicap, exactly once.
+ *
+ * Picks are stored inconsistently — the Samoa line as "Samoa" with point
+ * -47.5, the PNG line as "Papua New Guinea -8.5" with the same point — so
+ * appending the point unconditionally produced "Papua New Guinea -8.5 -8.5"
+ * on the card. Any trailing handicap already in the label is stripped before
+ * the stored point is applied, which also keeps the two in step: `point` is
+ * what settlement reads, so it is the authoritative number to display.
+ */
 function selectionLabel(pick: PublicPick): string {
   if (pick.point === null || pick.point === undefined) return pick.selection;
+
+  // Drop a trailing SIGNED number only. An unsigned trailing number could be
+  // part of a team's name, and stripping it would corrupt the label.
+  const bare = String(pick.selection).replace(/\s+[-+]\d+(?:\.\d+)?\s*$/, "").trim();
   const sign = pick.point > 0 ? "+" : "";
-  return `${pick.selection} ${sign}${pick.point}`;
+  return `${bare} ${sign}${pick.point}`;
 }
 
 /** Build a Premium Plays entry from a published match pick. */

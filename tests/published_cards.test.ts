@@ -273,3 +273,65 @@ test("an upcoming fixture is marked upcoming", () => {
   const card = buildPublishedMultiCard(row(), sgmPick)!;
   assert.equal(card.status, "upcoming");
 });
+
+// ---------------------------------------------------------------------------
+// The handicap must appear exactly once
+//
+// Picks are stored inconsistently: the Samoa line was written as "Samoa" with
+// point -47.5, while the PNG line was written as "Papua New Guinea -8.5" with
+// the same point. Appending the point unconditionally rendered the second as
+// "PAPUA NEW GUINEA -8.5 -8.5" on the live card.
+// ---------------------------------------------------------------------------
+
+const linePickBare: PublicPick = {
+  ...base, id: "line-bare", market: "line", selection: "Samoa", point: -47.5,
+  entry_odds: 1.9, entry_bookmaker: "TAB",
+  model_probability: 0.523, market_probability: 0.5263,
+};
+
+const linePickInline: PublicPick = {
+  ...base, id: "line-inline", market: "line",
+  selection: "Papua New Guinea -8.5", point: -8.5,
+  entry_odds: 1.95, entry_bookmaker: "TAB",
+  model_probability: 0.524, market_probability: 0.5128,
+};
+
+test("a bare selection gains the handicap", () => {
+  const play = buildPublishedPremiumPlay(row(), linePickBare)!;
+  assert.equal(play.selection, "Samoa -47.5");
+});
+
+test("a selection that already carries the handicap is not doubled", () => {
+  const play = buildPublishedPremiumPlay(row(), linePickInline)!;
+  assert.equal(play.selection, "Papua New Guinea -8.5");
+});
+
+test("a positive handicap keeps its plus sign and is not doubled", () => {
+  const play = buildPublishedPremiumPlay(row(), {
+    ...linePickInline, id: "l3", selection: "England +2.5", point: 2.5,
+  })!;
+  assert.equal(play.selection, "England +2.5");
+});
+
+test("a bare positive handicap gains a plus sign", () => {
+  const play = buildPublishedPremiumPlay(row(), {
+    ...linePickInline, id: "l4", selection: "England", point: 2.5,
+  })!;
+  assert.equal(play.selection, "England +2.5");
+});
+
+test("a differing stored line is not silently dropped", () => {
+  // If the label and the point disagree, the point is authoritative: it is
+  // what settlement uses. Showing the stale label would mislead.
+  const play = buildPublishedPremiumPlay(row(), {
+    ...linePickInline, id: "l5", selection: "Papua New Guinea -9.5", point: -8.5,
+  })!;
+  assert.equal(play.selection, "Papua New Guinea -8.5");
+});
+
+test("a team whose name ends in a number is not mistaken for a handicap", () => {
+  const play = buildPublishedPremiumPlay(row(), {
+    ...linePickInline, id: "l6", selection: "Cook Islands", point: -14.5,
+  })!;
+  assert.equal(play.selection, "Cook Islands -14.5");
+});

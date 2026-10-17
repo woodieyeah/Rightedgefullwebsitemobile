@@ -203,3 +203,59 @@ test("a try-scorer pick with no model probability is dropped, not shown as zero"
 test("try-scorer rows are empty when there are no picks", () => {
   assert.deepEqual(toTryScorerRows([], "Australia v New Zealand", 101), []);
 });
+
+// ---------------------------------------------------------------------------
+// A selection that already carries its handicap
+//
+// Picks are stored inconsistently: "Samoa" with point -47.5, but "Papua New
+// Guinea -8.5" with point -8.5. The inline form broke two things — the team
+// no longer matched either side, so the play never reached the card, and
+// where it did render the handicap appeared twice.
+// ---------------------------------------------------------------------------
+
+const pngRow = {
+  match: "Papua New Guinea v Lebanon",
+  homeTeam: "Papua New Guinea",
+  awayTeam: "Lebanon",
+  bestBet: "",
+  side: "",
+  stake: 0,
+};
+
+const pngPick = {
+  id: "p1",
+  fixture_id: "f1",
+  match_key: "lebanon__papuanewguinea",
+  competition: "rlwc",
+  market: "line" as const,
+  selection: "Papua New Guinea -8.5",
+  point: -8.5,
+  entry_odds: 1.95,
+  entry_bookmaker: "TAB",
+  model_probability: 0.524,
+  market_probability: 0.5128,
+  result_status: "pending" as const,
+  profit_units: null,
+  published_at: "2026-10-17T00:00:00Z",
+  legs: [] as never[],
+};
+
+test("an inline handicap still matches its team", () => {
+  const out = applyCorePlay(pngRow, pngPick as never);
+  assert.equal(out.side, "Home", "the play must attach to the home side");
+});
+
+test("an inline handicap is not rendered twice", () => {
+  const out = applyCorePlay(pngRow, pngPick as never);
+  assert.equal(out.bestBet, "Papua New Guinea -8.5");
+});
+
+test("a bare selection still gains its handicap", () => {
+  const out = applyCorePlay(pngRow, { ...pngPick, selection: "Papua New Guinea" } as never);
+  assert.equal(out.bestBet, "Papua New Guinea -8.5");
+});
+
+test("an unrelated team is still rejected", () => {
+  const out = applyCorePlay(pngRow, { ...pngPick, selection: "Fiji -8.5" } as never);
+  assert.equal(out.side, "", "a non-participant must never be assigned a side");
+});

@@ -63,7 +63,13 @@ export function applyCorePlay<T extends AdaptedPredictionLike>(
 ): T {
   if (!pick) return row;
 
-  const selection = normalise(pick.selection);
+  // A selection may or may not already carry its handicap: picks are stored
+  // as "Samoa" with point -47.5 in one place and "Papua New Guinea -8.5"
+  // with point -8.5 in another. Strip a trailing SIGNED number so the team
+  // matches either way — an unsigned trailing number could belong to the
+  // team's own name and must survive.
+  const bareSelection = String(pick.selection).replace(/\s+[-+]\d+(?:\.\d+)?\s*$/, "").trim();
+  const selection = normalise(bareSelection);
   const isHome = selection === normalise(row.homeTeam);
   const isAway = selection === normalise(row.awayTeam);
 
@@ -73,7 +79,8 @@ export function applyCorePlay<T extends AdaptedPredictionLike>(
   // The handicap is part of the selection, not decoration. "Samoa @ $1.90"
   // reads as a head-to-head when the real head-to-head is $1.01; the $1.90 is
   // a 47.5-point line. A zero point is a genuine pick-em and is rendered.
-  const label = pick.selection.trim();
+  // `point` is what settlement reads, so it is the number shown.
+  const label = bareSelection;
   const bestBet =
     pick.point === null || pick.point === undefined
       ? label

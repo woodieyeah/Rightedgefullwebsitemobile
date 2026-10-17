@@ -158,7 +158,10 @@ async function main() {
       console.log(`  CORE  ${f.fav} ${lineVal} @ $${price}  model ${(cover * 100).toFixed(1)}%  market ${(100 / price).toFixed(1)}%`);
       rows.push({
         fixture_id: fixture.id, model_version: MODEL_VERSION, market: "line",
-        selection: `${f.fav} ${lineVal}`, point: lineVal,
+        // The bare team name only. `point` carries the handicap, and the card
+        // appends it at render time — baking it into the selection as well
+        // renders it twice and stops the team matching a side.
+        selection: f.fav, point: lineVal,
         entry_odds: price, entry_bookmaker: "TAB",
         entry_captured_at: new Date().toISOString(),
         model_probability: Number(cover.toFixed(4)),
