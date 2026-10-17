@@ -1,3 +1,4 @@
+import { fetchWithTimeout } from "../../model/fetch-timeout.ts";
 /**
  * RLWC fixture loading from Supabase.
  *
@@ -94,7 +95,7 @@ export async function fetchCompetitionFixtures(
       `?competition=eq.${encodeURIComponent(competition)}` +
       `&order=kickoff_at.asc`;
 
-    const response = await fetch(url, {
+    const response = await fetchWithTimeout(url, {
       headers: { apikey: anonKey, Authorization: `Bearer ${anonKey}` },
     });
     if (!response.ok) return [];

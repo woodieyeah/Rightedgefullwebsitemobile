@@ -1,3 +1,4 @@
+import { fetchWithTimeout } from "../../model/fetch-timeout.ts";
 /**
  * Published picks for RLWC match cards.
  *
@@ -54,7 +55,7 @@ export async function fetchCompetitionPicks(
       `?competition=eq.${encodeURIComponent(competition)}` +
       `&order=published_at.asc`;
 
-    const response = await fetch(url, {
+    const response = await fetchWithTimeout(url, {
       headers: { apikey: anonKey, Authorization: `Bearer ${anonKey}` },
     });
     if (!response.ok) return [];

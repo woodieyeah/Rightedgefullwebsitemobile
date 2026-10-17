@@ -23,6 +23,7 @@ import { applyCorePlay, toTryScorerRows } from "./rlwc/apply-picks";
 import { buildMatchCardPlayLabel, shouldShowEdge } from "./rlwc/match-card-play";
 import { teamNameFromSelection } from "../model/line-cover";
 import { fetchHeadshots, headshotFor, type HeadshotIndex } from "./rlwc/headshots";
+import { fetchWithTimeout, settleAllWithFallback } from "../model/fetch-timeout";
 import {
   buildTrackerFromPicks,
   formatRate,
@@ -1842,7 +1843,10 @@ function parseCsv(text: string): RawRow[] {
 async function fetchSheetRows(gid: string): Promise<RawRow[]> {
   const url = `${toPublishedCsvUrl(gid)}&t=${Date.now()}`;
 
-  const res = await fetch(url, {
+  // Google's CSV host has stalled mid-tournament before, and an unbounded
+  // fetch never settles — the dashboard then waits forever instead of
+  // rendering what it already has.
+  const res = await fetchWithTimeout(url, {
     method: "GET",
     headers: {
       Accept: "text/csv,text/plain,*/*",
@@ -15922,19 +15926,36 @@ export default function App() {
 
       setError("");
 
+      // Each sheet is fetched independently. Promise.all would reject the
+      // whole batch when one CSV fails, which is how a single stalled Google
+      // host blanked the entire dashboard; a dead tab should cost only its
+      // own section.
+      const { results: sheetResults, failures: sheetFailures } =
+        await settleAllWithFallback<RawRow[]>(
+          [
+            fetchSheetRows(SHEET_GIDS.matchPredictions),
+            fetchSheetRows(SHEET_GIDS.betLog),
+            fetchSheetRows(SHEET_GIDS.performanceTracker),
+            fetchSheetRows(SHEET_GIDS.fixtures2026),
+            fetchSheetRows(SHEET_GIDS.tryScorers),
+          ],
+          [],
+        );
+
       const [
         predictionRows,
         betLogRows,
         trackerRows,
         fixtureRows,
         tryScorerRows,
-      ] = await Promise.all([
-        fetchSheetRows(SHEET_GIDS.matchPredictions),
-        fetchSheetRows(SHEET_GIDS.betLog),
-        fetchSheetRows(SHEET_GIDS.performanceTracker),
-        fetchSheetRows(SHEET_GIDS.fixtures2026),
-        fetchSheetRows(SHEET_GIDS.tryScorers),
-      ]);
+      ] = sheetResults;
+
+      if (sheetFailures.length) {
+        console.warn(
+          `${sheetFailures.length} sheet source(s) unavailable; rendering with what loaded.`,
+          sheetFailures,
+        );
+      }
 
       const dashboardData = buildDashboardData(
         predictionRows,

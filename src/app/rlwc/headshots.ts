@@ -11,6 +11,7 @@
  */
 
 import { findHeadshot, normalisePlayerName } from "../../model/player-headshots.ts";
+import { fetchWithTimeout } from "../../model/fetch-timeout.ts";
 
 const SUPABASE_URL = "https://spahmuawycgohcznathc.supabase.co";
 
@@ -29,7 +30,7 @@ export async function fetchHeadshots(
       `?competition=eq.${encodeURIComponent(competition)}` +
       `&select=name_key,image_url`;
 
-    const response = await fetch(url, {
+    const response = await fetchWithTimeout(url, {
       headers: { apikey: anonKey, Authorization: `Bearer ${anonKey}` },
     });
     if (!response.ok) return {};
