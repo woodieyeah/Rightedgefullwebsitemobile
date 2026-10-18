@@ -259,3 +259,82 @@ test("an unrelated team is still rejected", () => {
   const out = applyCorePlay(pngRow, { ...pngPick, selection: "Fiji -8.5" } as never);
   assert.equal(out.side, "", "a non-participant must never be assigned a side");
 });
+
+// ---------------------------------------------------------------------------
+// A line price is not a head-to-head price
+//
+// applyCorePlay wrote pick.entry_odds into marketHomeOdds/marketAwayOdds for
+// EVERY market. Those fields carry head-to-head semantics —
+// getPredictedWinnerMarketOdds reads them as the winner's outright price — so
+// publishing Fiji -8.5 at $1.44 told the rest of the page that Fiji's
+// head-to-head was $1.44. The generator then invented a "Fiji head-to-head"
+// play and advertised +8.7% edge (78.1% model vs 69.4% implied by $1.44).
+//
+// Fiji's real head-to-head was $1.20, i.e. 83.3% implied and an edge of
+// -5.2%. The card published a fabricated positive edge on a market nobody
+// selected, derived from a price for a different market.
+// ---------------------------------------------------------------------------
+
+const fijiRow = {
+  match: "Fiji v Cook Islands",
+  homeTeam: "Fiji",
+  awayTeam: "Cook Islands",
+  bestBet: "",
+  side: "",
+  stake: 0,
+  marketHomeOdds: 0,
+  marketAwayOdds: 0,
+};
+
+const linePick = {
+  id: "fc1", fixture_id: "f1", match_key: "cookislands__fiji", competition: "rlwc",
+  market: "line" as const, selection: "Fiji", point: -8.5,
+  entry_odds: 1.44, entry_bookmaker: "TAB",
+  model_probability: 0.666, market_probability: 0.6944,
+  result_status: "pending" as const, profit_units: null,
+  published_at: "2026-10-18T00:00:00Z", legs: [] as never,
+};
+
+test("a line pick does not populate the head-to-head odds", () => {
+  const out = applyCorePlay(fijiRow, linePick as never);
+  assert.equal(out.marketHomeOdds, 0, "a -8.5 line price must not become the h2h price");
+  assert.equal(out.marketAwayOdds, 0);
+});
+
+test("a line pick still attaches and labels correctly", () => {
+  const out = applyCorePlay(fijiRow, linePick as never);
+  assert.equal(out.side, "Home");
+  assert.equal(out.bestBet, "Fiji -8.5");
+});
+
+test("a head-to-head pick DOES populate the head-to-head odds", () => {
+  const h2h = { ...linePick, market: "h2h" as const, point: null, entry_odds: 1.20 };
+  const out = applyCorePlay(fijiRow, h2h as never);
+  assert.equal(out.marketHomeOdds, 1.20);
+  assert.equal(out.marketAwayOdds, 0);
+});
+
+test("an away head-to-head populates only the away side", () => {
+  const h2h = {
+    ...linePick, market: "h2h" as const, point: null,
+    selection: "Cook Islands", entry_odds: 4.5,
+  };
+  const out = applyCorePlay(fijiRow, h2h as never);
+  assert.equal(out.marketAwayOdds, 4.5);
+  assert.equal(out.marketHomeOdds, 0);
+});
+
+test("a total pick does not populate either head-to-head price", () => {
+  const total = {
+    ...linePick, market: "total" as const, selection: "Fiji", point: 55.5, entry_odds: 1.85,
+  };
+  const out = applyCorePlay(fijiRow, total as never);
+  assert.equal(out.marketHomeOdds, 0);
+  assert.equal(out.marketAwayOdds, 0);
+});
+
+test("an existing head-to-head price is not clobbered by a line pick", () => {
+  const seeded = { ...fijiRow, marketHomeOdds: 1.20 };
+  const out = applyCorePlay(seeded, linePick as never);
+  assert.equal(out.marketHomeOdds, 1.20, "the real h2h price must survive");
+});

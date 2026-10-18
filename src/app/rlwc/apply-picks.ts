@@ -91,8 +91,15 @@ export function applyCorePlay<T extends AdaptedPredictionLike>(
     bestBet,
     side: isHome ? "Home" : "Away",
     stake: 1,
-    marketHomeOdds: isHome ? pick.entry_odds : row.marketHomeOdds,
-    marketAwayOdds: isAway ? pick.entry_odds : row.marketAwayOdds,
+    // ONLY a head-to-head price belongs in these fields. They carry outright
+    // semantics across the page — getPredictedWinnerMarketOdds reads them as
+    // the winner's price — so writing a handicap or total price here states
+    // that the team's outright odds are the line's odds. Publishing Fiji
+    // -8.5 at $1.44 made the page believe Fiji's head-to-head was $1.44
+    // (69.4% implied) when it was $1.20 (83.3%), and the generator turned
+    // that into a fabricated +8.7% edge on a market nobody selected.
+    marketHomeOdds: pick.market === "h2h" && isHome ? pick.entry_odds : row.marketHomeOdds,
+    marketAwayOdds: pick.market === "h2h" && isAway ? pick.entry_odds : row.marketAwayOdds,
     confidence: confidenceFor(pick.model_probability),
   };
 }
