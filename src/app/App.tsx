@@ -27,8 +27,10 @@ import { fetchWithTimeout, settleAllWithFallback } from "../model/fetch-timeout"
 import { mergePublishedPlays } from "./rlwc/merge-published";
 import {
   buildTrackerFromPicks,
+  formatCurrency as formatUnitsAsCurrency,
   formatRate,
   formatUnits,
+  UNIT_SIZE_AUD,
   type SettledPublicPick,
 } from "./rlwc/result-trackers";
 import {
@@ -14148,7 +14150,7 @@ function PublishedResultTracker({
           {title}
         </div>
         <div className="text-[9px] font-black uppercase tracking-widest text-[#6B7280]">
-          1 unit per play
+          1 unit = ${UNIT_SIZE_AUD} per play
         </div>
       </div>
       <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4">
@@ -14166,7 +14168,13 @@ function PublishedResultTracker({
             Profit
           </div>
           <div className={`mt-1 text-base font-black ${profitColour}`}>
-            {tracker.settled === 0 ? "—" : formatUnits(tracker.profitUnits)}
+            {tracker.settled === 0 ? "—" : formatUnitsAsCurrency(tracker.profitUnits)}
+          </div>
+          {/* Units stay visible beneath the cash figure: they are the
+              stake-independent record, and a subscriber betting a different
+              size needs them to read the result. */}
+          <div className="mt-0.5 text-[9px] font-bold tabular-nums text-[#6B7280]">
+            {tracker.settled === 0 ? "" : formatUnits(tracker.profitUnits)}
           </div>
         </div>
         <div className="min-w-0 bg-[#16161D] px-2.5 py-2">

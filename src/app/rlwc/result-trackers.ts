@@ -63,6 +63,34 @@ export function formatUnits(units: number): string {
   return `${units >= 0 ? "+" : ""}${units.toFixed(2)}u`;
 }
 
+/**
+ * One unit in dollars.
+ *
+ * Units are the honest record — they are stake-independent, so they compare
+ * across subscribers betting different sizes. The dollar figure is shown
+ * beside them to make the result concrete for anyone staking this amount.
+ */
+export const UNIT_SIZE_AUD = 100;
+
+/**
+ * Format a unit figure as signed whole dollars.
+ *
+ * Rounded to the dollar: cents on a $100 unit are noise, and a tracker that
+ * reads "+$356.00" invites false precision about a flat-stake record.
+ * Break-even prints "+$0" rather than an em dash, because zero profit on a
+ * settled record is a real result, not missing data.
+ */
+export function formatCurrency(units: number): string {
+  const dollars = Math.round(units * UNIT_SIZE_AUD);
+  const sign = dollars < 0 ? "-" : "+";
+  return `${sign}$${Math.abs(dollars).toLocaleString("en-AU")}`;
+}
+
+/** Format turnover in dollars. Never signed: a stake is never negative. */
+export function formatStake(units: number): string {
+  return `$${Math.round(units * UNIT_SIZE_AUD).toLocaleString("en-AU")}`;
+}
+
 /** Format a rate, or an em dash when there is no record yet. */
 export function formatRate(rate: number | null, decimals = 1): string {
   return rate === null ? "—" : `${rate.toFixed(decimals)}%`;

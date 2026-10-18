@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   buildTrackerFromPicks,
+  formatCurrency,
+  formatStake,
+  UNIT_SIZE_AUD,
   type SettledPublicPick,
 } from "../src/app/rlwc/result-trackers.ts";
 
@@ -143,4 +146,53 @@ test("a push refunds and leaves the strike-rate denominator", () => {
   const t = buildTrackerFromPicks(rows, "core");
   assert.equal(t.strikeRatePct, 100);
   assert.ok(Math.abs(t.profitUnits - 0.65) < 1e-9);
+});
+
+// ---------------------------------------------------------------------------
+// Dollar values
+//
+// A unit is $100, so the tracker shows the cash figure alongside the unit
+// figure. Units stay primary — they are the stake-independent record — while
+// dollars make the result concrete for a subscriber betting the same size.
+// ---------------------------------------------------------------------------
+
+test("a unit is worth one hundred dollars", () => {
+  assert.equal(UNIT_SIZE_AUD, 100);
+});
+
+test("a positive profit shows a signed dollar amount", () => {
+  assert.equal(formatCurrency(3.56), "+$356");
+});
+
+test("a negative profit keeps its sign", () => {
+  assert.equal(formatCurrency(-8.75), "-$875");
+});
+
+test("break-even reads as zero, not an em dash", () => {
+  assert.equal(formatCurrency(0), "+$0");
+});
+
+test("a fractional cent rounds to whole dollars", () => {
+  // 0.445u is $44.50; a tracker showing cents would be noise.
+  assert.equal(formatCurrency(0.445), "+$45");
+  assert.equal(formatCurrency(0.444), "+$44");
+});
+
+test("thousands are grouped for readability", () => {
+  assert.equal(formatCurrency(12.5), "+$1,250");
+  assert.equal(formatCurrency(-20), "-$2,000");
+});
+
+test("the dollar figure tracks the unit figure exactly", () => {
+  for (const units of [0.44, 2.2, -1, 3.56, -8.75]) {
+    const expected = Math.round(units * UNIT_SIZE_AUD);
+    const rendered = Number(formatCurrency(units).replace(/[+$,]/g, "").replace(/^-/, "-"));
+    assert.equal(rendered, expected, `${units}u should be $${expected}`);
+  }
+});
+
+test("turnover is formatted without a sign", () => {
+  // Staked is never negative, so a leading + would read oddly.
+  assert.equal(formatStake(5), "$500");
+  assert.equal(formatStake(14), "$1,400");
 });
