@@ -165,3 +165,37 @@ test("empty input is handled", () => {
   assert.equal(teamNameFromSelection(""), "");
   assert.equal(teamNameFromSelection("   "), "");
 });
+
+// ---------------------------------------------------------------------------
+// Market suffixes must not defeat the crest lookup
+//
+// The sheet-derived generator labels a play "<Team> head-to-head". That string
+// matched no nation, so TeamLogo silently rendered the fallback shield instead
+// of the Fiji emblem. The crest resolves on the nation alone.
+// ---------------------------------------------------------------------------
+
+test("a head-to-head suffix is stripped for the crest", () => {
+  assert.equal(teamNameFromSelection("Fiji head-to-head"), "Fiji");
+});
+
+test("other market suffixes are stripped too", () => {
+  assert.equal(teamNameFromSelection("Papua New Guinea head to head"), "Papua New Guinea");
+  assert.equal(teamNameFromSelection("Tonga h2h"), "Tonga");
+  assert.equal(teamNameFromSelection("Samoa anytime try"), "Samoa");
+});
+
+test("a handicap is still stripped", () => {
+  assert.equal(teamNameFromSelection("Fiji -8.5"), "Fiji");
+  assert.equal(teamNameFromSelection("England +2.5"), "England");
+});
+
+test("a bare nation is unchanged", () => {
+  assert.equal(teamNameFromSelection("Cook Islands"), "Cook Islands");
+  assert.equal(teamNameFromSelection("Fiji"), "Fiji");
+});
+
+test("a nation containing a market word is not truncated", () => {
+  // Defensive: no RLWC nation contains these, but the stripper must only
+  // remove a TRAILING market suffix, never an interior word.
+  assert.equal(teamNameFromSelection("Cook Islands -14.5"), "Cook Islands");
+});

@@ -128,6 +128,15 @@ export function teamNameFromSelection(selection: string): string {
   // Over/Under selections name no team.
   if (/^(over|under)\b/i.test(trimmed)) return "";
 
+  // Remove a trailing market description. The sheet-derived generator labels
+  // a play "<Team> head-to-head", which matched no nation and silently
+  // rendered the fallback shield instead of the crest. Only a TRAILING
+  // suffix is removed, so an interior word in a nation's name survives.
+  const withoutMarket = trimmed.replace(
+    /\s+(head[-\s]?to[-\s]?head|h2h|anytime\s+try|first\s+try|try\s*scorer)\s*$/i,
+    "",
+  );
+
   // Remove a trailing signed or unsigned number: "-47.5", "+3.5", "0".
-  return trimmed.replace(/\s*[-+]?\d+(?:\.\d+)?\s*$/, "").trim();
+  return withoutMarket.replace(/\s*[-+]?\d+(?:\.\d+)?\s*$/, "").trim();
 }

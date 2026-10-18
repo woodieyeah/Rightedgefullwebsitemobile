@@ -24,6 +24,7 @@ import { buildMatchCardPlayLabel, shouldShowEdge } from "./rlwc/match-card-play"
 import { teamNameFromSelection } from "../model/line-cover";
 import { fetchHeadshots, headshotFor, type HeadshotIndex } from "./rlwc/headshots";
 import { fetchWithTimeout, settleAllWithFallback } from "../model/fetch-timeout";
+import { mergePublishedPlays } from "./rlwc/merge-published";
 import {
   buildTrackerFromPicks,
   formatRate,
@@ -11099,18 +11100,26 @@ function BestBetsPage({
     const published = data.publishedPremiumPlays ?? [];
     if (!published.length) return matchReads;
 
-    const existing = new Set(matchReads.map((play) => getPredictionPairKey(play.row)));
-    const extra = published
+    // A published pick REPLACES whatever the generator invented for the same
+    // fixture. The generator builds candidates from the adapted RLWC row and
+    // produced a "Fiji head-to-head" play alongside our published Fiji -8.5;
+    // skipping ours because the fixture was taken meant the card advertised a
+    // market nobody selected.
+    const visible = published
       .filter((play) => {
         const key = getPredictionPairKey(play.row as PredictionRow);
-        if (existing.has(key) || archivedMatchKeys.has(key)) return false;
+        if (archivedMatchKeys.has(key)) return false;
         return canViewStartedPremiumPlays || !hasPredictionKickedOff(play.row as PredictionRow, now);
       })
       .map((play) =>
         withPremiumChooserMetrics(play as unknown as PremiumMarketPlay, "Core Play"),
       );
 
-    return [...matchReads, ...extra].sort(comparePremiumPlaysByFixture);
+    return mergePublishedPlays(
+      matchReads,
+      visible,
+      (play) => getPredictionPairKey(play.row as PredictionRow),
+    ).sort(comparePremiumPlaysByFixture);
   }, [matchReads, data.publishedPremiumPlays, archivedMatchKeys, canViewStartedPremiumPlays, now]);
 
   // BEST H2H: keep every qualifying match instead of collapsing the round to
