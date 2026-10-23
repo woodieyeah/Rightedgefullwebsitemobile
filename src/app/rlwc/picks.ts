@@ -1,4 +1,5 @@
 import { fetchWithTimeout } from "../../model/fetch-timeout.ts";
+import { RLWC_FETCH_ATTEMPTS, RLWC_FETCH_TIMEOUT_MS } from "./fixtures.ts";
 /**
  * Published picks for RLWC match cards.
  *
@@ -51,22 +52,38 @@ export async function fetchCompetitionPicks(
 ): Promise<PublicPick[]> {
   if (!anonKey) return [];
 
-  try {
-    const url =
-      `${SUPABASE_URL}/rest/v1/public_picks` +
-      `?competition=eq.${encodeURIComponent(competition)}` +
-      `&order=published_at.asc`;
+  const url =
+    `${SUPABASE_URL}/rest/v1/public_picks` +
+    `?competition=eq.${encodeURIComponent(competition)}` +
+    `&order=published_at.asc`;
 
-    const response = await fetchWithTimeout(url, {
-      headers: { apikey: anonKey, Authorization: `Bearer ${anonKey}` },
-    });
-    if (!response.ok) return [];
-
-    const rows = await response.json();
-    return Array.isArray(rows) ? (rows as PublicPick[]) : [];
-  } catch {
-    return [];
+  // Same reasoning as the fixtures read: an empty result removes every play
+  // and multi from the page, so a slow connection must not decide the
+  // product is gone after a single attempt.
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt < RLWC_FETCH_ATTEMPTS; attempt++) {
+    try {
+      const response = await fetchWithTimeout(url, {
+        headers: { apikey: anonKey, Authorization: `Bearer ${anonKey}` },
+        timeoutMs: RLWC_FETCH_TIMEOUT_MS,
+      });
+      if (!response.ok) {
+        lastError = new Error(`HTTP ${response.status}`);
+        continue;
+      }
+      const rows = await response.json();
+      return Array.isArray(rows) ? (rows as PublicPick[]) : [];
+    } catch (error) {
+      lastError = error;
+    }
   }
+
+  console.error(
+    `RLWC picks unavailable after ${RLWC_FETCH_ATTEMPTS} attempts; ` +
+      `no plays or multis will render.`,
+    lastError,
+  );
+  return [];
 }
 
 /**

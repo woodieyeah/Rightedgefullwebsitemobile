@@ -15640,13 +15640,28 @@ export default function App() {
         );
       }
 
-      const dashboardData = buildDashboardData(
-        predictionRows,
-        betLogRows,
-        trackerRows,
-        fixtureRows,
-        tryScorerRows,
-      );
+      // The NRL sheet pipeline must never be able to blank the whole app.
+      // The season is finished and the published sheets have degraded to
+      // mostly-empty rows, so a parser that throws on that shape would reach
+      // the outer catch, skip setData entirely, and leave every page — RLWC
+      // included — rendering its empty state while healthy picks sat in
+      // Supabase. A sheet failure now costs only the sheet-derived sections.
+      let dashboardData: DashboardData;
+      try {
+        dashboardData = buildDashboardData(
+          predictionRows,
+          betLogRows,
+          trackerRows,
+          fixtureRows,
+          tryScorerRows,
+        );
+      } catch (sheetError) {
+        console.warn(
+          "NRL sheet data could not be parsed; rendering RLWC content only.",
+          sheetError,
+        );
+        dashboardData = buildDashboardData([], [], [], [], []);
+      }
 
       // RLWC fixtures come from Supabase, not the sheet. Merged in after the
       // sheet build so NRL data is untouched and an RLWC failure cannot affect

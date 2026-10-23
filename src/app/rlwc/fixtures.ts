@@ -18,6 +18,16 @@ import { fetchWithTimeout } from "../../model/fetch-timeout.ts";
 
 const SUPABASE_URL = "https://spahmuawycgohcznathc.supabase.co";
 
+/**
+ * RLWC reads get a longer budget than the generic sheet default.
+ *
+ * The sheets are optional decoration now, so 12s is right for them. RLWC is
+ * the product: if these reads fail the page has nothing to show, so they are
+ * given room to succeed on a slow connection rather than failing fast.
+ */
+export const RLWC_FETCH_TIMEOUT_MS = 30_000;
+export const RLWC_FETCH_ATTEMPTS = 3;
+
 export interface PublicFixture {
   id: string;
   competition: string;
@@ -89,23 +99,40 @@ export async function fetchCompetitionFixtures(
 ): Promise<PublicFixture[]> {
   if (!anonKey) return [];
 
-  try {
-    const url =
-      `${SUPABASE_URL}/rest/v1/public_fixtures` +
-      `?competition=eq.${encodeURIComponent(competition)}` +
-      `&order=kickoff_at.asc`;
+  const url =
+    `${SUPABASE_URL}/rest/v1/public_fixtures` +
+    `?competition=eq.${encodeURIComponent(competition)}` +
+    `&order=kickoff_at.asc`;
 
-    const response = await fetchWithTimeout(url, {
-      headers: { apikey: anonKey, Authorization: `Bearer ${anonKey}` },
-    });
-    if (!response.ok) return [];
-
-    const rows = await response.json();
-    return Array.isArray(rows) ? (rows as PublicFixture[]) : [];
-  } catch {
-    // An RLWC fetch failure must never break the NRL pages.
-    return [];
+  // RLWC is the live product, and the entire card — plays, multis and result
+  // trackers — is skipped when this returns empty. A single slow response on a
+  // degraded connection therefore blanked the whole page, so this retries on a
+  // longer budget instead of giving up after one 12s attempt.
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt < RLWC_FETCH_ATTEMPTS; attempt++) {
+    try {
+      const response = await fetchWithTimeout(url, {
+        headers: { apikey: anonKey, Authorization: `Bearer ${anonKey}` },
+        timeoutMs: RLWC_FETCH_TIMEOUT_MS,
+      });
+      if (!response.ok) {
+        lastError = new Error(`HTTP ${response.status}`);
+        continue;
+      }
+      const rows = await response.json();
+      return Array.isArray(rows) ? (rows as PublicFixture[]) : [];
+    } catch (error) {
+      lastError = error;
+    }
   }
+
+  // Returning [] hides the whole product, so it must never pass unremarked.
+  console.error(
+    `RLWC fixtures unavailable after ${RLWC_FETCH_ATTEMPTS} attempts; ` +
+      `plays, multis and trackers will not render.`,
+    lastError,
+  );
+  return [];
 }
 
 /**
