@@ -79,6 +79,39 @@ export function selectPendingPicks(picks: PublicPick[]): PublicPick[] {
   return picks.filter((pick) => pick.result_status === "pending");
 }
 
+/**
+ * The picks a match card should show.
+ *
+ * Settled picks are kept, not filtered out. Dropping them blanked the card the
+ * instant a match was settled, so the play a subscriber followed all day
+ * disappeared with no visible outcome. A settled pick stays put and carries a
+ * result badge — including a loss, which must not quietly vanish.
+ */
+export function selectCardPicks(picks: PublicPick[]): PublicPick[] {
+  return picks;
+}
+
+/**
+ * The result badge for a pick, or null while it is still running.
+ *
+ * Returns null for any status it does not recognise rather than guessing: a
+ * card must never assert an outcome the data does not state.
+ */
+export function pickResultBadge(pick: PublicPick): string | null {
+  switch (pick.result_status) {
+    case "win":
+      return "WON";
+    case "loss":
+      return "LOST";
+    case "push":
+      return "PUSH";
+    case "void":
+      return "VOID";
+    default:
+      return null;
+  }
+}
+
 /** Group picks by fixture so a card can look up its own. */
 export function picksByFixture(picks: PublicPick[]): Map<string, PublicPick[]> {
   const byFixture = new Map<string, PublicPick[]>();

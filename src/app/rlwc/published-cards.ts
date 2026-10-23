@@ -20,7 +20,7 @@
  * flat 0.83 factor, giving $2.88 where Betr actually prices $2.80.
  */
 
-import type { PublicPick } from "./picks.ts";
+import { pickResultBadge, type PublicPick } from "./picks.ts";
 
 export interface PredictionRowLike {
   match: string;
@@ -46,6 +46,8 @@ export interface PublishedPremiumPlay {
   marketImpliedPct: number | null;
   isManualApproved: true;
   marketPoint?: number;
+  /** "WON"/"LOST"/"PUSH"/"VOID" once settled; null while the pick is running. */
+  resultBadge?: string | null;
 }
 
 export interface PublishedMultiLeg {
@@ -146,6 +148,7 @@ export function buildPublishedPremiumPlay(
     // bypassed, exactly as manually approved plays already are.
     isManualApproved: true,
     marketPoint: pick.point ?? undefined,
+    resultBadge: pickResultBadge(pick),
   };
 }
 

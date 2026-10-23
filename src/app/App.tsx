@@ -9091,6 +9091,8 @@ type PremiumMarketPlay = {
   isManualApproved?: boolean;
   marketPoint?: number;
   projectedValue?: number;
+  /** "WON"/"LOST"/"PUSH"/"VOID" once a published pick is settled. */
+  resultBadge?: string | null;
 };
 
 type PremiumPlayReveal = {
@@ -9532,6 +9534,19 @@ function MatchPremiumSignalStrip({
             <span className="text-[8px] font-black uppercase tracking-widest text-[#6B7280]">
               Play
             </span>
+            {play?.resultBadge ? (
+              <span
+                className={`ml-auto shrink-0 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest ${
+                  play.resultBadge === "WON"
+                    ? "bg-[#064E3B] text-[#6EE7B7]"
+                    : play.resultBadge === "LOST"
+                      ? "bg-[#4C1D24] text-[#FCA5A5]"
+                      : "bg-[#1E1E2E] text-[#9CA3AF]"
+                }`}
+              >
+                {play.resultBadge}
+              </span>
+            ) : null}
           </div>
           <div className="truncate text-xs font-black uppercase text-white">
             {matchPlayLabel}
@@ -15646,9 +15661,10 @@ export default function App() {
           // play, the multi and the try scorers all render through the
           // existing card path. Returns [] on any failure.
           const allPicks = await fetchCompetitionPicks("rlwc", publicAnonKey);
-          // Cards show only picks that can still be backed; settled ones live
-          // on in the result trackers below.
-          const picksForFixture = picksByFixture(selectPendingPicks(allPicks));
+          // Settled picks stay on their card with a WON/LOST badge. Filtering
+          // them out blanked the card the moment a match was settled, so the
+          // play a subscriber followed all day vanished with no outcome shown.
+          const picksForFixture = picksByFixture(selectCardPicks(allPicks));
 
           const predictions = (adapted.predictions as unknown as PredictionRow[]).map(
             (prediction, index) => {
