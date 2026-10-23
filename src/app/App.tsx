@@ -15754,8 +15754,14 @@ export default function App() {
             dashboardData.headshots = headshots;
           }
         }
-      } catch {
-        // RLWC is additive; never let it break the NRL pages.
+      } catch (rlwcError) {
+        // RLWC is the live product: if this block fails the page has nothing
+        // to show, so the failure must be visible rather than swallowed.
+        // Silently catching here is what made a blank page undiagnosable.
+        console.error(
+          "RLWC content failed to build; plays, multis and trackers will not render.",
+          rlwcError,
+        );
       }
 
       setData(dashboardData);
