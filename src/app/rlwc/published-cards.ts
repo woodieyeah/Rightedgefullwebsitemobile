@@ -89,6 +89,16 @@ function typeFor(market: string): "Line" | "Total" | "Head 2 Head" {
 function selectionLabel(pick: PublicPick): string {
   if (pick.point === null || pick.point === undefined) return pick.selection;
 
+  // A total names its own line ("Under 60.5") and the point repeats it, so a
+  // signed handicap must never be appended — that printed "Under 60.5 +60.5".
+  // The line is still restored when only the side was stored, so the card
+  // never shows a bare "Under" with no number.
+  if (pick.market === "total") {
+    const side = String(pick.selection).match(/^(over|under)/i)?.[1];
+    if (!side) return pick.selection;
+    return `${side.charAt(0).toUpperCase()}${side.slice(1).toLowerCase()} ${pick.point}`;
+  }
+
   // Drop a trailing SIGNED number only. An unsigned trailing number could be
   // part of a team's name, and stripping it would corrupt the label.
   const bare = String(pick.selection).replace(/\s+[-+]\d+(?:\.\d+)?\s*$/, "").trim();

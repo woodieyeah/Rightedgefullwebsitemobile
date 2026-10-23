@@ -335,3 +335,32 @@ test("a team whose name ends in a number is not mistaken for a handicap", () => 
   })!;
   assert.equal(play.selection, "Cook Islands -14.5");
 });
+
+test("a total keeps its own line and does not have the point appended", () => {
+  // A total's selection already names its line ("Under 60.5"), and the point
+  // repeats it. Appending produced "Under 60.5 +60.5" on the live card.
+  const play = buildPublishedPremiumPlay(row(), {
+    ...linePickInline, id: "t1", market: "total",
+    selection: "Under 60.5", point: 60.5,
+  })!;
+  assert.equal(play.selection, "Under 60.5");
+  assert.equal(play.type, "Total");
+});
+
+test("an Over total is not doubled either", () => {
+  const play = buildPublishedPremiumPlay(row(), {
+    ...linePickInline, id: "t2", market: "total",
+    selection: "Over 41.5", point: 41.5,
+  })!;
+  assert.equal(play.selection, "Over 41.5");
+});
+
+test("a bare total gains its line so the card is never ambiguous", () => {
+  // Defensive: if a publisher ever stores just the side, the line must still
+  // reach the card rather than leaving "Under" with no number.
+  const play = buildPublishedPremiumPlay(row(), {
+    ...linePickInline, id: "t3", market: "total",
+    selection: "Under", point: 60.5,
+  })!;
+  assert.equal(play.selection, "Under 60.5");
+});
