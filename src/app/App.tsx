@@ -1539,12 +1539,6 @@ const appPages = [
     mobileLabel: "Multi",
     icon: <BadgeCheck className="w-5 h-5" />,
   },
-  {
-    id: "try-scorers",
-    label: "Try Scorers",
-    mobileLabel: "Scorers",
-    icon: <Trophy className="w-5 h-5" />,
-  },
 ];
 
 function getAppPages(isAdmin: boolean) {
@@ -4445,7 +4439,7 @@ function PaymentGateModal({
     if (!open) return;
     setEmail(storedEmail || "");
     const currentPremiumHash = window.location.hash.replace("#", "");
-    const section = ["matches", "best-bets", "multi", "try-scorers"].includes(currentPremiumHash)
+    const section = ["matches", "best-bets", "multi"].includes(currentPremiumHash)
       ? currentPremiumHash
       : "best-bets";
     (window as any).trackAnalyticsEvent?.("premium_paywall_view", {
@@ -4501,7 +4495,7 @@ function PaymentGateModal({
 
       setStep("processing");
       const currentPremiumHash = window.location.hash.replace("#", "");
-      let returnHash = ["matches", "best-bets", "multi", "try-scorers"].includes(currentPremiumHash)
+      let returnHash = ["matches", "best-bets", "multi"].includes(currentPremiumHash)
         ? currentPremiumHash
         : "best-bets";
       const returnUrl = `${window.location.origin}${window.location.pathname}`;
@@ -12250,335 +12244,6 @@ function OriginPage({
   );
 }
 
-function TryScorersPage({
-  data,
-  onRequestAccess,
-  isPremium = false,
-  isAdmin = false,
-}: {
-  data: DashboardData;
-  onRequestAccess: (targetHash?: string) => void;
-  isPremium?: boolean;
-  isAdmin?: boolean;
-}) {
-  const now = useMinuteNow();
-
-  // Try-scorer rows carry no kickoff time, so a finished match is
-  // indistinguishable from an upcoming one without joining to its fixture.
-  // Without this the completed Grand Final kept showing live Best Bet and Value
-  // signals days after it was played. Fails open: a row whose fixture cannot be
-  // resolved is kept, so a naming mismatch shows too much rather than silently
-  // hiding premium plays.
-  const liveTryScorers = useMemo(() => {
-    const kickoffByPair = new Map<string, FixtureRow>();
-    for (const fixture of data.fixtures) {
-      kickoffByPair.set(buildTeamPairKey(fixture.homeTeam, fixture.awayTeam), fixture);
-    }
-    return data.tryScorers.filter((row) => {
-      const fixture = kickoffByPair.get(getMatchPairKeyFromLabel(row.match));
-      if (!fixture) return true;
-      return !isFixtureCompleted(fixture, now);
-    });
-  }, [data.tryScorers, data.fixtures, now]);
-
-  const availableRounds = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          liveTryScorers
-            .map((row) => row.round)
-            .filter((round) => Number.isFinite(round) && round > 0),
-        ),
-      ).sort((a, b) => b - a),
-    [liveTryScorers],
-  );
-
-  const latestRound = availableRounds[0] || 0;
-  const availableRoundKey = availableRounds.join("|");
-  const [selectedRound, setSelectedRound] = useState<number | "all">(
-    latestRound || "all",
-  );
-
-  useEffect(() => {
-    if (!availableRounds.length) {
-      setSelectedRound("all");
-      return;
-    }
-
-    setSelectedRound((current) => {
-      if (current === "all") return latestRound;
-      return availableRounds.includes(current) ? current : latestRound;
-    });
-  }, [availableRoundKey, latestRound]);
-
-  const roundFilteredRows =
-    selectedRound === "all"
-      ? liveTryScorers
-      : liveTryScorers.filter((row) => row.round === selectedRound);
-
-  const predictedWinnerByMatch = data.predictions.reduce((map, prediction) => {
-    if (prediction.predictedWinner) {
-      map[getPredictionPairKey(prediction)] = prediction.predictedWinner;
-    }
-    return map;
-  }, {} as Record<string, string>);
-
-  const valuePlays = getTryScorerPageRows(roundFilteredRows, predictedWinnerByMatch);
-  const roundLabel =
-    selectedRound === "all" ? "All rounds" : `Round ${selectedRound}`;
-
-  const matchGroups = valuePlays.reduce((groups, row) => {
-    if (!groups[row.match]) groups[row.match] = [];
-    groups[row.match].push(row);
-    return groups;
-  }, {} as Record<string, TryScorerRow[]>);
-
-  const bestBetPlayCount = Object.values(matchGroups).reduce((total, players) => {
-    const bestBetKeys = getMatchBestBetKeys(players);
-    return total + players.filter((row) => bestBetKeys.has(getTryScorerKey(row))).length;
-  }, 0);
-  const matchCount = Object.keys(matchGroups).length;
-
-  if (!isPremium && !isAdmin) {
-    return (
-      <div className="flex flex-col gap-6 md:gap-8">
-        <GlassCard className="p-8 md:p-12 text-center relative overflow-hidden">
-          <div className="relative z-10 flex flex-col items-center max-w-xl mx-auto">
-            <div className="border border-[#1E1E2E] bg-[#16161D] p-4 mb-6">
-              <Lock className="w-10 h-10 text-white stroke-[2px]" />
-            </div>
-            <h2 className="text-3xl md:text-5xl font-semibold text-white uppercase tracking-tight mb-3">
-              Premium Content
-            </h2>
-            <p className="text-sm md:text-base text-[#9CA3AF] leading-relaxed mb-8">
-              Try Scorer plays are included with RightEdge Premium. Unlock the full round to see model plays, Try Scorer signals and live prices.
-            </p>
-            <button
-              onClick={() => onRequestAccess("try-scorers")}
-              className="inline-flex items-center justify-center gap-3 re-primary-cta border px-8 py-4 text-base font-medium uppercase tracking-wider transition hover:opacity-90"
-            >
-              Unlock Premium Plays — $14/week
-              <ArrowRight className="w-5 h-5 stroke-[2px]" />
-            </button>
-          </div>
-        </GlassCard>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex flex-col gap-8">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-end gap-3">
-        <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
-          <div className="bg-[#1E232B] border-2 border-white/10 px-4 py-3 shadow-[4px_4px_0_0_#0047FF]">
-            <div className="text-[9px] font-black text-white/40 uppercase tracking-widest mb-1">
-              Showing
-            </div>
-            <div className="text-sm font-black text-white uppercase tracking-wider">
-              {roundLabel} · {bestBetPlayCount} plays · {matchCount} matches
-            </div>
-          </div>
-
-          <div className="relative min-w-[180px]">
-            <select
-              value={selectedRound === "all" ? "all" : String(selectedRound)}
-              onChange={(e) => {
-                const value = e.target.value;
-                setSelectedRound(value === "all" ? "all" : Number(value));
-              }}
-              className="w-full appearance-none bg-[#111317] border-2 border-[#FFEA00] text-white px-4 py-3 pr-10 text-xs font-black uppercase tracking-widest focus:outline-none focus:border-[#00E676] shadow-[4px_4px_0_0_#FF2E63]"
-            >
-              {availableRounds.map((round) => (
-                <option key={round} value={round}>
-                  Round {round}
-                </option>
-              ))}
-              {availableRounds.length > 1 && <option value="all">All rounds</option>}
-            </select>
-            <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#FFEA00]" />
-          </div>
-        </div>
-      </div>
-
-      {valuePlays.length === 0 ? (
-        <GlassCard className="p-8 text-center border-l-4 border-l-white/20">
-          <div className="text-white/50 font-bold uppercase tracking-widest text-sm">
-            No value plays identified for {roundLabel.toLowerCase()} yet.
-          </div>
-          {availableRounds.length > 0 && selectedRound !== latestRound && (
-            <button
-              type="button"
-              onClick={() => setSelectedRound(latestRound)}
-              className="mt-5 inline-flex items-center justify-center gap-2 bg-[#FFEA00] text-black px-5 py-3 text-xs font-black uppercase tracking-wider hover:bg-[#FFD600] transition-colors shadow-[4px_4px_0_0_#FF2E63]"
-            >
-              Show latest round
-              <ArrowRight className="w-4 h-4 stroke-[3px]" />
-            </button>
-          )}
-        </GlassCard>
-      ) : (
-        <div className="flex flex-col gap-10">
-          {Object.entries(matchGroups).map(([match, players]) => {
-            const teams = match.split(" v ");
-            const homeTeam = teams[0] || "";
-            const awayTeam = teams[1] || "";
-            const bestBetKeys = getMatchBestBetKeys(players);
-            const tryScorerSortRank: Record<string, number> = { "Best Bet": 3, "High Prob": 2, Value: 1 };
-            const sortedPlayers = [...players].sort((a, b) => {
-              const aLabel = getAssignedTryScorerLabel(a, bestBetKeys);
-              const bLabel = getAssignedTryScorerLabel(b, bestBetKeys);
-              return (
-                (tryScorerSortRank[bLabel || ""] || 0) - (tryScorerSortRank[aLabel || ""] || 0) ||
-                b.statsInsiderPct - a.statsInsiderPct ||
-                b.edgePct - a.edgePct
-              );
-            });
-
-            return (
-              <div key={match}>
-                {/* Match Header */}
-                <div className="flex items-center gap-2 mb-4 pb-3 border-b border-white/10">
-                  <div className="w-3 h-3 rounded-sm shrink-0" style={{ backgroundColor: getTeamColors(homeTeam).primary }} />
-                  <div className="w-3 h-3 rounded-sm shrink-0" style={{ backgroundColor: getTeamColors(awayTeam).primary }} />
-                  <span className="text-[10px] font-black text-white/50 uppercase tracking-widest">{homeTeam} v {awayTeam}</span>
-                </div>
-
-                {/* Desktop */}
-                <div className="hidden md:block overflow-x-auto">
-                  <table className="w-full table-fixed text-left border-collapse">
-                    <colgroup>
-                      <col className="w-[24%]" />
-                      <col className="w-[8%]" />
-                      <col className="w-[10%]" />
-                      <col className="w-[11%]" />
-                      <col className="w-[11%]" />
-                      <col className="w-[22%]" />
-                      <col className="w-[14%]" />
-                    </colgroup>
-                    <thead>
-                      <tr className="border-b border-white/10">
-                        {["Player", "Round", "Model %", "Market %", "Best Odds", "Bookmaker", "Signal"].map((h) => (
-                          <th key={h} className="px-2 pb-3 font-black text-white/40 uppercase tracking-widest text-[10px]">
-                            {h}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-white/5">
-                      {sortedPlayers.map((row, i) => {
-                        const signalLabel = getAssignedTryScorerLabel(row, bestBetKeys);
-                        const isBestBet = bestBetKeys.has(getTryScorerKey(row));
-                        return (
-                        <tr
-                          key={i}
-                          className={`transition-colors ${
-                            isBestBet
-                              ? "border-l-2 border-l-[#00E676]/60 bg-[#f6f6f3] hover:bg-[#f6f6f3]"
-                              : "hover:bg-white/[0.03]"
-                          }`}
-                        >
-                          <td className="px-2 py-4">
-                            <div className="flex min-w-0 items-center gap-2">
-                              <PlayerAvatar
-                                playerName={row.player}
-                                teamName={row.team}
-                                headshots={data.headshots}
-                                className="w-5 h-5 text-[8px]"
-                              />
-                              <span className="min-w-0 truncate text-sm font-black text-white">{row.player}</span>
-                            </div>
-                          </td>
-                          <td className="px-2 py-4 text-xs font-black text-white/40 uppercase tracking-widest">
-                            {row.round ? `R${row.round}` : "—"}
-                          </td>
-                          <td className="px-2 py-4 text-sm font-bold text-white">
-                            {formatPercent(row.statsInsiderPct, 1)}
-                          </td>
-                          <td className="px-2 py-4 text-sm font-bold text-white/50">
-                            {formatPercent(row.marketImpliedPct, 1)}
-                          </td>
-                          <td className="px-2 py-4">
-                            <div className={isBetrBookmaker(row.bookmaker) ? "text-sm font-black text-[#093AD3]" : "text-sm font-black text-[#00E676]"}>
-                              ${row.bestOdds.toFixed(2)}
-                            </div>
-                          </td>
-                          <td className="px-2 py-4 text-xs font-bold text-[#FFEA00] uppercase tracking-wider">
-                            <AffiliateMarketButton
-                              payload="rightedge_try_scorer"
-                              bookmaker={row.bookmaker}
-                              odds={row.bestOdds}
-                              label={getPreviewBookmakerName(row.bookmaker)}
-                              className="!min-h-[34px] !px-2.5 !py-1 !text-[10px]"
-                            />
-                          </td>
-                          <td className="px-2 py-4">
-                            <span className={`inline-flex max-w-full whitespace-nowrap px-2 py-1 text-[10px] font-black uppercase tracking-wider ${getTryScorerSignalClass(signalLabel)}`}>
-                              {signalLabel || "Watch"}
-                            </span>
-                          </td>
-                        </tr>
-                      );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-
-                {/* Mobile */}
-                <div className="md:hidden flex flex-col divide-y divide-white/5">
-                  {sortedPlayers.map((row, i) => {
-                    const teamColors = getTeamColors(row.team);
-                    const signalLabel = getAssignedTryScorerLabel(row, bestBetKeys);
-                    const isBestBet = bestBetKeys.has(getTryScorerKey(row));
-                    return (
-                      <div
-                        key={i}
-                        className={`flex items-center justify-between gap-4 py-4 transition-colors ${
-                          isBestBet
-                            ? "-mx-3 border-l-2 border-l-[#00E676]/60 bg-[#f6f6f3] px-3"
-                            : ""
-                        }`}
-                      >
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm font-black text-white mb-1">{row.player}</div>
-                          <div className="flex items-center gap-1 mb-1">
-                            <span className="text-xs font-black" style={{ color: teamColors.secondary === '#FFFFFF' || teamColors.secondary === '#000000' ? '#FFFFFF' : teamColors.secondary }}>
-                              {row.team}
-                            </span>
-                            <span className="text-xs text-white/40">· {row.position}</span>
-                            {row.round > 0 && <span className="text-xs text-white/40">· R{row.round}</span>}
-                          </div>
-                          <div className="text-[10px] text-white/30 uppercase tracking-wider">
-                            Model {formatPercent(row.statsInsiderPct, 1)} · Market {formatPercent(row.marketImpliedPct, 1)}
-                          </div>
-                        </div>
-                        <div className="flex flex-col items-end gap-1 shrink-0">
-                          <div className={isBetrBookmaker(row.bookmaker) ? "text-xl font-black text-[#093AD3]" : "text-xl font-black text-white"}>
-                            ${row.bestOdds.toFixed(2)}
-                          </div>
-                          <AffiliateMarketButton
-                            payload="rightedge_try_scorer"
-                            bookmaker={row.bookmaker}
-                            odds={row.bestOdds}
-                            label="View market"
-                            className="!min-h-[34px] !px-2.5 !py-1 !text-[9px]"
-                          />
-                          <span className={`px-2 py-1 text-[10px] font-black uppercase tracking-widest ${getTryScorerSignalClass(signalLabel)}`}>
-                            {signalLabel || "Watch"}
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-               </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
 type SameGameMultiLeg = {
   kind: "result" | "total" | "try-scorer";
   label: string;
@@ -14636,7 +14301,7 @@ function AppDashboard({
   const [page, setPage] = useState(() => {
     const hash = window.location.hash.replace("#", "");
     if (
-      ["matches", "best-bets", "multi", "try-scorers", "performance", "admin", "admin-results", "model-lab"].includes(
+      ["matches", "best-bets", "multi", "performance", "admin", "admin-results", "model-lab"].includes(
         hash,
       )
     ) {
@@ -14711,7 +14376,6 @@ function AppDashboard({
           "matches",
           "best-bets",
           "multi",
-          "try-scorers",
           "performance",
           "admin",
           "admin-results",
@@ -14809,11 +14473,6 @@ function AppDashboard({
           title: "Multi",
           subtitle: `Model-selected combinations for ${data?.currentRoundLabel || "the current round"}`,
         };
-      case "try-scorers":
-        return {
-          title: "Premium",
-          subtitle: "Try Scorer Value Plays",
-        };
       case "performance":
         return {
           subtitle: "Performance",
@@ -14847,7 +14506,7 @@ function AppDashboard({
                 active={page === item.id}
                 icon={item.icon}
                 label={item.label}
-                premium={item.id === "best-bets" || item.id === "multi" || item.id === "try-scorers"}
+                premium={item.id === "best-bets" || item.id === "multi"}
                 onClick={() => {
                   handlePageChange(item.id);
                   window.scrollTo({
@@ -15078,14 +14737,6 @@ function AppDashboard({
                   isPremium={isPremium || isAdmin}
                   isAdmin={isAdmin}
                   selectedArchive={selectedRoundArchive}
-                />
-              )}
-              {page === "try-scorers" && (
-                <TryScorersPage
-                  data={data}
-                  onRequestAccess={onRequestAccess}
-                  isPremium={isPremium}
-                  isAdmin={isAdmin}
                 />
               )}
               {page === "multi" && (
@@ -15672,7 +15323,7 @@ export default function App() {
     const analyticsName = rawHash.replace(/-/g, "_");
     (window as any).trackAnalyticsEvent?.(`${analyticsName}_view`, {
       section: rawHash,
-      app_section: ["matches", "best-bets", "multi", "try-scorers", "performance", "admin", "admin-results", "model-lab"].includes(rawHash),
+      app_section: ["matches", "best-bets", "multi", "performance", "admin", "admin-results", "model-lab"].includes(rawHash),
     });
   };
 
@@ -15698,7 +15349,7 @@ export default function App() {
   };
 
   const requestPremiumAccess = (source: string = 'unknown') => {
-    let targetHash = ["matches", "best-bets", "multi", "try-scorers"].includes(source)
+    let targetHash = ["matches", "best-bets", "multi"].includes(source)
       ? source
       : "best-bets";
     setSitePage("app");
@@ -15731,8 +15382,8 @@ export default function App() {
 
   const checkHash = () => {
     const hash = window.location.hash.replace("#", "");
-    const appHashes = ["matches", "best-bets", "multi", "try-scorers", "performance", "admin", "admin-results", "model-lab"];
-    const premiumHashes = ["best-bets", "try-scorers"];
+    const appHashes = ["matches", "best-bets", "multi", "performance", "admin", "admin-results", "model-lab"];
+    const premiumHashes = ["best-bets"];
     const publicHashes = ["results", "methodology", "ad-studio", "articles", "article-round-5-2026", "article-methodology", "cricket"];
 
     if (hash === "origin") {
@@ -15818,7 +15469,7 @@ export default function App() {
 
       const sessionId = searchParams.get("session_id");
       const fallbackReturnHash = searchParams.get("return_hash") || window.location.hash.replace("#", "") || "best-bets";
-      let returnHash = ["matches", "best-bets", "multi", "try-scorers"].includes(fallbackReturnHash)
+      let returnHash = ["matches", "best-bets", "multi"].includes(fallbackReturnHash)
         ? fallbackReturnHash
         : "best-bets";
 
@@ -15859,7 +15510,7 @@ export default function App() {
 
           setShowEmailGate(false);
 
-          let confirmedReturnHash = ["matches", "best-bets", "multi", "try-scorers"].includes(data.returnHash)
+          let confirmedReturnHash = ["matches", "best-bets", "multi"].includes(data.returnHash)
             ? data.returnHash
             : returnHash;
 
@@ -16277,7 +15928,7 @@ export default function App() {
             setShowPaymentGate(false);
             setSitePage("app");
             const currentPremiumHash = window.location.hash.replace("#", "");
-            let returnHash = ["matches", "best-bets", "multi", "try-scorers"].includes(currentPremiumHash)
+            let returnHash = ["matches", "best-bets", "multi"].includes(currentPremiumHash)
               ? currentPremiumHash
               : "best-bets";
             window.location.hash = returnHash;
