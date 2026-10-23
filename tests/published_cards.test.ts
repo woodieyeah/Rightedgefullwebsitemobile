@@ -178,6 +178,65 @@ test("a published multi becomes a multi card", () => {
   assert.equal(card.match, "Australia V New Zealand");
 });
 
+test("a line leg shows its handicap and keeps its team", () => {
+  // A line leg rendered as kind "try-scorer" with a bare team name: the card
+  // looked for a headshot for "Samoa", found none, dropped the avatar cell and
+  // collapsed the row's grid so the label truncated to "S...".
+  const linePick: PublicPick = {
+    ...base, id: "m-line", market: "sgm",
+    selection: "Samoa -22.5 + Connelly Lemuelu anytime try",
+    entry_odds: 2.65, entry_bookmaker: "betr",
+    model_probability: null, market_probability: 0.3774,
+    legs: [
+      { selection: "Samoa", market: "line", point: -22.5, odds: 1.50, result: "pending" },
+      { selection: "Connelly Lemuelu", market: "anytime_try", point: null, odds: 2.25, result: "pending" },
+    ] as any,
+  };
+  const card = buildPublishedMultiCard(row(), linePick)!;
+
+  assert.equal(card.legs[0].label, "Samoa -22.5", "a line leg must show its handicap");
+  assert.equal(card.legs[0].kind, "result", "a line leg is not a try scorer");
+  assert.equal(card.legs[0].team, "Samoa", "a line leg must carry its team so a crest renders");
+
+  assert.equal(card.legs[1].label, "Connelly Lemuelu");
+  assert.equal(card.legs[1].kind, "try-scorer");
+  assert.equal(card.legs[1].suffix, "ANYTIME");
+});
+
+test("a positive line leg keeps its plus sign", () => {
+  const underdog: PublicPick = {
+    ...base, id: "m-dog", market: "sgm", selection: "Lebanon +44.5 + x",
+    entry_odds: 3.0, model_probability: null, market_probability: 0.33,
+    legs: [
+      { selection: "Lebanon", market: "line", point: 44.5, odds: 1.90, result: "pending" },
+      { selection: "Sione Katoa", market: "anytime_try", point: null, odds: 1.30, result: "pending" },
+    ] as any,
+  };
+  const card = buildPublishedMultiCard(row(), underdog)!;
+  assert.equal(card.legs[0].label, "Lebanon +44.5");
+});
+
+test("a total leg in a multi is labelled and typed as a total", () => {
+  const withTotal: PublicPick = {
+    ...base, id: "m-total", market: "sgm", selection: "Under 60.5 + x",
+    entry_odds: 3.5, model_probability: null, market_probability: 0.2857,
+    legs: [
+      { selection: "Under 60.5", market: "total", point: 60.5, odds: 1.90, result: "pending" },
+      { selection: "George Williams", market: "anytime_try", point: null, odds: 2.20, result: "pending" },
+    ] as any,
+  };
+  const card = buildPublishedMultiCard(row(), withTotal)!;
+  assert.equal(card.legs[0].label, "Under 60.5", "a total must not have its point appended twice");
+  assert.equal(card.legs[0].kind, "total");
+  assert.equal(card.legs[0].team, undefined, "a total names no team");
+});
+
+test("an h2h leg still carries its team", () => {
+  const card = buildPublishedMultiCard(row(), sgmPick)!;
+  assert.equal(card.legs[0].kind, "result");
+  assert.equal(card.legs[0].team, "Australia");
+});
+
 test("a three-leg multi keeps all three legs", () => {
   // Betr prices Australia + Trbojevic + Bostock at $5.00 against a $8.66
   // product — a 42% correlation discount, because Bostock (centre) is

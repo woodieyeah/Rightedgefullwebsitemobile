@@ -149,6 +149,30 @@ export function buildPublishedPremiumPlay(
   };
 }
 
+/**
+ * Label a multi leg, applying the same rules as a core play's selection.
+ *
+ * A line leg stores the bare team name with the handicap in `point`, so the
+ * handicap has to be restored here or the card shows "Samoa" where the core
+ * play shows "Samoa -22.5". A total already names its own line and must not
+ * have the point appended twice.
+ */
+function multiLegLabel(leg: { market: string; selection: string; point?: number | null }): string {
+  const point = leg.point;
+  if (point === null || point === undefined || !Number.isFinite(point)) return leg.selection;
+
+  if (leg.market === "total") {
+    const side = String(leg.selection).match(/^(over|under)/i)?.[1];
+    if (!side) return leg.selection;
+    return `${side.charAt(0).toUpperCase()}${side.slice(1).toLowerCase()} ${point}`;
+  }
+
+  if (leg.market !== "line") return leg.selection;
+
+  const bare = String(leg.selection).replace(/\s+[-+]\d+(?:\.\d+)?\s*$/, "").trim();
+  return `${bare} ${point > 0 ? "+" : ""}${point}`;
+}
+
 /** Build a Multi page card from a published same-game multi. */
 export function buildPublishedMultiCard(
   row: PredictionRowLike,
@@ -173,15 +197,25 @@ export function buildPublishedMultiCard(
     match: `${row.homeTeam} V ${row.awayTeam}`,
     fixture: row.fixture ?? null,
     status: "upcoming",
-    legs: legs.map((leg) => ({
-      kind: leg.market === "h2h" ? "result" : leg.market === "total" ? "total" : "try-scorer",
-      label: leg.selection,
-      suffix: leg.market === "anytime_try" ? "ANYTIME" : undefined,
-      marketPct: (1 / leg.odds) * 100,
-      modelPct: (1 / leg.odds) * 100,
-      odds: leg.odds,
-      team: leg.market === "h2h" ? leg.selection : undefined,
-    })),
+    legs: legs.map((leg) => {
+      const isTryScorer = leg.market === "anytime_try" || leg.market === "first_try" ||
+        leg.market === "player_2_tries";
+      return {
+        kind: isTryScorer ? "try-scorer" : leg.market === "total" ? "total" : "result",
+        // A line leg must show its handicap, exactly as the core play does.
+        // Labelling it with the bare team name both lost the line and left
+        // the renderer hunting for a headshot that cannot exist.
+        label: multiLegLabel(leg),
+        suffix: isTryScorer ? "ANYTIME" : undefined,
+        marketPct: (1 / leg.odds) * 100,
+        modelPct: (1 / leg.odds) * 100,
+        odds: leg.odds,
+        // A team-based leg carries its team so a crest renders in the avatar
+        // slot. Without it PlayerAvatar returns null, the grid cell collapses
+        // and every following column shifts left, truncating the label.
+        team: leg.market === "h2h" || leg.market === "line" ? leg.selection : undefined,
+      };
+    }),
     price: pick.entry_odds,
   };
 }

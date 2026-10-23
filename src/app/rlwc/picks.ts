@@ -15,6 +15,8 @@ const SUPABASE_URL = "https://spahmuawycgohcznathc.supabase.co";
 export interface PickLeg {
   selection: string;
   market: string;
+  /** The handicap or total line. Null for a try scorer, which has no line. */
+  point: number | null;
   odds: number;
   result: "pending" | "win" | "loss" | "push" | "void";
 }
