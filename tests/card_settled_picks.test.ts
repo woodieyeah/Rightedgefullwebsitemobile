@@ -1,17 +1,21 @@
 /**
- * A settled pick stays on its match card, badged with the result.
+ * Match cards show only picks that can still be backed.
  *
- * Previously `selectPendingPicks` dropped everything except pending picks, so
- * the moment a match was settled its card went blank — the play a subscriber
- * had been watching all day simply vanished, and the only record was the
- * tracker further down the page. Keeping the pick visible with WON/LOST is
- * both more useful and more honest: a loss stays on display rather than
- * quietly disappearing.
+ * A settled pick must NOT be fed into the card pipeline. selectCorePlay takes
+ * the first h2h/line/total it finds and ignores result_status, so including
+ * settled picks made every finished fixture resurface its old pick. Those
+ * fixtures are then removed by the >3h completion filter, which took the
+ * Matches and Premium Plays sections down with them — a live outage for
+ * paying subscribers, with four playable fixtures still on the card.
+ *
+ * Settled results belong in the result trackers, which read the full ledger
+ * separately and already show the complete record including losses.
  */
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
-  selectCardPicks,
+  selectPendingPicks,
   pickResultBadge,
   type PublicPick,
 } from "../src/app/rlwc/picks.ts";
@@ -31,8 +35,8 @@ const base = {
 };
 
 const pending: PublicPick = {
-  ...base, id: "p1", market: "line", selection: "Lebanon", point: 44.5,
-  entry_odds: 1.9, entry_bookmaker: "TAB",
+  ...base, id: "p1", market: "line", selection: "Samoa", point: -22.5,
+  entry_odds: 1.58, entry_bookmaker: "TAB",
 };
 const won: PublicPick = {
   ...base, id: "p2", market: "line", selection: "Lebanon", point: 44.5,
@@ -50,23 +54,43 @@ const voided: PublicPick = {
   result_status: "void", profit_units: 0,
 };
 
-test("a pending pick is shown", () => {
-  assert.deepEqual(selectCardPicks([pending]).map((p) => p.id), ["p1"]);
+test("only pending picks reach a match card", () => {
+  assert.deepEqual(
+    selectPendingPicks([pending, won, lost, voided]).map((p) => p.id),
+    ["p1"],
+  );
 });
 
-test("a settled pick is still shown so the card does not go blank", () => {
-  const kept = selectCardPicks([won, lost]).map((p) => p.id);
-  assert.deepEqual(kept, ["p2", "p3"], "settled picks must remain on the card");
+test("a settled winner is not placed back on a card", () => {
+  assert.equal(selectPendingPicks([won]).length, 0);
 });
 
-test("a losing pick stays visible rather than quietly disappearing", () => {
-  assert.equal(selectCardPicks([lost]).length, 1);
+test("a settled loss is not placed back on a card", () => {
+  assert.equal(selectPendingPicks([lost]).length, 0);
 });
 
-test("a voided pick is shown too, since a refund is a real outcome", () => {
-  assert.equal(selectCardPicks([voided]).length, 1);
+test("a voided pick is not placed back on a card", () => {
+  assert.equal(selectPendingPicks([voided]).length, 0);
 });
 
+test("the dashboard feeds ONLY pending picks into the card pipeline", () => {
+  // Guards the exact regression that blanked production: passing settled
+  // picks through resurfaced finished fixtures, which the completion filter
+  // then dropped along with the whole section.
+  const APP = readFileSync(new URL("../src/app/App.tsx", import.meta.url), "utf8");
+  assert.match(
+    APP,
+    /picksByFixture\(selectPendingPicks\(allPicks\)\)/,
+    "match cards must be built from selectPendingPicks",
+  );
+  assert.doesNotMatch(
+    APP,
+    /picksByFixture\(selectCardPicks\(/,
+    "selectCardPicks must never feed the card pipeline",
+  );
+});
+
+// The badge helper stays: the result trackers use it to label settled rows.
 test("the badge names the outcome", () => {
   assert.equal(pickResultBadge(pending), null, "a pending pick carries no badge");
   assert.equal(pickResultBadge(won), "WON");

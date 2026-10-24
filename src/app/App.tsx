@@ -15676,10 +15676,13 @@ export default function App() {
           // play, the multi and the try scorers all render through the
           // existing card path. Returns [] on any failure.
           const allPicks = await fetchCompetitionPicks("rlwc", publicAnonKey);
-          // Settled picks stay on their card with a WON/LOST badge. Filtering
-          // them out blanked the card the moment a match was settled, so the
-          // play a subscriber followed all day vanished with no outcome shown.
-          const picksForFixture = picksByFixture(selectCardPicks(allPicks));
+          // Cards show only picks that can still be backed. Feeding settled
+          // picks in here broke the page: selectCorePlay takes the first
+          // h2h/line/total it finds regardless of status, so every finished
+          // fixture resurfaced its settled pick, and those fixtures are then
+          // dropped by the >3h completion filter — taking the whole section
+          // with them. Settled results belong in the trackers, not on a card.
+          const picksForFixture = picksByFixture(selectPendingPicks(allPicks));
 
           const predictions = (adapted.predictions as unknown as PredictionRow[]).map(
             (prediction, index) => {
