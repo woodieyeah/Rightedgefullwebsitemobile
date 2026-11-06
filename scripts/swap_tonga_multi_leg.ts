@@ -15,6 +15,8 @@
  *
  * Usage: npx tsx scripts/swap_tonga_multi_leg.ts [--dry-run]
  */
+import { buildSgmLeg } from "../src/model/sgm-legs.ts";
+
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const DRY_RUN = process.argv.includes("--dry-run");
@@ -76,7 +78,7 @@ async function getJson(url: string, attempts = 4): Promise<any> {
 interface Out {
   name: string; price: number; points: number;
   betType: string; eventName: string;
-  eventId: number; outcomeId: number; team: string;
+  eventId: number; outcomeId: number; fixedMarketId: number; team: string;
 }
 
 function collect(node: any, out: Out[] = [], ev = ""): Out[] {
@@ -92,6 +94,9 @@ function collect(node: any, out: Out[] = [], ev = ""): Out[] {
       eventName: String(e ?? ""),
       eventId: Number(node.EventId ?? 0),
       outcomeId: Number(node.OutcomeId ?? 0),
+      // Handicap starts share an EventId and OutcomeId and differ only by
+      // FixedMarketId; dropping it collapses every start to one price.
+      fixedMarketId: Number(node.FixedMarketId ?? 0),
       team: String(node.PlayerTeamName ?? ""),
     });
   }
@@ -99,15 +104,14 @@ function collect(node: any, out: Out[] = [], ev = ""): Out[] {
   return out;
 }
 
-function sgmLeg(o: Out, kind: "line" | "try", point: number) {
-  return kind === "line"
-    ? { EventId: o.eventId, OutcomeId: o.outcomeId, MarketType: "WIN", FixedWin: o.price, FixedMarketId: 0,
-        MarketTypeDesc: `Match Result (${LABEL})`, GroupByHeader: "Match Result",
-        Points: point, BetDetailTypeCode: "W", OutcomeName: `${o.name} ${point}` }
-    : { EventId: o.eventId, OutcomeId: o.outcomeId, MarketType: "TSCORER", FixedWin: o.price, FixedMarketId: 0,
-        MarketTypeDesc: `Anytime Tryscorer (${LABEL})`, GroupByHeader: "Anytime Tryscorer",
-        Points: 0, BetDetailTypeCode: "TS", OutcomeName: o.name };
-}
+/**
+ * Superseded by scripts/reprice_semi_multis.ts.
+ *
+ * This script's original leg shape ("W" + FixedMarketId 0) made the endpoint
+ * price a handicap as an outright. It now delegates to the shared builder so
+ * it cannot be re-run with the broken shape.
+ */
+const sgmLeg = (o: Out, kind: "handicap" | "try-scorer") => buildSgmLeg(o, kind, LABEL);
 
 async function main() {
   console.log(`Swapping ${OLD_SCORER} -> ${NEW_SCORER} in the ${LABEL} multi${DRY_RUN ? " (DRY RUN)" : ""}\n`);
@@ -158,7 +162,7 @@ async function main() {
     },
     body: JSON.stringify({
       MasterEventID: EVENT,
-      Markets: [sgmLeg(anchor, "line", anchor.points), sgmLeg(scorer, "try", 0)],
+      Markets: [sgmLeg(anchor, "handicap"), sgmLeg(scorer, "try-scorer")],
     }),
   });
   const d = await res.json().catch(() => null);

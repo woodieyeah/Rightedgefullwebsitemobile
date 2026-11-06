@@ -28,6 +28,7 @@
  *   npx tsx scripts/publish_round4.ts [--dry-run] [--only "Australia v Samoa"]
  */
 import { parseMarginBands, coverProbabilityFromBands } from "../src/model/line-cover.ts";
+import { buildSgmLeg } from "../src/model/sgm-legs.ts";
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -188,15 +189,17 @@ async function priceSgm(event: number, legs: any[]): Promise<number | null> {
   return price;
 }
 
-function sgmLeg(o: BbOutcome, kind: "line" | "try", label: string, point: number) {
-  return kind === "line"
-    ? { EventId: o.eventId, OutcomeId: o.outcomeId, MarketType: "WIN", FixedWin: o.price, FixedMarketId: 0,
-        MarketTypeDesc: `Match Result (${label})`, GroupByHeader: "Match Result",
-        Points: point, BetDetailTypeCode: "W", OutcomeName: `${o.name} ${point}` }
-    : { EventId: o.eventId, OutcomeId: o.outcomeId, MarketType: "TSCORER", FixedWin: o.price, FixedMarketId: 0,
-        MarketTypeDesc: `Anytime Tryscorer (${label})`, GroupByHeader: "Anytime Tryscorer",
-        Points: 0, BetDetailTypeCode: "TS", OutcomeName: o.name };
-}
+/**
+ * Leg descriptors come from the shared builder.
+ *
+ * The previous local version sent a handicap as BetDetailTypeCode "W" with
+ * FixedMarketId 0, which made the endpoint price it as an OUTRIGHT: every
+ * Tonga start and Tonga-to-win all returned $5.80, so the card advertised a
+ * price belonging to a different bet. buildSgmLeg enforces HC/HCWEST with the
+ * start's own FixedMarketId and throws rather than degrading.
+ */
+const sgmLeg = (o: BbOutcome, kind: "handicap" | "try-scorer", label: string) =>
+  buildSgmLeg(o, kind, label);
 
 async function run(plan: Plan) {
   console.log(`\n${"=".repeat(74)}\n${plan.label}\n${"=".repeat(74)}`);
@@ -309,8 +312,8 @@ async function run(plan: Plan) {
   else if (!scorer) console.log(`  SGM   ${plan.scorer} is not quoted in the anytime market`);
   else {
     const price = await priceSgm(plan.event, [
-      sgmLeg(anchor, "line", plan.label, anchor.points),
-      sgmLeg(scorer, "try", plan.label, 0),
+      sgmLeg(anchor, "handicap", plan.label),
+      sgmLeg(scorer, "try-scorer", plan.label),
     ]);
     if (price === null) console.log("  SGM   not priceable — skipped");
     else {
