@@ -21,6 +21,8 @@ import {
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+import { selectPredictionCandidates } from "../src/model/prediction-candidates.ts";
+
 const DRY_RUN = process.argv.includes("--dry-run");
 
 const UA =
@@ -136,10 +138,16 @@ async function loadBlueBetPrices(): Promise<Map<string, BookPrices>> {
 async function main() {
   console.log(`RLWC prediction worker · ${new Date().toISOString()}${DRY_RUN ? " · DRY RUN" : ""}`);
 
-  const fixtures = await supabase(
-    "fixtures?select=id,home_team,away_team,kickoff_at,status&status=eq.scheduled&order=kickoff_at.asc",
+  // Settlement never updates fixtures.status, so "scheduled" alone still
+  // returns every played match. Harmless while TAB drops a finished market —
+  // but the grand final repeats the Round 1 pairing, so the settled opener
+  // matched the FINAL's live market and the duplicate (fixture_id,
+  // model_version) insert rejected the entire batch. Kickoff time decides.
+  const allFixtures = await supabase(
+    "fixtures?select=id,home_team,away_team,kickoff_at,status&order=kickoff_at.asc",
   );
-  console.log(`${fixtures.length} scheduled fixture(s)`);
+  const fixtures = selectPredictionCandidates(allFixtures ?? []);
+  console.log(`${fixtures.length} upcoming fixture(s) of ${allFixtures?.length ?? 0}`);
 
   const [tabMatches, bluebet] = await Promise.all([loadTabMatches(), loadBlueBetPrices()]);
   console.log(`${tabMatches.length} TAB match(es), ${bluebet.size} BlueBet price(s)\n`);

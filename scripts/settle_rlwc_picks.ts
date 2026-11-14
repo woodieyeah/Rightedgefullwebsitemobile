@@ -29,6 +29,8 @@ import {
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const DRY_RUN = process.argv.includes("--dry-run");
+import { resultKey } from "../src/model/result-keys.ts";
+
 const roundArg = process.argv.indexOf("--round");
 const ROUND = roundArg >= 0 ? Number(process.argv[roundArg + 1]) : 1;
 
@@ -138,7 +140,7 @@ async function fetchResults(round: number): Promise<Map<string, MatchResult>> {
       ? await fetchMatchDetail(fixture.matchCentreUrl ?? "")
       : { tryScorers: null, playersUsed: undefined };
 
-    byKey.set(matchKey(home, away), {
+    byKey.set(resultKey(home, away, round), {
       homeTeam: home,
       awayTeam: away,
       homeScore: Number(fixture.homeTeam?.score),
@@ -151,8 +153,9 @@ async function fetchResults(round: number): Promise<Map<string, MatchResult>> {
   return byKey;
 }
 
-const matchKey = (home: string, away: string) =>
-  `${home}__${away}`.toLowerCase().replace(/[^a-z_]/g, "");
+// The local `${home}__${away}` key is retired: the grand final repeats the
+// Round 1 pairing, so it mapped two different fixtures to one result. Keys
+// now come from resultKey(), which includes the round.
 
 async function main() {
   console.log(`Settling RLWC round ${ROUND}${DRY_RUN ? " (DRY RUN)" : ""}\n`);
@@ -161,9 +164,13 @@ async function main() {
   const finals = [...results.values()].filter((r) => r.final);
   console.log(`NRL feed: ${results.size} fixture(s), ${finals.length} final\n`);
 
+  // Picks are scoped to the round being settled. Previously every pick in
+  // the table was considered, which is only safe while no two fixtures share
+  // a pairing — and the grand final repeats the Round 1 opener.
   const picks = await supabase(
     "picks?select=id,market,selection,point,entry_odds,stake_units,result_status," +
-      "fixture:fixtures(home_team,away_team)&order=market",
+      "fixture:fixtures!inner(home_team,away_team,round_number)" +
+      `&fixture.round_number=eq.${ROUND}&order=market`,
   );
 
   const legsByPick = new Map<string, any[]>();
@@ -180,7 +187,7 @@ async function main() {
   for (const pick of picks ?? []) {
     const fixture = pick.fixture;
     if (!fixture) continue;
-    const result = results.get(matchKey(fixture.home_team, fixture.away_team)) ?? null;
+    const result = results.get(resultKey(fixture.home_team, fixture.away_team, ROUND)) ?? null;
 
     const stake = Number(pick.stake_units) || 1;
     const odds = Number(pick.entry_odds);
