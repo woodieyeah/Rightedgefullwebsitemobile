@@ -24,6 +24,7 @@
  *     --scorer "Paul Alamoti" [--dry-run]
  */
 import { buildSgmLeg, type SgmOutcome } from "../src/model/sgm-legs.ts";
+import { checkScorerTeam } from "../src/model/scorer-team.ts";
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -36,6 +37,8 @@ const arg = (flag: string): string | null => {
 
 const MATCH_KEY = arg("--match");
 const NEW_SCORER = arg("--scorer");
+/** An opposition scorer is a real bet but must be opted into explicitly. */
+const ALLOW_CROSS_TEAM = process.argv.includes("--allow-cross-team");
 
 const BB_BASE = "https://affiliate-api.bluebet.com.au";
 const SGM_ENDPOINT = "https://web20-api.bluebet.com.au/SameGameMultiPrice";
@@ -48,6 +51,8 @@ const MIN_SGM_PRICE = 1.45;
 const EVENTS: Record<string, { event: number; label: string }> = {
   newzealand__tonga: { event: 2325881, label: "New Zealand v Tonga" },
   australia__samoa: { event: 2325886, label: "Australia v Samoa" },
+  // The final repeats the Round 1 pairing, so it carries a round-qualified key.
+  australia__newzealand__f: { event: 2332757, label: "Australia v New Zealand" },
 };
 
 if (!SUPABASE_URL || !SERVICE_KEY) {
@@ -129,20 +134,36 @@ function collect(node: any, out: Out[] = [], ev = ""): Out[] {
   return out;
 }
 
+/**
+ * Price a combination, treating HTTP 429 as "retry" and never as a refusal.
+ *
+ * Betr throttles under sustained use. Reading a 429 as the book declining
+ * made every Australia combination look unavailable when it was simply rate
+ * limited — all of them priced normally after a backoff.
+ */
 async function priceCombination(markets: any[]): Promise<{ price: number | null; errorNo: number | null }> {
-  const res = await fetch(SGM_ENDPOINT, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json", Accept: "application/json", "User-Agent": UA_BB,
-      Origin: "https://www.betr.com.au", Referer: "https://www.betr.com.au/",
-    },
-    body: JSON.stringify({ MasterEventID: EVENT, Markets: markets }),
-  });
-  const d = await res.json().catch(() => null);
-  if (!d) return { price: null, errorNo: null };
-  if (d.ErrorNo !== 0) return { price: null, errorNo: Number(d.ErrorNo) };
-  const p = Number(d.Price);
-  return { price: Number.isFinite(p) && p ? p : null, errorNo: 0 };
+  const waits = [0, 20_000, 60_000, 120_000];
+  for (let i = 0; i < waits.length; i++) {
+    if (waits[i]) {
+      console.log(`      rate limited (HTTP 429); waiting ${waits[i] / 1000}s`);
+      await new Promise((r) => setTimeout(r, waits[i]));
+    }
+    const res = await fetch(SGM_ENDPOINT, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json", Accept: "application/json", "User-Agent": UA_BB,
+        Origin: "https://www.betr.com.au", Referer: "https://www.betr.com.au/",
+      },
+      body: JSON.stringify({ MasterEventID: EVENT, Markets: markets }),
+    });
+    if (res.status === 429) continue;
+    const d = await res.json().catch(() => null);
+    if (!d) return { price: null, errorNo: null };
+    if (d.ErrorNo !== 0) return { price: null, errorNo: Number(d.ErrorNo) };
+    const p = Number(d.Price);
+    return { price: Number.isFinite(p) && p ? p : null, errorNo: 0 };
+  }
+  throw new Error("SGM endpoint stayed rate limited through every retry");
 }
 
 async function main() {
@@ -190,12 +211,21 @@ async function main() {
     /^anytime tryscorer$/i.test(o.eventName) && norm(o.name) === norm(NEW_SCORER!));
   if (!scorer) {
     const available = [...new Set(all
-      .filter((o) => /^anytime tryscorer$/i.test(o.eventName) && norm(o.team) === norm(anchorTeam))
+      .filter((o) => /^anytime tryscorer$/i.test(o.eventName))
+      .filter((o) => ALLOW_CROSS_TEAM || norm(o.team) === norm(anchorTeam))
       .map((o) => o.name))];
     throw new Error(`${NEW_SCORER} is not quoted in the anytime market. ${anchorTeam} options: ${available.join(", ")}`);
   }
-  if (norm(scorer.team) !== norm(anchorTeam)) {
-    throw new Error(`${scorer.name} is listed under ${scorer.team || "no team"}, not ${anchorTeam}`);
+  const teamCheck = checkScorerTeam({
+    scorer: scorer.name,
+    scorerTeam: scorer.team,
+    anchorTeam,
+    allowCrossTeam: ALLOW_CROSS_TEAM,
+  });
+  if (!teamCheck.allowed) throw new Error(teamCheck.reason!);
+  if (teamCheck.crossTeam) {
+    console.log(`  NOTE: cross-team multi — the line backs ${anchorTeam} while ${scorer.name} ` +
+      `plays for ${scorer.team}. Both legs can land together.`);
   }
 
   console.log(`  anchor: ${anchor.name} ${anchor.points > 0 ? "+" : ""}${anchor.points} $${anchor.price}  (fmi ${anchor.fixedMarketId})`);
