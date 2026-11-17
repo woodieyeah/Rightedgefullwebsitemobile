@@ -26,8 +26,8 @@ import {
   canIssuePremiumChallenge,
   createPremiumChallenge,
   generatePremiumCode,
+  getPremiumCodeHash,
   normalizePremiumCode,
-  verifyPremiumChallenge,
 } from "../supabase/functions/server/premium_auth.ts";
 
 const SECRET = "test-only-premium-code-hmac-secret-at-least-32-bytes";
@@ -75,35 +75,37 @@ test("the same code under a different secret yields a different hash", async () 
 });
 
 test("a correct code verifies and a wrong code does not", async () => {
+  // getPremiumCodeHash is the production primitive: the edge function hashes
+  // the submitted code and hands the hash to the atomic SQL comparison.
   const challenge = await createPremiumChallenge("a@b.com", "123456", SECRET, 0);
-  assert.equal((await verifyPremiumChallenge(challenge, "123456", SECRET, 1_000)).status, "success");
-  assert.equal((await verifyPremiumChallenge(challenge, "654321", SECRET, 1_000)).status, "invalid");
+  assert.equal(await getPremiumCodeHash("a@b.com", "123456", SECRET), challenge.codeHash);
+  assert.notEqual(await getPremiumCodeHash("a@b.com", "654321", SECRET), challenge.codeHash);
 });
 
 test("a code issued for one email cannot verify another", async () => {
-  // The challenge is bound to its email, so intercepting a code for one
-  // account cannot unlock a different one.
+  // The email is inside the signed payload, so the same digits hash
+  // differently per account. Moving a challenge record to another address
+  // cannot unlock it.
   const challenge = await createPremiumChallenge("victim@example.com", "123456", SECRET, 0);
-  const forged = { ...challenge, email: "attacker@example.com" };
-  assert.equal((await verifyPremiumChallenge(forged, "123456", SECRET, 1_000)).status, "invalid");
+  const attackerHash = await getPremiumCodeHash("attacker@example.com", "123456", SECRET);
+  assert.notEqual(attackerHash, challenge.codeHash);
 });
 
-test("an expired code is refused", async () => {
-  const challenge = await createPremiumChallenge("a@b.com", "123456", SECRET, 0);
-  const afterExpiry = PREMIUM_CODE_TTL_SECONDS * 1000 + 1;
-  assert.equal((await verifyPremiumChallenge(challenge, "123456", SECRET, afterExpiry)).status, "expired");
-});
-
-test("attempts are capped so a 6-digit code cannot be brute forced", async () => {
-  let challenge = await createPremiumChallenge("a@b.com", "123456", SECRET, 0);
-  for (let i = 0; i < PREMIUM_CODE_MAX_ATTEMPTS; i++) {
-    const result = await verifyPremiumChallenge(challenge, "000000", SECRET, 1_000);
-    assert.equal(result.status, "invalid");
-    challenge = result.challenge!;
-  }
-  // Even the CORRECT code must now be refused.
-  const locked = await verifyPremiumChallenge(challenge, "123456", SECRET, 1_000);
-  assert.equal(locked.status, "locked");
+test("expiry and the attempt cap are enforced in SQL, not in the edge function", () => {
+  // These were previously enforced by a read-modify-write helper that could
+  // not survive concurrency. The helper is deleted; the guarantees now live
+  // in the migration and are covered by premium_challenge_concurrency.
+  const authSource = readFileSync(
+    new URL("../supabase/functions/server/premium_auth.ts", import.meta.url),
+    "utf8",
+  );
+  assert.doesNotMatch(
+    authSource,
+    /export async function verifyPremiumChallenge/,
+    "the non-atomic verifier is back; concurrent requests can share an attempt count",
+  );
+  assert.equal(PREMIUM_CODE_MAX_ATTEMPTS, 5);
+  assert.equal(PREMIUM_CODE_TTL_SECONDS, 600);
 });
 
 test("a challenge cannot be reissued without a cooldown", () => {
@@ -141,8 +143,28 @@ test("/verify-email never mints a premium session from an email alone", () => {
     "/verify-email still creates a premium session from the request body",
   );
   assert.doesNotMatch(body, /instantAccess:\s*true/, "/verify-email still advertises instant access");
-  // It must instead start an ownership challenge.
-  assert.match(body, /createPremiumChallenge|issuePremiumChallenge/);
+  // It must instead issue an emailed ownership challenge.
+  assert.match(body, /issuePremiumAccessCode/);
+});
+
+test("every route that promises a code actually sends one", () => {
+  // /create-checkout-session once returned verificationRequired WITHOUT
+  // issuing a challenge, so existing subscribers saw a code screen while no
+  // email was ever sent and no code could ever work.
+  const re = /app\.post\("([^"]+)"/g;
+  const routes: { path: string; start: number }[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(serverSource))) routes.push({ path: m[1], start: m.index });
+
+  for (let i = 0; i < routes.length; i++) {
+    const body = serverSource.slice(routes[i].start, routes[i + 1]?.start ?? serverSource.length);
+    if (!/verificationRequired:\s*true/.test(body)) continue;
+    assert.match(
+      body,
+      /issuePremiumAccessCode/,
+      `${routes[i].path} returns verificationRequired without issuing a code`,
+    );
+  }
 });
 
 test("/create-checkout-session cannot hand an existing subscriber instant access", () => {
@@ -249,7 +271,7 @@ test("the premium session tier is only granted on a verified path", () => {
   for (const grant of premiumGrants) {
     const before = serverSource.slice(Math.max(0, grant.index! - 2_600), grant.index!);
     const proven =
-      /verifyPremiumChallenge/.test(before) ||
+      /verifyAndConsumePremiumChallenge/.test(before) ||
       /payment_status/.test(before) ||
       /checkout\.sessions\.retrieve/.test(before) ||
       /syncStripeCheckoutSession/.test(before);

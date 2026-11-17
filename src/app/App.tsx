@@ -4585,7 +4585,7 @@ function PaymentGateModal({
     setSubmitting(true);
     setErrorMsg("");
     try {
-      const res = await fetch(resolveApiUrl(`/api/verify-premium-code`), {
+      const res = await fetch(`/api/verify-premium-code`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -4809,7 +4809,7 @@ function RetentionOfferModal({
     setErrorMsg("");
 
     try {
-      const res = await fetch(resolveApiUrl(`/api/apply-retention-offer`), {
+      const res = await fetch(`/api/apply-retention-offer`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -14538,7 +14538,7 @@ function AppDashboard({
         return;
       }
 
-      const res = await fetch(resolveApiUrl(`/api/create-customer-portal`), {
+      const res = await fetch(`/api/create-customer-portal`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

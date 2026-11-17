@@ -26,15 +26,18 @@ import {
 } from "./admin_challenge_store.ts";
 import {
   buildPremiumChallengeKey,
-  canIssuePremiumChallenge,
   createPremiumChallenge,
   generatePremiumCode,
+  getPremiumCodeHash,
   normalizePremiumCode,
   normalizePremiumEmail,
   requirePremiumCodeHmacSecret,
-  verifyPremiumChallenge,
-  type PremiumChallenge,
 } from "./premium_auth.ts";
+import {
+  cancelPremiumChallenge,
+  issuePremiumChallenge,
+  verifyAndConsumePremiumChallenge,
+} from "./premium_challenge_store.ts";
 const app = new Hono().basePath('/make-server-3b84b96c');
 const MATCH_ODDS_CACHE_MS = 2 * 60 * 60 * 1000;
 const NRL_EVENTS_CACHE_MS = 6 * 60 * 60 * 1000;
@@ -3556,46 +3559,14 @@ app.post("/verify-email", async (c) => {
     // session here, so knowing a subscriber's email was enough to become
     // them. Now a code is emailed to the address being claimed and premium is
     // granted only by /verify-premium-code.
-    const secret = requirePremiumCodeHmacSecret(Deno.env.get("PREMIUM_CODE_HMAC_SECRET"));
-    const challengeKey = buildPremiumChallengeKey(email);
-    const existingRaw = await kv.get(challengeKey);
-    const existing = parseKvValue<PremiumChallenge>(existingRaw);
-    const now = Date.now();
+    const issued = await issuePremiumAccessCode(email);
 
-    if (!canIssuePremiumChallenge(existing, now)) {
-      // Deliberately the same shape as success: whether a code was just sent
-      // must not become an oracle for "is this address a subscriber".
-      return c.json({
-        active: true,
-        verificationRequired: true,
-        email,
-        message: "Enter the 6-digit code we emailed you.",
-      });
-    }
-
-    const code = generatePremiumCode();
-    const challenge = await createPremiumChallenge(email, code, secret, now);
-    await kv.set(challengeKey, JSON.stringify(challenge));
-
-    try {
-      const resend = getResendClient();
-      const { error } = await resend.emails.send({
-        from: getFromEmail(),
-        to: [email],
-        subject: "Your RightEdge access code",
-        text: `Your RightEdge access code is ${code}. It expires in 10 minutes.`,
-        html: `<div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;background:#0A0A0F;color:#fff"><h1 style="font-size:22px">RightEdge access code</h1><p style="color:#c5c7ce">Use this one-time code to sign in. It expires in 10 minutes.</p><div style="font-size:34px;font-weight:700;letter-spacing:8px;margin:24px 0">${code}</div><p style="color:#8b8e98;font-size:13px">If you did not request this code you can ignore this email. Nobody can access your account without it.</p></div>`,
-      });
-      // Resend reports delivery failures in the response body, not by throwing.
-      if (error) throw error;
-    } catch (deliveryError) {
-      console.error("[verify-email] Failed to send access code:", deliveryError);
-      // Drop the challenge: leaving one behind that the user never received
-      // would lock them out for the cooldown window.
-      await kv.del(challengeKey);
+    if (issued === "failed") {
       return c.json({ error: "Could not send your access code. Please try again." }, 502);
     }
 
+    // "sent" and "throttled" answer identically on purpose: the response must
+    // not reveal whether a code was just dispatched.
     return c.json({
       active: true,
       verificationRequired: true,
@@ -3626,29 +3597,30 @@ app.post("/verify-premium-code", async (c) => {
 
     const secret = requirePremiumCodeHmacSecret(Deno.env.get("PREMIUM_CODE_HMAC_SECRET"));
     const challengeKey = buildPremiumChallengeKey(email);
-    const challenge = parseKvValue<PremiumChallenge>(await kv.get(challengeKey));
 
-    if (!challenge) {
-      return c.json({ error: "That code has expired. Request a new one." }, 400);
-    }
+    // Verification, the attempt count and the single-use delete happen in
+    // one locked transaction. Doing this with kv.get/kv.set let parallel
+    // requests share an attempt count, so the 5-attempt cap became 5 per
+    // request and two requests with the same code both minted a session.
+    const codeHash = await getPremiumCodeHash(email, code, secret);
+    const rpc = getAdminChallengeRpc();
+    const result = await verifyAndConsumePremiumChallenge(
+      rpc,
+      challengeKey,
+      email,
+      codeHash,
+      Date.now(),
+    );
 
-    const result = await verifyPremiumChallenge(challenge, code, secret, Date.now());
-
-    if (result.status === "locked") {
-      await kv.del(challengeKey);
+    if (result === "locked") {
       return c.json({ error: "Too many incorrect attempts. Request a new code." }, 429);
     }
-    if (result.status === "expired") {
-      await kv.del(challengeKey);
+    if (result === "expired") {
       return c.json({ error: "That code has expired. Request a new one." }, 400);
     }
-    if (result.status === "invalid") {
-      await kv.set(challengeKey, JSON.stringify(result.challenge));
+    if (result !== "success") {
       return c.json({ error: "That code is not correct." }, 400);
     }
-
-    // The code is single-use.
-    await kv.del(challengeKey);
 
     // Re-check Stripe at grant time rather than trusting the earlier lookup:
     // the subscription could have lapsed between the two requests.
@@ -3717,6 +3689,54 @@ async function findActiveStripeSubscription(stripe: Stripe, email: string) {
 // authentication, anyone who knew a subscriber's address could request the
 // link and be logged in as them. Existing subscribers now sign in through
 // /verify-email + /verify-premium-code, which proves ownership of the address.
+
+/**
+ * Issue and email a premium access code.
+ *
+ * Shared by /verify-email and /create-checkout-session so the two cannot
+ * drift: /create-checkout-session previously returned verificationRequired
+ * without issuing a challenge, leaving existing subscribers staring at a code
+ * screen while no email was ever sent.
+ *
+ * Returns "sent" when an email went out, "throttled" when a recent challenge
+ * is still valid, and "failed" when delivery failed. Callers MUST respond
+ * identically for "sent" and "throttled" so the endpoint cannot be used as an
+ * oracle for whether an address is a subscriber.
+ */
+async function issuePremiumAccessCode(email: string): Promise<"sent" | "throttled" | "failed"> {
+  const secret = requirePremiumCodeHmacSecret(Deno.env.get("PREMIUM_CODE_HMAC_SECRET"));
+  const challengeKey = buildPremiumChallengeKey(email);
+  const now = Date.now();
+  const code = generatePremiumCode();
+  const challenge = await createPremiumChallenge(email, code, secret, now);
+
+  // The cooldown is enforced inside the RPC, so parallel requests cannot each
+  // dispatch a fresh code to the same address.
+  const rpc = getAdminChallengeRpc();
+  const issued = await issuePremiumChallenge(rpc, challengeKey, challenge, now);
+  if (!issued) {
+    return "throttled";
+  }
+
+  try {
+    const resend = getResendClient();
+    const { error } = await resend.emails.send({
+      from: getFromEmail(),
+      to: [email],
+      subject: "Your RightEdge access code",
+      text: `Your RightEdge access code is ${code}. It expires in 10 minutes.`,
+      html: `<div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;background:#0A0A0F;color:#fff"><h1 style="font-size:22px">RightEdge access code</h1><p style="color:#c5c7ce">Use this one-time code to sign in. It expires in 10 minutes.</p><div style="font-size:34px;font-weight:700;letter-spacing:8px;margin:24px 0">${code}</div><p style="color:#8b8e98;font-size:13px">If you did not request this code you can ignore this email. Nobody can access your account without it.</p></div>`,
+    });
+    // Resend reports delivery failures in the response body, not by throwing.
+    if (error) throw error;
+    return "sent";
+  } catch (deliveryError) {
+    console.error("[premium-code] Failed to send access code:", deliveryError);
+    // Drop only the challenge this request issued; a newer one is left intact.
+    await cancelPremiumChallenge(rpc, challengeKey, challenge.codeHash);
+    return "failed";
+  }
+}
 
 app.post("/verify-otp", async (c) => {
   try {
@@ -3927,13 +3947,21 @@ app.post("/create-checkout-session", async (c) => {
       // Do NOT hand out access here. This endpoint is unauthenticated by
       // necessity (new customers have no session), so granting anything to a
       // body-supplied email would let anyone claim a stranger's subscription.
-      // Point them at the sign-in flow, which emails a code to the address.
-      console.log(`[Stripe] Existing subscriber ${email} directed to code sign-in`);
+      // Issue the code HERE rather than only telling the client to ask for
+      // one: returning verificationRequired without sending an email left
+      // existing subscribers on a code screen that could never be satisfied.
+      const issued = await issuePremiumAccessCode(email);
+
+      if (issued === "failed") {
+        return c.json({ error: "Could not send your access code. Please try again." }, 502);
+      }
+
+      console.log(`[Stripe] Existing subscriber directed to code sign-in`);
       return c.json({
         alreadySubscribed: true,
         verificationRequired: true,
         email,
-        message: "You already have an active subscription. Sign in to access it.",
+        message: "You already have an active subscription. Enter the code we emailed you.",
       });
     }
 

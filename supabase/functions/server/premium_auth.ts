@@ -91,21 +91,16 @@ async function hmacSha256(value: string, secret: string): Promise<string> {
   return Array.from(new Uint8Array(signature), (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-/** Constant-time compare: a short-circuit here leaks the code one char at a time. */
-function constantTimeEqual(left: string, right: string): boolean {
-  if (left.length !== right.length) return false;
-  let diff = 0;
-  for (let i = 0; i < left.length; i++) {
-    diff |= left.charCodeAt(i) ^ right.charCodeAt(i);
-  }
-  return diff === 0;
-}
-
 /**
  * The stored hash binds the code to its email.
  *
  * Including the email in the signed payload is what makes a challenge
  * non-transferable: the same code under a different address will not verify.
+ *
+ * Comparison happens in SQL (verify_premium_challenge_f8a832e3) so that the
+ * attempt counter and the single-use delete are atomic. Both sides are
+ * fixed-length hex digests of a secret-keyed HMAC, so an attacker cannot
+ * steer the comparison with chosen input.
  */
 export async function getPremiumCodeHash(
   email: string,
@@ -136,25 +131,6 @@ export function canIssuePremiumChallenge(
 ): boolean {
   if (!existing) return true;
   return now - existing.issuedAt >= PREMIUM_CODE_REISSUE_COOLDOWN_MS;
-}
-
-export async function verifyPremiumChallenge(
-  challenge: PremiumChallenge,
-  submittedCode: string,
-  secret: string,
-  now: number,
-): Promise<PremiumVerification> {
-  if (challenge.attempts >= PREMIUM_CODE_MAX_ATTEMPTS) return { status: "locked" };
-  if (now - challenge.issuedAt > PREMIUM_CODE_TTL_SECONDS * 1000) return { status: "expired" };
-
-  const expected = await getPremiumCodeHash(challenge.email, submittedCode, secret);
-  if (constantTimeEqual(expected, challenge.codeHash)) return { status: "success" };
-
-  const attempts = challenge.attempts + 1;
-  if (attempts >= PREMIUM_CODE_MAX_ATTEMPTS) {
-    return { status: "invalid", challenge: { ...challenge, attempts } };
-  }
-  return { status: "invalid", challenge: { ...challenge, attempts } };
 }
 
 /**
