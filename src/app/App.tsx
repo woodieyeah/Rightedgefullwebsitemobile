@@ -4426,10 +4426,12 @@ function PaymentGateModal({
   onSuccess: () => void;
   onSessionRefresh: () => Promise<RuntimeAuthState>;
 }) {
-  const [step, setStep] = useState<"email" | "processing">("email");
+  const [step, setStep] = useState<"email" | "code" | "processing">("email");
+  const [accessCode, setAccessCode] = useState("");
   const [email, setEmail] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+  const [successMsg, setSuccessMsg] = useState("");
 
   const storedEmail = getUserEmail();
   const checkoutEmail = email.trim().toLowerCase();
@@ -4472,24 +4474,13 @@ function PaymentGateModal({
       });
 
       const verifyData = await verifyRes.json().catch(() => ({}));
-      const isActiveSubscriber = Boolean(
-        verifyData.instantAccess ||
-        verifyData.activeSubscriber ||
-        verifyData.active_subscriber ||
-        verifyData.subscribed ||
-        verifyData.active
-      );
 
-      if (verifyRes.ok && isActiveSubscriber) {
-        const verifiedEmail = (verifyData.email || checkoutEmail).trim().toLowerCase();
-        const nextAuthState = await onSessionRefresh();
-        if (nextAuthState.tier !== "premium") {
-          setErrorMsg("We verified your email, but could not restore the secure session. Please try again.");
-          setSubmitting(false);
-          return;
-        }
-        (window as any).trackAnalyticsEvent?.("paid_access_verified", { email: verifiedEmail });
-        onSuccess();
+      // An active subscription no longer unlocks access on its own: the server
+      // emails a 6-digit code to the address and only that code grants premium.
+      if (verifyRes.ok && verifyData.verificationRequired) {
+        setStep("code");
+        setSuccessMsg("We emailed you a 6-digit access code. It expires in 10 minutes.");
+        setSubmitting(false);
         return;
       }
 
@@ -4548,6 +4539,17 @@ function PaymentGateModal({
       });
 
       const checkoutData = await checkoutRes.json().catch(() => ({}));
+
+      // The server refuses to grant access to an unverified email. If this
+      // address already subscribes, send them through the emailed-code flow
+      // instead of charging them again.
+      if (checkoutRes.ok && checkoutData.alreadySubscribed) {
+        setStep("code");
+        setSuccessMsg("You already have a subscription. We emailed you a 6-digit access code.");
+        setSubmitting(false);
+        return;
+      }
+
       if (checkoutRes.ok && checkoutData.url) {
         (window as any).trackAnalyticsEvent?.("premium_checkout_redirect", {
           email: checkoutEmail,
@@ -4567,6 +4569,50 @@ function PaymentGateModal({
       setSubmitting(false);
     } catch (err) {
       setStep("email");
+      setErrorMsg("Network error. Please check your connection and try again.");
+      setSubmitting(false);
+    }
+  };
+
+  const handleCodeSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const code = accessCode.replace(/[^0-9]/g, "");
+    if (code.length !== 6) {
+      setErrorMsg("Enter the 6-digit code from your email.");
+      return;
+    }
+
+    setSubmitting(true);
+    setErrorMsg("");
+    try {
+      const res = await fetch(resolveApiUrl(`/api/verify-premium-code`), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${publicAnonKey}`,
+        },
+        credentials: "include",
+        body: JSON.stringify({ email: checkoutEmail, code }),
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok || !data.success) {
+        setErrorMsg(data.error || "That code is not correct.");
+        setSubmitting(false);
+        return;
+      }
+
+      // The session cookie is set by the server; confirm it took effect
+      // rather than assuming the response implies a usable session.
+      const nextAuthState = await onSessionRefresh();
+      if (nextAuthState.tier !== "premium") {
+        setErrorMsg("We verified your code, but could not restore the secure session. Please try again.");
+        setSubmitting(false);
+        return;
+      }
+      (window as any).trackAnalyticsEvent?.("paid_access_verified", { email: checkoutEmail });
+      onSuccess();
+    } catch {
       setErrorMsg("Network error. Please check your connection and try again.");
       setSubmitting(false);
     }
@@ -4602,8 +4648,8 @@ function PaymentGateModal({
 
         <p className="text-sm text-[#9CA3AF] font-normal leading-relaxed mb-6">
           {hasStoredEmail
-            ? "Confirm or change your saved email. Existing subscribers unlock instantly; otherwise we’ll continue to secure Stripe checkout."
-            : "Already Premium? Enter your subscriber email and we’ll unlock access instantly. New here? Use the same email to continue to secure Stripe checkout."}
+            ? "Confirm or change your saved email. Existing subscribers get a 6-digit code by email; otherwise we’ll continue to secure Stripe checkout."
+            : "Already Premium? Enter your subscriber email and we’ll send you a 6-digit access code. New here? Use the same email to continue to secure Stripe checkout."}
         </p>
 
         {step === "processing" ? (
@@ -4616,6 +4662,63 @@ function PaymentGateModal({
               Secure checkout is opening now.
             </p>
           </div>
+        ) : step === "code" ? (
+          <form onSubmit={handleCodeSubmit} className="flex flex-col gap-4">
+            {successMsg && (
+              <p className="text-[#4ADE80] text-xs font-medium uppercase tracking-wider">
+                {successMsg}
+              </p>
+            )}
+            <input
+              type="text"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              maxLength={6}
+              value={accessCode}
+              onChange={(e) => {
+                setAccessCode(e.target.value.replace(/[^0-9]/g, ""));
+                setErrorMsg("");
+              }}
+              placeholder="000000"
+              autoFocus
+              disabled={submitting}
+              className="w-full bg-[#0A0A0F] border border-[#1E1E2E] text-white text-center font-semibold text-2xl tracking-[0.5em] px-4 py-4 placeholder:text-[#6B7280] focus:outline-none focus:border-white/40 transition-colors disabled:opacity-50"
+            />
+
+            {errorMsg && (
+              <p className="text-[#F87171] text-xs font-medium uppercase tracking-wider">
+                {errorMsg}
+              </p>
+            )}
+
+            <button
+              type="submit"
+              disabled={submitting}
+              className="w-full re-primary-cta border py-4 text-base font-medium uppercase tracking-wider hover:opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              {submitting ? (
+                <RefreshCw className="w-5 h-5 animate-spin" />
+              ) : (
+                <>
+                  Verify &amp; Unlock
+                  <ArrowRight className="w-5 h-5 stroke-[3px]" />
+                </>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setStep("email");
+                setAccessCode("");
+                setErrorMsg("");
+                setSuccessMsg("");
+              }}
+              className="text-[10px] text-[#6B7280] font-medium uppercase tracking-wider hover:text-white transition-colors"
+            >
+              Use a different email
+            </button>
+          </form>
         ) : (
           <form
             onSubmit={handleEmailSubmit}
@@ -4706,12 +4809,15 @@ function RetentionOfferModal({
     setErrorMsg("");
 
     try {
-      const res = await fetch(`/api/apply-retention-offer`, {
+      const res = await fetch(resolveApiUrl(`/api/apply-retention-offer`), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${publicAnonKey}`,
         },
+        // The server now requires a session matching this email, so the
+        // cookie must be sent. Without this the call returns 401.
+        credentials: "include",
         body: JSON.stringify({ email }),
       });
 
@@ -14432,12 +14538,15 @@ function AppDashboard({
         return;
       }
 
-      const res = await fetch(`/api/create-customer-portal`, {
+      const res = await fetch(resolveApiUrl(`/api/create-customer-portal`), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${publicAnonKey}`
         },
+        // The server now requires a session matching this email, so the
+        // cookie must be sent. Without this the call returns 401.
+        credentials: 'include',
         body: JSON.stringify({
           email,
           returnUrl: window.location.href
