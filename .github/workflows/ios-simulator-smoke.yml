@@ -150,6 +150,14 @@ jobs:
             // the UI captures so it cannot contaminate what is being reviewed
             // (and so screenshot differences reflect the page, not a changing
             // label). It is only made visible on the final diagnostics frame.
+            // Publish the current phase to localStorage so the CI step can
+            // WAIT for a screen instead of sleeping and hoping. Shell sleeps
+            // and in-page timers drift apart -- an earlier run captured
+            // "03-plays-premium" while the archive was still on screen, even
+            // though the navlog said the Plays step had passed.
+            function publishPhase(name){
+              try { window.localStorage.setItem('hermes_phase', name); } catch (e) {}
+            }
             function mark(name){
               var b=document.getElementById('hermes-phase');
               if(!b){
@@ -161,6 +169,7 @@ jobs:
                 document.body.appendChild(b);
               }
               b.textContent='PHASE: '+name+'  |  requests: '+window.__netlog.length;
+              publishPhase(name);
             }
             window.__phase = mark;
 
@@ -294,19 +303,28 @@ jobs:
                     });
                     afterRender(function(){
                       var txt = (document.body.innerText||'');
-                      // Real evidence: a final score like 24-12 and a fixture.
-                      var hasScore = /\b\d{1,2}\s*[-–]\s*\d{1,2}\b/.test(txt);
-                      var hasResultWord = /RESULTS?|HIT|MISS/i.test(txt);
-                      record('archive', hasScore && hasResultWord,
-                        hasScore && hasResultWord ? 'archived round shows fixtures and scores'
-                                                  : 'no final score pattern in archived round',
-                        {hasScore: hasScore, hasResultWord: hasResultWord});
+                      // Evidence that a historical round rendered with real
+                      // settled data. Scores are rendered in SEPARATE boxes
+                      // ("STORM" / "14" / "PANTHERS" / "22"), so there is no
+                      // "14-22" hyphen in innerText -- an earlier regex looked
+                      // for one and could never match even though the screen
+                      // was correct. Assert on the markers that actually exist.
+                      var hasArchiveHeader = /PREVIOUS ROUND RESULTS|ROUND \d+ RESULTS/i.test(txt);
+                      var hasSettledSummary = /MATCH PLAYS HIT/i.test(txt);
+                      var hasCompleted = /COMPLETED/i.test(txt);
+                      var hasOutcome = /\b(HIT|MISS)\b/.test(txt);
+                      var ok = hasArchiveHeader && (hasSettledSummary || (hasCompleted && hasOutcome));
+                      record('archive', ok,
+                        ok ? 'archived round shows settled fixtures and results'
+                           : 'archived round markers missing',
+                        {hasArchiveHeader: hasArchiveHeader, hasSettledSummary: hasSettledSummary,
+                         hasCompleted: hasCompleted, hasOutcome: hasOutcome});
                       mark('archived round');
                       // Chain the tab steps off the archive completing, not a
                       // wall-clock timer: when the network is slow the whole
                       // sequence shifts together instead of firing at an
                       // arbitrary moment against a half-rendered page.
-                      window.setTimeout(runTabSequence, 7000);
+                      window.setTimeout(runTabSequence, 18000);
                     });
                   }
                 }, 500);
@@ -330,9 +348,9 @@ jobs:
                     window.setTimeout(function(){
                       mark('tapping MATCHES');
                       clickTab('Matches', 'Matches', function(){ mark('on MATCHES'); });
-                    }, 7000);
+                    }, 18000);
                   });
-                }, 7000);
+                }, 18000);
               });
             }
 
@@ -458,6 +476,7 @@ jobs:
           # running in the simulator either way; its log is collected
           # separately below.
           xcrun simctl launch "$UDID" au.com.rightedge.app
+          echo "LAUNCH_EPOCH=$(date +%s)" >> "$GITHUB_ENV"
 
           # Do NOT collect the app log here. `log show` took 27 seconds in a
           # previous run, which pushed the first screenshot to t+40s instead of
@@ -487,23 +506,38 @@ jobs:
           #   then   archived round -> Plays -> Multi -> Matches, ~7s apart
           #   t+95s  overlay painted LAST so no UI capture is obscured
           # This step starts ~8s after launch.
-          shot () {
-            xcrun simctl io "$UDID" screenshot "artifacts/$1.png" >/dev/null 2>&1
-            echo "  captured $1 ($(wc -c < "artifacts/$1.png" | tr -d ' ') bytes) at t+$(( $(date +%s) - START ))s"
+          # Captures are anchored to the LAUNCH epoch, not to this step's start
+          # and not to cumulative sleeps. Shell sleeps and in-page timers drift
+          # apart: an earlier run captured "03-plays-premium" at t+50s while
+          # the archive was still on screen. Each shot now waits until a target
+          # offset from launch has genuinely elapsed.
+          #
+          # Probe schedule, from launch:
+          #   t+6s   click "View Free Round Predictions"
+          #   then   wait for Matches (up to 60s)
+          #   +0.5s  select archived round, dwell 18s
+          #   +18s   Plays, dwell 18s
+          #   +18s   Multi, dwell 18s
+          #   +18s   Matches
+          #   t+95s  diagnostics overlay
+          shot_at () {
+            local name=$1 target=$2
+            local now elapsed
+            while :; do
+              now=$(date +%s); elapsed=$(( now - LAUNCH_EPOCH ))
+              [ "$elapsed" -ge "$target" ] && break
+              sleep 1
+            done
+            xcrun simctl io "$UDID" screenshot "artifacts/$name.png" >/dev/null 2>&1
+            echo "  captured $name ($(wc -c < "artifacts/$name.png" | tr -d ' ') bytes) at t+${elapsed}s"
           }
-          START=$(date +%s)
 
-          shot 01-matches              # Matches, as first painted
-          sleep 18
-          shot 02-archived-round       # archived round with real data
-          sleep 14
-          shot 03-plays-premium        # Plays premium notice
-          sleep 14
-          shot 04-multi                # Multi public content
-          sleep 14
-          shot 05-matches-return       # back on Matches
-          sleep 22
-          shot 06-diagnostics          # navigation + network overlay
+          shot_at 01-matches          14   # dashboard open, before the archive
+          shot_at 02-archived-round   30   # mid archive dwell
+          shot_at 03-plays-premium    48   # mid Plays dwell
+          shot_at 04-multi            66   # mid Multi dwell
+          shot_at 05-matches-return   84   # back on Matches
+          shot_at 06-diagnostics     104   # after the t+95s overlay
 
           xcrun simctl spawn "$UDID" log show --last 4m --style compact \
             --predicate 'process == "App"' > artifacts/app.log 2>&1 || true
