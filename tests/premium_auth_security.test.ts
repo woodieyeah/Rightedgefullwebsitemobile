@@ -147,10 +147,14 @@ test("/verify-email never mints a premium session from an email alone", () => {
   assert.match(body, /issuePremiumAccessCode/);
 });
 
-test("every route that promises a code actually sends one", () => {
+test("every route that promises to have SENT a code actually sends one", () => {
   // /create-checkout-session once returned verificationRequired WITHOUT
   // issuing a challenge, so existing subscribers saw a code screen while no
   // email was ever sent and no code could ever work.
+  //
+  // A route may still ASK the client to go and verify (the billing 403 does)
+  // without sending anything itself. The distinction is the message: only a
+  // route claiming "we emailed you" must actually issue a code.
   const re = /app\.post\("([^"]+)"/g;
   const routes: { path: string; start: number }[] = [];
   let m: RegExpExecArray | null;
@@ -158,11 +162,26 @@ test("every route that promises a code actually sends one", () => {
 
   for (let i = 0; i < routes.length; i++) {
     const body = serverSource.slice(routes[i].start, routes[i + 1]?.start ?? serverSource.length);
-    if (!/verificationRequired:\s*true/.test(body)) continue;
+    const claimsSent = /we emailed you|code we emailed/i.test(body);
+    if (!claimsSent) continue;
     assert.match(
       body,
       /issuePremiumAccessCode/,
-      `${routes[i].path} returns verificationRequired without issuing a code`,
+      `${routes[i].path} tells the user a code was emailed but never issues one`,
+    );
+  }
+});
+
+test("a route that only requests verification does not claim to have sent a code", () => {
+  // The billing 403 asks the user to sign in with a code; the sign-in flow
+  // sends it. Claiming otherwise would be a lie the user cannot act on.
+  for (const route of ["/create-customer-portal", "/apply-retention-offer"]) {
+    const body = routeBody(route);
+    if (!/verificationRequired/.test(body)) continue;
+    assert.doesNotMatch(
+      body,
+      /we emailed you/i,
+      `${route} claims a code was already sent, but it does not send one`,
     );
   }
 });
