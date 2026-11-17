@@ -241,9 +241,12 @@ jobs:
 
             // Sequential chain: each step starts only after the previous one
             // has rendered, so a slow network cannot desynchronise the run.
+            // The timeout is generous because the runner's network has been
+            // observed taking 12s+ per Google Sheets CSV (and 27s for a
+            // PostHog beacon); a tight timeout tests the wrong screen.
             window.setTimeout(function(){
               mark('waiting for Matches');
-              whenReady(matchesOpen, 25000, function(){
+              whenReady(matchesOpen, 60000, function(){
                 record('matches-ready', true, 'Matches dashboard rendered');
                 mark('Matches ready');
                 // 1. Archived round with real fixtures and final scores.
@@ -265,33 +268,44 @@ jobs:
                                                   : 'no final score pattern in archived round',
                         {hasScore: hasScore, hasResultWord: hasResultWord});
                       mark('archived round');
+                      // Chain the tab steps off the archive completing, not a
+                      // wall-clock timer: when the network is slow the whole
+                      // sequence shifts together instead of firing at an
+                      // arbitrary moment against a half-rendered page.
+                      window.setTimeout(runTabSequence, 7000);
                     });
                   }
                 }, 500);
               }, function(){
                 record('matches-ready', false, 'Matches dashboard never rendered');
                 mark('Matches NEVER ready');
+                // Still exercise the tabs so the failure report distinguishes
+                // "no data" from "navigation broken".
+                runTabSequence();
               });
             }, 6000);
 
-            window.setTimeout(function(){
+            function runTabSequence(){
               mark('tapping PLAYS');
-              clickTab('Plays', 'Premium', function(){ mark('on PLAYS'); });
-            }, 22000);
+              clickTab('Plays', 'Premium', function(){
+                mark('on PLAYS');
+                window.setTimeout(function(){
+                  mark('tapping MULTI');
+                  clickTab('Multi', 'Multi', function(){
+                    mark('on MULTI');
+                    window.setTimeout(function(){
+                      mark('tapping MATCHES');
+                      clickTab('Matches', 'Matches', function(){ mark('on MATCHES'); });
+                    }, 7000);
+                  });
+                }, 7000);
+              });
+            }
 
-            window.setTimeout(function(){
-              mark('tapping MULTI');
-              clickTab('Multi', 'Multi', function(){ mark('on MULTI'); });
-            }, 30000);
-
-            window.setTimeout(function(){
-              mark('tapping MATCHES');
-              clickTab('Matches', 'Matches', function(){ mark('on MATCHES'); });
-            }, 38000);
-
-            // 48s: the network + navigation overlay goes LAST, so every UI
-            // screenshot before it is clean. An earlier run painted it at 42s
-            // and covered the app in every single shot.
+            // 95s: the overlay goes LAST, after every UI capture. Earlier
+            // runs painted it at 42s and 48s and covered the app in EVERY
+            // shot, because a slow `log show` delayed the capture step. The
+            // screenshots now finish by ~t+85s, so this is comfortably after.
             window.setTimeout(function(){
               var ph=document.getElementById('hermes-phase');
               if(ph) ph.style.display='block';
@@ -319,7 +333,7 @@ jobs:
                 '\n\nNETWORK LOG ('+window.__netlog.length+' requests, URLs redacted)\n\n' +
                 (lines.join('\n') || '(no requests recorded)');
               document.body.appendChild(d);
-            }, 48000);
+            }, 95000);
           })();
           </script>
           PROBE
@@ -411,15 +425,12 @@ jobs:
           # separately below.
           xcrun simctl launch "$UDID" au.com.rightedge.app
 
-          # Capture starts immediately in the next step; the probe's own timers
-          # drive navigation at 20s and the network overlay at 46s, so this
-          # step only needs the app alive and painting.
+          # Do NOT collect the app log here. `log show` took 27 seconds in a
+          # previous run, which pushed the first screenshot to t+40s instead of
+          # t+8s and meant the t+48s diagnostics overlay had already painted
+          # over the UI captures. The log is collected after the screenshots.
           sleep 8
-
-          mkdir -p artifacts
-          xcrun simctl spawn "$UDID" log show --last 1m --style compact \
-            --predicate 'process == "App"' > artifacts/boot.log 2>&1 || true
-          echo "--- captured app log lines: $(wc -l < artifacts/boot.log | tr -d ' ') ---"
+          echo "app launched; screenshots begin immediately in the next step"
 
       - name: Screenshot home, navigate, and capture diagnostics
         timeout-minutes: 10
@@ -435,29 +446,30 @@ jobs:
           # real pointer+click sequence on the actual tab elements and verifies
           # the resulting content. This step only times the captures to match.
           #
-          # Timeline from app launch (probe timers):
-          #   t+14s  archived round selected (real fixtures + final scores)
-          #   t+22s  Plays tab   (native premium notice)
-          #   t+30s  Multi tab   (public content)
-          #   t+38s  Matches tab (back to free predictions)
-          #   t+48s  overlay painted LAST so no UI shot is obscured
+          # Timeline from app launch (probe timers). The probe chains each step
+          # off the previous one RENDERING, so these are the earliest times;
+          # a slow network shifts them later together.
+          #   t+6s   waits for Matches (up to 60s for slow sheet loads)
+          #   then   archived round -> Plays -> Multi -> Matches, ~7s apart
+          #   t+95s  overlay painted LAST so no UI capture is obscured
           # This step starts ~8s after launch.
           shot () {
             xcrun simctl io "$UDID" screenshot "artifacts/$1.png" >/dev/null 2>&1
-            echo "  captured $1 ($(wc -c < "artifacts/$1.png" | tr -d ' ') bytes)"
+            echo "  captured $1 ($(wc -c < "artifacts/$1.png" | tr -d ' ') bytes) at t+$(( $(date +%s) - START ))s"
           }
+          START=$(date +%s)
 
-          shot 01-matches              # t+8s   Matches, off-season state
-          sleep 10
-          shot 02-archived-round       # t+18s  archived round, real data
-          sleep 8
-          shot 03-plays-premium        # t+26s  Plays premium notice
-          sleep 8
-          shot 04-multi                # t+34s  Multi public content
-          sleep 8
-          shot 05-matches-return       # t+42s  back on Matches
-          sleep 10
-          shot 06-diagnostics          # t+52s  navigation + network overlay
+          shot 01-matches              # Matches, as first painted
+          sleep 18
+          shot 02-archived-round       # archived round with real data
+          sleep 14
+          shot 03-plays-premium        # Plays premium notice
+          sleep 14
+          shot 04-multi                # Multi public content
+          sleep 14
+          shot 05-matches-return       # back on Matches
+          sleep 22
+          shot 06-diagnostics          # navigation + network overlay
 
           xcrun simctl spawn "$UDID" log show --last 4m --style compact \
             --predicate 'process == "App"' > artifacts/app.log 2>&1 || true
@@ -468,8 +480,14 @@ jobs:
           # `simctl spawn log show` -- an earlier run recorded 15 requests and
           # zero log lines arrived -- so localStorage is the only channel that
           # actually carries a verdict back to CI.
+          #
+          # WebKit flushes localStorage to sqlite lazily, so the app MUST be
+          # terminated first or the SELECT returns nothing from a live app
+          # (an earlier run found the db and read back an empty result).
           CONTAINER=$(xcrun simctl get_app_container "$UDID" au.com.rightedge.app data 2>/dev/null || true)
           echo "app container: ${CONTAINER:-<not found>}"
+          xcrun simctl terminate "$UDID" au.com.rightedge.app 2>/dev/null || true
+          sleep 4
           if [ -n "$CONTAINER" ]; then
             DB=$(find "$CONTAINER" -name 'localstorage.sqlite3' 2>/dev/null | head -1)
             echo "localstorage db: ${DB:-<not found>}"
@@ -477,6 +495,11 @@ jobs:
               # The value is stored as UTF-16; strip NULs to recover the JSON.
               sqlite3 "$DB" "SELECT value FROM ItemTable WHERE key='hermes_navlog';" 2>/dev/null \
                 | tr -d '\000' > artifacts/navlog.json || true
+              # Diagnose an empty read rather than silently reporting [].
+              if [ ! -s artifacts/navlog.json ]; then
+                echo "keys present in localStorage:"
+                sqlite3 "$DB" "SELECT key FROM ItemTable;" 2>/dev/null | tr -d '\000' | head -20 | sed 's/^/    /'
+              fi
             fi
           fi
           if [ ! -s artifacts/navlog.json ]; then
