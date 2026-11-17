@@ -628,3 +628,33 @@
     line-height: 1.5;
   }
 }
+
+/*
+ * iOS safe areas.
+ *
+ * env(safe-area-inset-*) is 0 on desktop browsers and on Android, and iOS only
+ * reports a non-zero value when index.html sets viewport-fit=cover. Every rule
+ * here is written as max(<existing>, env(...)), so it changes nothing on the
+ * website and only adds space on a notched iPhone.
+ *
+ * Without this the page scrolls its last content under the home indicator,
+ * which on a gesture-navigation iPhone makes the bottom row untappable.
+ */
+body {
+  padding-bottom: max(0px, env(safe-area-inset-bottom));
+}
+
+/* Any element opting in clears the home indicator explicitly. */
+.ios-safe-bottom {
+  padding-bottom: max(0px, env(safe-area-inset-bottom));
+}
+
+/*
+ * The app shell owns its own bottom nav, which already carries
+ * pb-[max(1rem,env(safe-area-inset-bottom))]. Doubling the inset there would
+ * leave a visible gap under the bar, so the body rule is cancelled when that
+ * nav is present.
+ */
+body:has(.rightedge-mobile-bottom-nav) {
+  padding-bottom: 0;
+}

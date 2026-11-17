@@ -1,5 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { resolveApiUrl } from "./api-base.ts";
+import {
+  isNativeShell,
+  onNativeResume,
+  openExternal,
+  websiteUrl,
+  NATIVE_PREMIUM_NOTICE,
+} from "./native-shell.ts";
 import { HelmetProvider, Helmet } from "react-helmet-async";
 import {
   projectId,
@@ -3483,9 +3490,14 @@ function getFeaturedPrediction(predictions: PredictionRow[]) {
   const upcomingPredictions = predictions.filter(
     (row) => !hasPredictionKickedOff(row),
   );
-  const candidateRows = upcomingPredictions.length
-    ? upcomingPredictions
-    : predictions;
+  // No upcoming fixture means there is genuinely nothing to back, so the
+  // featured card must be absent. The previous fallback to the full list
+  // surfaced a COMPLETED match -- with live market odds and a model edge --
+  // as though it were still a betting opportunity. Between seasons that is
+  // the normal state, so the misleading card was the default, and on iPhone
+  // it was the first thing on screen.
+  if (!upcomingPredictions.length) return null;
+  const candidateRows = upcomingPredictions;
 
   const scoreUrgency = (row: PredictionRow) => {
     const kickoff = getFixtureUtcKickoffMs(row.fixture);
@@ -5154,7 +5166,11 @@ function PublicNav({
   showCricketLink?: boolean;
 }) {
   return (
-    <div className="fixed left-0 right-0 top-0 z-50 border-b border-[#1E1E2E] bg-[#0A0A0F]/95 backdrop-blur-sm">
+    // padding-top is max(0px, safe-area-inset-top), so it is a no-op on every
+    // desktop browser and on Android -- where the inset is 0 -- and only pushes
+    // the bar below the status bar / Dynamic Island on a notched iPhone. The
+    // horizontal insets do the same in landscape, where the notch eats an edge.
+    <div className="fixed left-0 right-0 top-0 z-50 border-b border-[#1E1E2E] bg-[#0A0A0F]/95 backdrop-blur-sm [padding-top:max(0px,env(safe-area-inset-top))] [padding-left:max(0px,env(safe-area-inset-left))] [padding-right:max(0px,env(safe-area-inset-right))]">
       <div className="mx-auto flex h-14 max-w-[1200px] items-center justify-between px-6 sm:h-16">
         <button
           type="button"
@@ -7019,12 +7035,22 @@ function FreeBetrMarketsPanel({
     const refreshTimer = window.setInterval(refreshVisibleOdds, BETR_ODDS_REFRESH_MS);
     window.addEventListener("focus", refreshOddsOnReturn);
     document.addEventListener("visibilitychange", refreshOddsOnReturn);
+    // iOS suspends JS timers while the app is backgrounded, and a WKWebView
+    // does not reliably fire focus/visibilitychange when the whole app is
+    // resumed. Without the native appStateChange event the interval above is
+    // simply dead after a resume and the user reads stale odds with no hint
+    // that they are stale. No-op on the website.
+    const stopNativeResume = onNativeResume(() => {
+      if (Date.now() - lastFetchAt < 5 * 1000) return;
+      fetchRealOdds();
+    });
 
     return () => {
       isMounted = false;
       window.clearInterval(refreshTimer);
       window.removeEventListener("focus", refreshOddsOnReturn);
       document.removeEventListener("visibilitychange", refreshOddsOnReturn);
+      stopNativeResume();
     };
   }, [row.match]);
 
@@ -15478,6 +15504,32 @@ export default function App() {
   };
 
   const requestPremiumAccess = (source: string = 'unknown') => {
+    // In the native shell the Premium flow has to run on the website: the
+    // backend reads its session from an HttpOnly, SameSite=Lax cookie and
+    // replies with wildcard CORS and no allow-credentials, so a WKWebView on
+    // capacitor://localhost can neither hold nor send that cookie. Attempting
+    // the in-app flow would show a sign-in that silently 401s afterwards.
+    //
+    // Opening the system browser also means the user keeps whatever session
+    // they already have there. It does NOT sign this app in, and the notice
+    // says so rather than implying otherwise.
+    if (isNativeShell()) {
+      (window as any).trackAnalyticsEvent?.("native_premium_external", { source });
+      void openExternal(websiteUrl("/?premium=1")).then((opened) => {
+        if (!opened) return;
+        // Surfaced after the browser opens so it is read on return, not
+        // dismissed on the way out.
+        window.setTimeout(() => {
+          try {
+            window.alert(NATIVE_PREMIUM_NOTICE);
+          } catch {
+            /* a blocked alert must not break navigation */
+          }
+        }, 400);
+      });
+      return;
+    }
+
     let targetHash = ["matches", "best-bets", "multi"].includes(source)
       ? source
       : "best-bets";
@@ -15964,7 +16016,7 @@ export default function App() {
       <div className="absolute inset-0 pointer-events-none" />
 
       <div
-        className={`max-w-[1200px] mx-auto relative z-10 flex flex-col ${sitePage === "app" ? "gap-10 px-3 py-4 sm:px-6 sm:py-6" : "gap-3 sm:gap-4 px-6 pb-6 pt-[72px] sm:pt-[80px]"}`}
+        className={`max-w-[1200px] mx-auto relative z-10 flex flex-col ${sitePage === "app" ? "gap-10 px-3 py-4 sm:px-6 sm:py-6" : "gap-3 sm:gap-4 px-6 pb-6 pt-[calc(72px+max(0px,env(safe-area-inset-top)))] sm:pt-[calc(80px+max(0px,env(safe-area-inset-top)))]"}`}
       >
         <div
           className={
