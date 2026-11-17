@@ -49,7 +49,12 @@ begin
 
   -- Enforce the reissue cooldown in the database so parallel requests cannot
   -- each dispatch a fresh code to the same address.
-  if found
+  -- Test existing_value explicitly rather than relying on FOUND. In PL/pgSQL
+  -- PERFORM also sets FOUND, so any statement inserted between the SELECT INTO
+  -- and this check would silently clobber it. Verified against real Postgres:
+  -- FOUND after a no-row SELECT INTO is false, but true again after
+  -- PERFORM pg_sleep(0).
+  if existing_value is not null
      and p_now_ms - coalesce((existing_value->>'issuedAt')::bigint, 0) < p_cooldown_ms then
     return false;
   end if;
@@ -89,7 +94,10 @@ begin
     where key = p_key
     for update;
 
-  if not found then
+  -- Explicit null test, not FOUND: see the note in issue_premium_challenge.
+  -- If this regressed, a missing challenge would fall through and be reported
+  -- as 'expired' because (null->>'issuedAt')::bigint coalesces to 0.
+  if challenge is null then
     return 'invalid';
   end if;
 
@@ -139,7 +147,8 @@ begin
     where key = p_key
     for update;
 
-  if not found then
+  -- Explicit null test, not FOUND: see the note in issue_premium_challenge.
+  if existing_value is null then
     return false;
   end if;
 

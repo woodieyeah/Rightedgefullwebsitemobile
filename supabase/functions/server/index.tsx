@@ -3567,8 +3567,18 @@ app.post("/verify-email", async (c) => {
 
     // "sent" and "throttled" answer identically on purpose: the response must
     // not reveal whether a code was just dispatched.
+    //
+    // active:false is deliberate BACKWARD COMPATIBILITY, not a status claim.
+    // The previously deployed bundle computes
+    //   isActiveSubscriber = !!(instantAccess || ... || active)
+    // and, when true, immediately calls onSessionRefresh() expecting a premium
+    // cookie we no longer set — leaving it stuck on "could not restore the
+    // secure session". Returning false lets a stale client fall through to
+    // /create-checkout-session, which answers with a human-readable `error`
+    // that the old bundle renders. The real signal for current clients is
+    // verificationRequired, which does not depend on this field.
     return c.json({
-      active: true,
+      active: false,
       verificationRequired: true,
       email,
       message: "Enter the 6-digit code we emailed you.",
@@ -3961,6 +3971,11 @@ app.post("/create-checkout-session", async (c) => {
         alreadySubscribed: true,
         verificationRequired: true,
         email,
+        // `error` is read by the PREVIOUSLY DEPLOYED bundle, which has no
+        // concept of alreadySubscribed and would otherwise look for `url`,
+        // find none, and show "Could not start checkout". A stale or cached
+        // client therefore gets actionable instructions instead of a dead end.
+        error: "We emailed you a 6-digit access code. Enter it to sign in, or reload this page if you don't see a code box.",
         message: "You already have an active subscription. Enter the code we emailed you.",
       });
     }
