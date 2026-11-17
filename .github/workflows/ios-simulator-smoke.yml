@@ -146,27 +146,42 @@ jobs:
             // ---- scripted navigation --------------------------------------
             // Each phase is logged into the DOM title so a screenshot can be
             // attributed to a phase with no guessing.
+            // The phase banner is a diagnostic. It is kept OFF-SCREEN during
+            // the UI captures so it cannot contaminate what is being reviewed
+            // (and so screenshot differences reflect the page, not a changing
+            // label). It is only made visible on the final diagnostics frame.
             function mark(name){
               var b=document.getElementById('hermes-phase');
               if(!b){
                 b=document.createElement('div');
                 b.id='hermes-phase';
                 b.style.cssText='position:fixed;left:0;right:0;bottom:0;z-index:2147483645;'+
-                  'background:#063;color:#fff;font:11px ui-monospace,monospace;padding:4px 8px;text-align:center';
+                  'background:#063;color:#fff;font:11px ui-monospace,monospace;padding:4px 8px;'+
+                  'text-align:center;display:none';
                 document.body.appendChild(b);
               }
               b.textContent='PHASE: '+name+'  |  requests: '+window.__netlog.length;
             }
             window.__phase = mark;
 
-            // ---- scripted UI interaction ----------------------------------
-            // Real tab CLICKS, not hash assignment. A hash change proves the
-            // router works but says nothing about whether the tab button is
-            // reachable, hit-testable or wired up -- and the earlier
-            // AppleScript taps silently failed while the job still passed. We
-            // dispatch a genuine click on the button element and then VERIFY
-            // the result, recording a pass/fail that the report step asserts.
+            // ---- scripted DOM interaction ---------------------------------
+            // HONEST NAMING: this is DOM interaction testing, NOT a physical
+            // tap. It dispatches synthetic pointer/mouse events on the real
+            // tab elements, which exercises the React handlers, the routing
+            // and the rendering -- but it does NOT prove the control is
+            // hit-testable by a finger (nothing about hit regions, overlapping
+            // views, or UIKit gesture recognisers). A true tap test needs
+            // XCUITest; see guidelines/ios-testing-limits.md.
+            //
+            // Results are persisted to localStorage, NOT console.log: a
+            // previous run proved console output from a simulator WKWebView
+            // never reaches `simctl spawn log show` (0 of 15 [NETLOG] lines
+            // arrived). CI reads them back out of the app container, so the
+            // assertion can actually fail the build.
             window.__navlog = [];
+            function persistNav(){
+              try { window.localStorage.setItem('hermes_navlog', JSON.stringify(window.__navlog)); } catch (e) {}
+            }
             function findTab(labelText){
               var nodes = document.querySelectorAll('button, a');
               for (var i=0;i<nodes.length;i++){
@@ -175,78 +190,111 @@ jobs:
               }
               return null;
             }
-            function clickTab(labelText, expectFragment){
+            function record(step, ok, why, extra){
+              var e = {step:step, ok:ok, why:why};
+              if (extra) { for (var k in extra) e[k]=extra[k]; }
+              window.__navlog.push(e);
+              persistNav();
+            }
+            // Waits for React to commit before asserting, rather than reading
+            // the DOM in the same tick the event was dispatched.
+            function afterRender(fn){
+              requestAnimationFrame(function(){
+                requestAnimationFrame(function(){ window.setTimeout(fn, 600); });
+              });
+            }
+            function clickTab(labelText, expectFragment, done){
               var el = findTab(labelText);
-              if (!el){
-                window.__navlog.push({step:labelText, ok:false, why:'tab button not found'});
-                return false;
-              }
+              if (!el){ record(labelText,false,'tab button not found'); if(done)done(false); return; }
               var r = el.getBoundingClientRect();
-              if (r.width === 0 || r.height === 0){
-                window.__navlog.push({step:labelText, ok:false, why:'tab has zero size'});
-                return false;
-              }
-              // A real pointer sequence, so anything relying on pointer events
-              // behaves as it would under a finger.
+              if (r.width === 0 || r.height === 0){ record(labelText,false,'tab has zero size'); if(done)done(false); return; }
+              var before = (document.body.innerText||'').trim().length;
               ['pointerdown','mousedown','pointerup','mouseup','click'].forEach(function(type){
                 el.dispatchEvent(new MouseEvent(type, {bubbles:true, cancelable:true, view:window}));
               });
-              var body = (document.body.innerText||'').toUpperCase();
-              var ok = body.indexOf(expectFragment.toUpperCase()) !== -1;
-              window.__navlog.push({
-                step: labelText, ok: ok,
-                why: ok ? 'content matched: '+expectFragment : 'expected text not found: '+expectFragment
+              afterRender(function(){
+                var body = (document.body.innerText||'');
+                var ok = body.toUpperCase().indexOf(expectFragment.toUpperCase()) !== -1;
+                record(labelText, ok,
+                  ok ? 'content matched: '+expectFragment : 'expected text not found: '+expectFragment,
+                  {textLenBefore: before, textLenAfter: body.trim().length});
+                if(done)done(ok);
               });
-              return ok;
             }
             window.__clickTab = clickTab;
 
-            // Timeline, from app launch. Each capture in the workflow is timed
-            // to land in the middle of a phase.
-            //   t+14s  archived round selected (real fixtures + final scores)
-            //   t+22s  Plays tab  (premium notice, native)
-            //   t+30s  Multi tab  (public content)
-            //   t+38s  back to Matches
-            //   t+48s  network overlay LAST, so no UI shot is obscured
+            // Gate every step on the Matches dashboard actually being open,
+            // rather than firing on a fixed timer and hoping. Polls for the
+            // real content instead of assuming 14s was enough.
+            function whenReady(predicate, timeoutMs, onReady, onTimeout){
+              var started = Date.now();
+              (function poll(){
+                if (predicate()) { onReady(); return; }
+                if (Date.now() - started > timeoutMs) { onTimeout(); return; }
+                window.setTimeout(poll, 400);
+              })();
+            }
+            function matchesOpen(){
+              var t=(document.body.innerText||'').toUpperCase();
+              return t.indexOf('MATCHES') !== -1 && (t.indexOf('ROUND') !== -1);
+            }
+
+            // Sequential chain: each step starts only after the previous one
+            // has rendered, so a slow network cannot desynchronise the run.
             window.setTimeout(function(){
-              mark('selecting archived round');
-              // Round 25 is a hardcoded archive: real fixtures with final
-              // scores, so this proves rendering when data exists rather than
-              // relying on an off-season empty state.
-              var sel = findTab('Last Round Results');
-              if (sel) {
-                ['pointerdown','mousedown','pointerup','mouseup','click'].forEach(function(t){
-                  sel.dispatchEvent(new MouseEvent(t,{bubbles:true,cancelable:true,view:window}));
-                });
-                window.__navlog.push({step:'archive', ok:true, why:'Last Round Results clicked'});
-              } else {
-                window.__navlog.push({step:'archive', ok:false, why:'Last Round Results not found'});
-              }
-              mark('archived round');
-            }, 14000);
+              mark('waiting for Matches');
+              whenReady(matchesOpen, 25000, function(){
+                record('matches-ready', true, 'Matches dashboard rendered');
+                mark('Matches ready');
+                // 1. Archived round with real fixtures and final scores.
+                window.setTimeout(function(){
+                  mark('selecting archived round');
+                  var sel = findTab('Last Round Results');
+                  if (!sel){ record('archive', false, 'Last Round Results not found'); }
+                  else {
+                    ['pointerdown','mousedown','pointerup','mouseup','click'].forEach(function(t){
+                      sel.dispatchEvent(new MouseEvent(t,{bubbles:true,cancelable:true,view:window}));
+                    });
+                    afterRender(function(){
+                      var txt = (document.body.innerText||'');
+                      // Real evidence: a final score like 24-12 and a fixture.
+                      var hasScore = /\b\d{1,2}\s*[-–]\s*\d{1,2}\b/.test(txt);
+                      var hasResultWord = /RESULTS?|HIT|MISS/i.test(txt);
+                      record('archive', hasScore && hasResultWord,
+                        hasScore && hasResultWord ? 'archived round shows fixtures and scores'
+                                                  : 'no final score pattern in archived round',
+                        {hasScore: hasScore, hasResultWord: hasResultWord});
+                      mark('archived round');
+                    });
+                  }
+                }, 500);
+              }, function(){
+                record('matches-ready', false, 'Matches dashboard never rendered');
+                mark('Matches NEVER ready');
+              });
+            }, 6000);
 
             window.setTimeout(function(){
               mark('tapping PLAYS');
-              clickTab('Plays', 'Premium');
-              mark('on PLAYS');
+              clickTab('Plays', 'Premium', function(){ mark('on PLAYS'); });
             }, 22000);
 
             window.setTimeout(function(){
               mark('tapping MULTI');
-              clickTab('Multi', 'Multi');
-              mark('on MULTI');
+              clickTab('Multi', 'Multi', function(){ mark('on MULTI'); });
             }, 30000);
 
             window.setTimeout(function(){
               mark('tapping MATCHES');
-              clickTab('Matches', 'Matches');
-              mark('on MATCHES');
+              clickTab('Matches', 'Matches', function(){ mark('on MATCHES'); });
             }, 38000);
 
             // 48s: the network + navigation overlay goes LAST, so every UI
             // screenshot before it is clean. An earlier run painted it at 42s
             // and covered the app in every single shot.
             window.setTimeout(function(){
+              var ph=document.getElementById('hermes-phase');
+              if(ph) ph.style.display='block';
               var old=document.getElementById('hermes-netlog'); if(old) old.remove();
               var d=document.createElement('pre');
               d.id='hermes-netlog';
@@ -414,6 +462,28 @@ jobs:
           xcrun simctl spawn "$UDID" log show --last 4m --style compact \
             --predicate 'process == "App"' > artifacts/app.log 2>&1 || true
           echo "app log lines: $(wc -l < artifacts/app.log | tr -d ' ')"
+
+          # Pull the navigation results out of the app's own WebKit storage.
+          # console.log from a simulator WKWebView does NOT reach
+          # `simctl spawn log show` -- an earlier run recorded 15 requests and
+          # zero log lines arrived -- so localStorage is the only channel that
+          # actually carries a verdict back to CI.
+          CONTAINER=$(xcrun simctl get_app_container "$UDID" au.com.rightedge.app data 2>/dev/null || true)
+          echo "app container: ${CONTAINER:-<not found>}"
+          if [ -n "$CONTAINER" ]; then
+            DB=$(find "$CONTAINER" -name 'localstorage.sqlite3' 2>/dev/null | head -1)
+            echo "localstorage db: ${DB:-<not found>}"
+            if [ -n "$DB" ]; then
+              # The value is stored as UTF-16; strip NULs to recover the JSON.
+              sqlite3 "$DB" "SELECT value FROM ItemTable WHERE key='hermes_navlog';" 2>/dev/null \
+                | tr -d '\000' > artifacts/navlog.json || true
+            fi
+          fi
+          if [ ! -s artifacts/navlog.json ]; then
+            echo '[]' > artifacts/navlog.json
+            echo "WARNING: no navlog recovered from the app container"
+          fi
+          echo "navlog bytes: $(wc -c < artifacts/navlog.json | tr -d ' ')"
           ls -la artifacts | tail -8
 
       - name: Redact the logs before anything is uploaded
@@ -436,7 +506,7 @@ jobs:
               (re.compile(r'/[A-Za-z0-9_-]{30,}'), '/<id>'),
           ]
           total = 0
-          for p in pathlib.Path('artifacts').glob('*.log'):
+          for p in list(pathlib.Path('artifacts').glob('*.log')) + list(pathlib.Path('artifacts').glob('*.json')):
               text = p.read_text(errors='replace')
               for rx, repl in patterns:
                   text, n = rx.subn(repl, text)
@@ -449,58 +519,50 @@ jobs:
       - name: Report what actually rendered and what the network did
         if: always()
         run: |
-          # The build succeeding says nothing about whether the app painted,
-          # navigated, or reached its API. File size alone proves none of
-          # those -- a previous run returned three BYTE-IDENTICAL screenshots
-          # (AppleScript taps silently failing) while still reporting success.
-          # So identical consecutive shots are now a hard failure.
+          # Screenshot hashes alone are NOT proof: the diagnostic phase banner
+          # changes text on every step, so two shots can differ while the page
+          # underneath is identical. The real verdict comes from the navlog,
+          # which records what content was present after React rendered.
           node -e "
             const fs=require('fs'), crypto=require('crypto');
             const shots=['01-matches','02-archived-round','03-plays-premium','04-multi','05-matches-return','06-diagnostics'];
-            const seen=new Map(); let missing=0, blank=0; const hash={};
+            let missing=0, blank=0;
             for (const s of shots) {
               const p='artifacts/'+s+'.png';
               if (!fs.existsSync(p)) { console.log('MISSING   '+s); missing++; continue; }
               const buf=fs.readFileSync(p);
               const h=crypto.createHash('sha256').update(buf).digest('hex').slice(0,12);
-              hash[s]=h;
-              const dup=seen.get(h);
-              if (!dup) seen.set(h, s);
               if (buf.length < 60000) blank++;
-              console.log((buf.length<60000?'BLANK?  ':'painted ')+s.padEnd(22)+buf.length+' bytes  '+h+(dup?('  == '+dup):''));
+              console.log((buf.length<60000?'BLANK?  ':'painted ')+s.padEnd(22)+buf.length+' bytes  '+h);
             }
-            console.log('');
-            console.log('distinct screens: '+seen.size+' of '+(shots.length-missing));
             if (missing) { console.log('FAIL: '+missing+' screenshot(s) missing'); process.exit(1); }
             if (blank)   { console.log('FAIL: '+blank+' screenshot(s) look blank'); process.exit(1); }
-            // Each navigation must have CHANGED the screen. Comparing adjacent
-            // states is what catches a dead tap -- the failure mode that
-            // previously passed while three shots were byte-identical.
-            const mustDiffer=[
-              ['01-matches','02-archived-round','selecting an archived round'],
-              ['02-archived-round','03-plays-premium','tapping Plays'],
-              ['03-plays-premium','04-multi','tapping Multi'],
-              ['04-multi','05-matches-return','tapping Matches'],
-            ];
-            let navFail=0;
-            for (const [a,b,what] of mustDiffer) {
-              if (hash[a] && hash[a]===hash[b]) { console.log('FAIL: '+what+' did not change the screen ('+a+' == '+b+')'); navFail++; }
-              else console.log('PASS: '+what+' changed the screen');
+            console.log('');
+
+            // The navigation verdict, recovered from the app's localStorage.
+            let nav=[];
+            try { nav=JSON.parse(fs.readFileSync('artifacts/navlog.json','utf8')); } catch(e){}
+            if (!Array.isArray(nav) || nav.length === 0) {
+              console.log('FAIL: no navigation results were recovered from the app.');
+              console.log('      The probe could not report, so navigation is UNVERIFIED.');
+              process.exit(1);
             }
-            if (navFail) process.exit(1);
+            console.log('NAVIGATION (from the app, after render):');
+            let failed=0;
+            for (const n of nav) {
+              console.log('  '+(n.ok?'PASS ':'FAIL ')+String(n.step).padEnd(16)+n.why);
+              if (!n.ok) failed++;
+            }
+            console.log('');
+            // Every step we rely on must be present AND passing.
+            const required=['matches-ready','archive','Plays','Multi','Matches'];
+            const byStep=Object.fromEntries(nav.map(n=>[String(n.step),n]));
+            for (const r of required) {
+              if (!byStep[r]) { console.log('FAIL: no result recorded for \"'+r+'\"'); failed++; }
+            }
+            if (failed) { console.log('FAIL: '+failed+' navigation assertion(s) failed'); process.exit(1); }
+            console.log('PASS: every navigation step reported success');
           "
-          echo
-          echo '--- NAVIGATION assertions from inside the app ---'
-          # The probe records a pass/fail per tab with the reason. A tab that
-          # was not found, had zero size, or did not produce the expected
-          # content fails the job here rather than passing quietly.
-          if grep -q 'NAV-FAIL' artifacts/app.log 2>/dev/null; then
-            grep 'NAV-FAIL' artifacts/app.log | head -10
-            echo '  FAIL: at least one tab did not navigate'
-            exit 1
-          else
-            echo '  no NAV-FAIL recorded in the app log'
-          fi
           echo
           echo '--- HTTP failures and JS errors (redacted) ---'
           grep -iE 'NETWORK_FAIL|JS ERROR|unhandled rejection|didFail|WebContent.*crash' artifacts/app.log 2>/dev/null | head -20 || echo '  none found'

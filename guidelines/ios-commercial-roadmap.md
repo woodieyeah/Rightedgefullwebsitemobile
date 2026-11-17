@@ -70,37 +70,86 @@ avoid the fee (Guideline 3.1.3's reader-app exception does not cover this, and
 the US "link-out" entitlement is jurisdiction-specific — verify current terms
 before relying on it).
 
-Published Apple commission: **30%**, or **15%** under the Small Business
-Program (businesses under US$1M/year — you would qualify). At 164 subscribers
-× $14/week that is roughly **$1,790/week gross**; a 15% cut is about
-**$268/week**. Those are my arithmetic on your real subscriber count, not a
-forecast.
+### The subscriber numbers, corrected
+
+An earlier draft of this document used "164 subscribers" and arithmetic that
+was wrong twice over. Both errors are corrected here.
+
+**164 is a row count, not a customer count.** Breaking down
+`stripeSubscriptionStatus` across all 164 `subscriber:*` records:
+
+| status | records |
+|---|---|
+| canceled | 126 |
+| **active** | **24** |
+| (none recorded) | 7 |
+| trialing | 3 |
+| incomplete_expired | 2 |
+| past_due | 1 |
+| paused | 1 |
+
+Also: **96 records carry `cancelAtPeriodEnd`**, and only **26** have a current
+period ending in the future.
+
+So the realistic paying base is **24 active (+3 trialing)**, not 164 — roughly
+a seventh of what the first draft assumed.
+
+**Caveat on even these figures:** this is the app's own cached mirror of Stripe
+state in `kv_store_f8a832e3`, not Stripe itself. A webhook that failed, or any
+change made directly in the Stripe dashboard, would leave it stale. **Before
+making any financial decision, pull the real count from the Stripe API**
+(`GET /v1/subscriptions?status=active`) and reconcile.
+
+### What that means for commission
+
+Published Apple commission is **30%**, or **15%** under the Small Business
+Program. The reduced rate is **not automatic** — it requires enrolling in the
+programme, meeting Apple's eligibility criteria, and being approved; assume
+30% until you hold an approval.
+
+Illustrative only, on 24 active × $14/week = **$336/week gross**:
+
+- at 30%: about **$101/week** commission
+- at 15% (if approved): about **$50/week**
+
+That is small enough that the commission is *not* the deciding factor. The real
+costs of Phase 2 are engineering time and billing-correctness risk.
 
 **Decisions you must make:**
 
 1. **Price parity or markup?** Many apps raise the in-app price to absorb the
    fee. Apple permits different prices; it forbids *steering* users to the
    cheaper web price from inside the app.
-2. **Migrating existing subscribers.** Your 164 Stripe subscribers must not be
-   double-charged. The usual answer: keep Stripe for existing web subscribers,
-   use IAP only for new in-app purchases, and reconcile entitlement server-side
-   so one account resolves to one entitlement regardless of payment rail.
+2. **Migrating existing subscribers.** Your existing Stripe subscribers must
+   not be double-charged. The usual answer: keep Stripe for existing web
+   subscribers, use IAP only for new in-app purchases, and reconcile
+   entitlement server-side so one account resolves to one entitlement
+   regardless of payment rail.
+3. **Is it worth launching paid at all yet?** With 24 active subscribers, a
+   free-only v1 that proves retention on iPhone may be the better first
+   release — it removes the single largest chunk of work and risk from the
+   critical path to being in the store.
 
 **Work:** StoreKit 2 via a Capacitor plugin, App Store Connect products,
 **server-side receipt validation** (never trust the client), App Store Server
 Notifications v2 for renewals/cancellations/refunds, and an entitlement
 resolver that merges Stripe and Apple state.
 
-**Effort:** 2–3 weeks. **Risk:** high — billing correctness, and the most
-common rejection cause after Guideline 4.2.
+**Effort:** 2–3 weeks. **Risk:** high — billing correctness, and a common
+rejection cause.
 
 ---
 
 ## Phase 3 — Push notifications
 
-Worth doing early, because it is also your **Guideline 4.2 defence**: a pure
-webview wrapper gets rejected as a "repackaged website", and push is the
-conventional native capability that answers it.
+Worth doing early. It is the clearest way to add genuine native capability,
+which **helps** with Guideline 4.2 ("minimum functionality" — a pure webview
+wrapper can be rejected as a repackaged website).
+
+**It does not guarantee approval.** 4.2 is a reviewer judgement about whether
+the app feels like an app. Push improves the odds; it is not a checkbox that
+settles the question. Other things that help: offline caching of the last
+round, Keychain-backed sign-in, a home-screen widget, and native share.
 
 Genuinely useful here: team news, odds movement on a tracked fixture, a Core
 Play published, settlement results.
@@ -121,18 +170,49 @@ account.
 
 1. **Apple Developer Program — US$99/year.** Nothing ships without it. Also
    the only way to test push and real IAP.
-2. **Organisation enrolment, not individual.** Guideline **5.1.1(ix)**:
-   regulated content (gambling-adjacent) must be submitted by a legal entity.
-   That needs a **D-U-N-S number** (typically 1–5 business days, free) and then
-   organisation enrolment (often 1–2 weeks). **Start this first** — it is pure
-   waiting.
+
+2. **Individual vs organisation enrolment — determine this, do not assume it.**
+   An earlier draft asserted organisation enrolment was mandatory. That was an
+   assumption, not a finding, and it matters because organisation enrolment
+   adds weeks (D-U-N-S number, typically 1–5 business days and free, then
+   enrolment review).
+
+   What is actually true of this codebase, verified:
+
+   - RightEdge takes **no bets** and holds **no wagering licence**. It sells
+     analytics and predictions.
+   - It **does** carry a live bookmaker affiliate link:
+     `record.betraffiliates.com.au/...` (`BETR_AFFILIATE_BASE_URL`,
+     `src/app/App.tsx`), wrapped by a `BetrAffiliateLink` component, plus
+     references to Sportsbet, PointsBet, Neds, Ladbrokes and BetRight.
+   - The UI already carries Australian gambling-help messaging and an 18+
+     notice.
+
+   Guideline **5.1.1(ix)** applies to apps providing regulated services such as
+   real-money gaming. A pure analytics app is a materially different case from
+   an operator — but **monetised affiliate referrals to licensed bookmakers is
+   the fact that could pull you into that bucket**, and it is a judgement call
+   reviewers make, not something I can determine from here.
+
+   **Action:** before paying for anything, ask Apple Developer Support directly,
+   describing the app honestly (analytics + bookmaker affiliate links, no
+   wagering). Their answer decides individual vs organisation, and it is free
+   to ask. If the answer is organisation, start the D-U-N-S application that
+   day, because it is pure waiting.
+
+   **Option worth weighing:** removing the affiliate links from the iOS build
+   only would simplify this classification considerably. It costs affiliate
+   revenue on iOS; it may buy a much shorter path to approval. That is a
+   commercial decision, not a technical one.
+
 3. **Guideline 4.2 — minimum functionality.** Push plus genuine native
-   behaviour (offline cache, Keychain sign-in, widgets) is the answer.
-4. **Guideline 5.3.4 — gambling.** You are an analytics/tipping product, not a
-   real-money operator, which is a materially easier position. But affiliate
-   links to bookmakers invite scrutiny: expect to justify them, carry the
-   18+ rating, keep the gambling-help messaging already in the UI, and expect
-   a geo-restriction question.
+   behaviour (offline cache, Keychain sign-in, widgets) improves your position.
+   It is not a guarantee — see Phase 3.
+
+4. **Guideline 5.3.4 — gambling.** Written for real-money gaming, which you are
+   not. Expect to justify the affiliate links, carry an 18+ rating, keep the
+   gambling-help messaging, and expect a geo-restriction question.
+
 5. **Age rating 18+**, privacy nutrition labels, and a public privacy policy.
 
 **Effort:** 1 week of preparation, plus **2–6 weeks of calendar time** mostly
