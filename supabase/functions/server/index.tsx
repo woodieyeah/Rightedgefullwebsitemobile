@@ -24,6 +24,20 @@ import {
   verifyAndConsumeAdminChallenge,
   type SupabaseRpc,
 } from "./admin_challenge_store.ts";
+import {
+  buildPremiumChallengeKey,
+  createPremiumChallenge,
+  generatePremiumCode,
+  getPremiumCodeHash,
+  normalizePremiumCode,
+  normalizePremiumEmail,
+  requirePremiumCodeHmacSecret,
+} from "./premium_auth.ts";
+import {
+  cancelPremiumChallenge,
+  issuePremiumChallenge,
+  verifyAndConsumePremiumChallenge,
+} from "./premium_challenge_store.ts";
 const app = new Hono().basePath('/make-server-3b84b96c');
 const MATCH_ODDS_CACHE_MS = 2 * 60 * 60 * 1000;
 const NRL_EVENTS_CACHE_MS = 6 * 60 * 60 * 1000;
@@ -3533,11 +3547,100 @@ app.post("/verify-email", async (c) => {
     }
     
     const stripe = new Stripe(stripeKey, { apiVersion: "2023-10-16" });
-    
-    const { activeSubscription, customerId } = await findActiveStripeSubscription(stripe, email);
-    
+
+    const { activeSubscription } = await findActiveStripeSubscription(stripe, email);
+
     if (!activeSubscription) {
       return c.json({ active: false });
+    }
+
+    // An active subscription proves the ADDRESS pays. It does not prove the
+    // CALLER owns the address. Previously this minted a 180-day premium
+    // session here, so knowing a subscriber's email was enough to become
+    // them. Now a code is emailed to the address being claimed and premium is
+    // granted only by /verify-premium-code.
+    const issued = await issuePremiumAccessCode(email);
+
+    if (issued === "failed") {
+      return c.json({ error: "Could not send your access code. Please try again." }, 502);
+    }
+
+    // "sent" and "throttled" answer identically on purpose: the response must
+    // not reveal whether a code was just dispatched.
+    //
+    // active:false is deliberate BACKWARD COMPATIBILITY, not a status claim.
+    // The previously deployed bundle computes
+    //   isActiveSubscriber = !!(instantAccess || ... || active)
+    // and, when true, immediately calls onSessionRefresh() expecting a premium
+    // cookie we no longer set — leaving it stuck on "could not restore the
+    // secure session". Returning false lets a stale client fall through to
+    // /create-checkout-session, which answers with a human-readable `error`
+    // that the old bundle renders. The real signal for current clients is
+    // verificationRequired, which does not depend on this field.
+    return c.json({
+      active: false,
+      verificationRequired: true,
+      email,
+      message: "Enter the 6-digit code we emailed you.",
+    });
+  } catch (err: any) {
+    console.error("[Verify Email] Error:", err);
+    return c.json({ error: "Failed to verify email" }, 500);
+  }
+});
+
+/**
+ * Exchange an emailed code for a premium session.
+ *
+ * This is the only path that grants premium without a paid Stripe checkout,
+ * and it requires possession of a code delivered to the address itself.
+ */
+app.post("/verify-premium-code", async (c) => {
+  try {
+    const body = await c.req.json();
+    const email = normalizePremiumEmail(body?.email);
+    const code = normalizePremiumCode(body?.code);
+
+    if (!email || !code) {
+      return c.json({ error: "Email and 6-digit code are required." }, 400);
+    }
+
+    const secret = requirePremiumCodeHmacSecret(Deno.env.get("PREMIUM_CODE_HMAC_SECRET"));
+    const challengeKey = buildPremiumChallengeKey(email);
+
+    // Verification, the attempt count and the single-use delete happen in
+    // one locked transaction. Doing this with kv.get/kv.set let parallel
+    // requests share an attempt count, so the 5-attempt cap became 5 per
+    // request and two requests with the same code both minted a session.
+    const codeHash = await getPremiumCodeHash(email, code, secret);
+    const rpc = getAdminChallengeRpc();
+    const result = await verifyAndConsumePremiumChallenge(
+      rpc,
+      challengeKey,
+      email,
+      codeHash,
+      Date.now(),
+    );
+
+    if (result === "locked") {
+      return c.json({ error: "Too many incorrect attempts. Request a new code." }, 429);
+    }
+    if (result === "expired") {
+      return c.json({ error: "That code has expired. Request a new one." }, 400);
+    }
+    if (result !== "success") {
+      return c.json({ error: "That code is not correct." }, 400);
+    }
+
+    // Re-check Stripe at grant time rather than trusting the earlier lookup:
+    // the subscription could have lapsed between the two requests.
+    const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
+    if (!stripeKey) return c.json({ error: "Stripe not configured" }, 500);
+    const stripe = new Stripe(stripeKey, { apiVersion: "2023-10-16" });
+    const { activeSubscription, customerId } = await findActiveStripeSubscription(stripe, email);
+
+    if (!activeSubscription) {
+      return c.json({ error: "No active subscription found for this email." }, 404);
     }
 
     await saveVerifiedSubscriber(email, "stripe_login_verified", {
@@ -3551,21 +3654,15 @@ app.post("/verify-email", async (c) => {
     const authSession = await createAuthSession(email, "premium");
     writeAuthSessionCookie(c, authSession.token);
 
-    // Keep compatibility with the currently deployed frontend, which sends
-    // users with active=true into the old OTP screen. Returning active=false
-    // lets it continue to create-checkout-session, where existing subscribers
-    // are bounced straight back into confirmed access without paying again.
     return c.json({
-      active: false,
-      instantAccess: true,
+      success: true,
       email,
       subscriptionId: activeSubscription.id,
       status: activeSubscription.status,
-      message: "Active subscription verified.",
     });
   } catch (err: any) {
-    console.error("[Verify Email] Error:", err);
-    return c.json({ error: "Failed to verify email" }, 500);
+    console.error("[verify-premium-code] Error:", err);
+    return c.json({ error: "Verification failed" }, 500);
   }
 });
 
@@ -3594,20 +3691,61 @@ async function findActiveStripeSubscription(stripe: Stripe, email: string) {
   return { activeSubscription, customerId };
 }
 
-async function createInstantAccessUrl(email: string, returnUrl: string, returnHash: string, customerId: string, subscription: any) {
-  const token = crypto.randomUUID();
-  await kv.set(`instant_access:${token}`, JSON.stringify({
-    email,
-    returnHash,
-    customerId,
-    subscriptionId: subscription?.id || "",
-    subscriptionStatus: subscription?.status || "",
-    currentPeriodEnd: getStripeCurrentPeriodEnd(subscription),
-    cancelAtPeriodEnd: Boolean(subscription?.cancel_at_period_end),
-    createdAt: new Date().toISOString(),
-  }));
+// createInstantAccessUrl was removed.
+//
+// It minted a `cs_rightedge_<uuid>` token for any email found to have an
+// active subscription, and /confirm-checkout-session redeemed that token for
+// a 180-day premium session. Because /create-checkout-session required no
+// authentication, anyone who knew a subscriber's address could request the
+// link and be logged in as them. Existing subscribers now sign in through
+// /verify-email + /verify-premium-code, which proves ownership of the address.
 
-  return `${returnUrl}?success=true&session_id=cs_rightedge_${token}&return_hash=${encodeURIComponent(returnHash)}#${returnHash}`;
+/**
+ * Issue and email a premium access code.
+ *
+ * Shared by /verify-email and /create-checkout-session so the two cannot
+ * drift: /create-checkout-session previously returned verificationRequired
+ * without issuing a challenge, leaving existing subscribers staring at a code
+ * screen while no email was ever sent.
+ *
+ * Returns "sent" when an email went out, "throttled" when a recent challenge
+ * is still valid, and "failed" when delivery failed. Callers MUST respond
+ * identically for "sent" and "throttled" so the endpoint cannot be used as an
+ * oracle for whether an address is a subscriber.
+ */
+async function issuePremiumAccessCode(email: string): Promise<"sent" | "throttled" | "failed"> {
+  const secret = requirePremiumCodeHmacSecret(Deno.env.get("PREMIUM_CODE_HMAC_SECRET"));
+  const challengeKey = buildPremiumChallengeKey(email);
+  const now = Date.now();
+  const code = generatePremiumCode();
+  const challenge = await createPremiumChallenge(email, code, secret, now);
+
+  // The cooldown is enforced inside the RPC, so parallel requests cannot each
+  // dispatch a fresh code to the same address.
+  const rpc = getAdminChallengeRpc();
+  const issued = await issuePremiumChallenge(rpc, challengeKey, challenge, now);
+  if (!issued) {
+    return "throttled";
+  }
+
+  try {
+    const resend = getResendClient();
+    const { error } = await resend.emails.send({
+      from: getFromEmail(),
+      to: [email],
+      subject: "Your RightEdge access code",
+      text: `Your RightEdge access code is ${code}. It expires in 10 minutes.`,
+      html: `<div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;background:#0A0A0F;color:#fff"><h1 style="font-size:22px">RightEdge access code</h1><p style="color:#c5c7ce">Use this one-time code to sign in. It expires in 10 minutes.</p><div style="font-size:34px;font-weight:700;letter-spacing:8px;margin:24px 0">${code}</div><p style="color:#8b8e98;font-size:13px">If you did not request this code you can ignore this email. Nobody can access your account without it.</p></div>`,
+    });
+    // Resend reports delivery failures in the response body, not by throwing.
+    if (error) throw error;
+    return "sent";
+  } catch (deliveryError) {
+    console.error("[premium-code] Failed to send access code:", deliveryError);
+    // Drop only the challenge this request issued; a newer one is left intact.
+    await cancelPremiumChallenge(rpc, challengeKey, challenge.codeHash);
+    return "failed";
+  }
 }
 
 app.post("/verify-otp", async (c) => {
@@ -3637,13 +3775,28 @@ app.post("/create-customer-portal", async (c) => {
     const returnUrl = body?.returnUrl || "http://localhost:5173";
     
     if (!email) return c.json({ error: "Email required" }, 400);
-    
+
+    // A billing portal session can change payment details and cancel a
+    // subscription, so the caller must prove they are this customer. An email
+    // in the request body proves nothing.
+    const session = await getAuthSessionFromRequest(c);
+    if (!session) {
+      return c.json({ error: "Please sign in to manage your subscription." }, 401);
+    }
+    if (session.email !== email) {
+      console.warn(
+        `[create-customer-portal] Session ${session.email} attempted to open the portal for ${email}`,
+      );
+      return c.json({ error: "Please sign in to manage your subscription." }, 403);
+    }
+
     const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
     if (!stripeKey) return c.json({ error: "Stripe not configured" }, 500);
-    
+
     const stripe = new Stripe(stripeKey, { apiVersion: "2023-10-16" });
-    const customers = await stripe.customers.list({ email, limit: 1 });
-    
+    // Resolve the customer from the SESSION's email, never the body's.
+    const customers = await stripe.customers.list({ email: session.email, limit: 1 });
+
     if (customers.data.length === 0) {
       return c.json({ error: "No active subscription found for this email." }, 404);
     }
@@ -3667,11 +3820,26 @@ app.post("/apply-retention-offer", async (c) => {
 
     if (!email) return c.json({ error: "Email required" }, 400);
 
+    // This MODIFIES a live subscription (applies a discount coupon), so an
+    // unproven email must never reach Stripe. Previously any caller could
+    // alter a stranger's billing by knowing their address.
+    const session = await getAuthSessionFromRequest(c);
+    if (!session) {
+      return c.json({ error: "Please sign in to manage your subscription." }, 401);
+    }
+    if (session.email !== email) {
+      console.warn(
+        `[apply-retention-offer] Session ${session.email} attempted to modify ${email}`,
+      );
+      return c.json({ error: "Please sign in to manage your subscription." }, 403);
+    }
+
     const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
     if (!stripeKey) return c.json({ error: "Stripe not configured" }, 500);
 
     const stripe = new Stripe(stripeKey, { apiVersion: "2023-10-16" });
-    const { activeSubscription } = await findActiveStripeSubscription(stripe, email);
+    // Resolve the subscription from the SESSION's email, never the body's.
+    const { activeSubscription } = await findActiveStripeSubscription(stripe, session.email);
 
     if (!activeSubscription) {
       return c.json({ error: "No active subscription found for this email." }, 404);
@@ -3783,15 +3951,32 @@ app.post("/create-checkout-session", async (c) => {
     }
 
     const stripe = new Stripe(stripeKey, { apiVersion: "2023-10-16" });
-    const { activeSubscription, customerId } = await findActiveStripeSubscription(stripe, email);
+    const { activeSubscription } = await findActiveStripeSubscription(stripe, email);
 
     if (activeSubscription) {
-      const url = await createInstantAccessUrl(email, returnUrl, returnHash, customerId, activeSubscription);
-      console.log(`[Stripe] Existing subscriber ${email} given instant premium access for #${returnHash}`);
+      // Do NOT hand out access here. This endpoint is unauthenticated by
+      // necessity (new customers have no session), so granting anything to a
+      // body-supplied email would let anyone claim a stranger's subscription.
+      // Issue the code HERE rather than only telling the client to ask for
+      // one: returning verificationRequired without sending an email left
+      // existing subscribers on a code screen that could never be satisfied.
+      const issued = await issuePremiumAccessCode(email);
+
+      if (issued === "failed") {
+        return c.json({ error: "Could not send your access code. Please try again." }, 502);
+      }
+
+      console.log(`[Stripe] Existing subscriber directed to code sign-in`);
       return c.json({
-        url,
-        instantAccess: true,
-        subscriptionId: activeSubscription.id,
+        alreadySubscribed: true,
+        verificationRequired: true,
+        email,
+        // `error` is read by the PREVIOUSLY DEPLOYED bundle, which has no
+        // concept of alreadySubscribed and would otherwise look for `url`,
+        // find none, and show "Could not start checkout". A stale or cached
+        // client therefore gets actionable instructions instead of a dead end.
+        error: "We emailed you a 6-digit access code. Enter it to sign in, or reload this page if you don't see a code box.",
+        message: "You already have an active subscription. Enter the code we emailed you.",
       });
     }
 
@@ -4605,44 +4790,13 @@ app.post("/confirm-checkout-session", async (c) => {
       return c.json({ error: "Valid Stripe checkout session_id is required." }, 400);
     }
 
+    // The cs_rightedge_<uuid> branch was removed. Those tokens were minted by
+    // /create-checkout-session for any email with an active subscription and
+    // redeemed here for a premium session, with no proof the caller owned the
+    // address. Only a genuine Stripe checkout session is accepted now, and it
+    // must show a completed payment below.
     if (String(sessionId).startsWith("cs_rightedge_")) {
-      const token = String(sessionId).replace("cs_rightedge_", "");
-      const instantAccess = await kv.get(`instant_access:${token}`);
-
-      if (!instantAccess) {
-        return c.json({ error: "Instant access session expired." }, 404);
-      }
-
-      const data: any = typeof instantAccess === "string" ? JSON.parse(instantAccess) : instantAccess;
-      const email = data?.email?.trim()?.toLowerCase();
-      if (!email || !email.includes("@")) {
-        return c.json({ error: "Invalid instant access session." }, 400);
-      }
-
-      const returnHash = ["matches", "origin", "best-bets", "same-game-multi", "try-scorers"].includes(data.returnHash)
-        ? data.returnHash
-        : "best-bets";
-
-      await saveVerifiedSubscriber(email, "stripe_existing_subscriber_instant_access", {
-        customerId: data.customerId || "",
-        subscriptionId: data.subscriptionId || "",
-        subscriptionStatus: data.subscriptionStatus || "active",
-        currentPeriodEnd: data.currentPeriodEnd || "",
-        cancelAtPeriodEnd: Boolean(data.cancelAtPeriodEnd),
-      });
-      await syncResendLifecycle(email, "premium");
-      await kv.del(`instant_access:${token}`);
-      const authSession = await createAuthSession(email, "premium");
-      writeAuthSessionCookie(c, authSession.token);
-
-      console.log(`[Stripe] Confirmed instant premium access for existing subscriber ${email}`);
-      return c.json({
-        success: true,
-        email,
-        returnHash,
-        customerId: data.customerId || "",
-        subscriptionId: data.subscriptionId || "",
-      });
+      return c.json({ error: "This access link is no longer valid. Please sign in." }, 410);
     }
 
     const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
