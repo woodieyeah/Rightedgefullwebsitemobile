@@ -183,10 +183,17 @@ jobs:
               try { window.localStorage.setItem('hermes_navlog', JSON.stringify(window.__navlog)); } catch (e) {}
             }
             function findTab(labelText){
+              var want = labelText.toUpperCase();
               var nodes = document.querySelectorAll('button, a');
+              // Exact match first (tab labels are exact), then a contains
+              // match, because CTAs wrap an icon and extra whitespace --
+              // "View Free Round Predictions →" never equals the bare label.
               for (var i=0;i<nodes.length;i++){
-                var t=(nodes[i].textContent||'').trim().toUpperCase();
-                if (t === labelText.toUpperCase()) return nodes[i];
+                if ((nodes[i].textContent||'').trim().toUpperCase() === want) return nodes[i];
+              }
+              for (var j=0;j<nodes.length;j++){
+                var t=(nodes[j].textContent||'').trim().toUpperCase();
+                if (t.indexOf(want) !== -1 && t.length < want.length + 24) return nodes[j];
               }
               return null;
             }
@@ -245,6 +252,27 @@ jobs:
             // observed taking 12s+ per Google Sheets CSV (and 27s for a
             // PostHog beacon); a tight timeout tests the wrong screen.
             window.setTimeout(function(){
+              // The app starts on the marketing HOME page, not the dashboard.
+              // An earlier revision waited for Matches without ever opening
+              // it, so every step failed with "tab button not found" while the
+              // app sat happily on the landing page.
+              //
+              // Clicking the real CTA is also the better test: it exercises
+              // navigateToApp(), which is exactly the function that used to
+              // trap native users behind the email gate.
+              mark('opening free predictions');
+              var cta = findTab('View Free Round Predictions');
+              if (!cta) {
+                // Fall back to the router so a label change does not abort the
+                // whole run, but record that the CTA was missing.
+                record('open-dashboard', false, 'View Free Round Predictions CTA not found');
+                window.location.hash = 'matches';
+              } else {
+                ['pointerdown','mousedown','pointerup','mouseup','click'].forEach(function(t){
+                  cta.dispatchEvent(new MouseEvent(t,{bubbles:true,cancelable:true,view:window}));
+                });
+                record('open-dashboard', true, 'free predictions CTA clicked');
+              }
               mark('waiting for Matches');
               whenReady(matchesOpen, 60000, function(){
                 record('matches-ready', true, 'Matches dashboard rendered');
@@ -492,12 +520,16 @@ jobs:
             DB=$(find "$CONTAINER" -name 'localstorage.sqlite3' 2>/dev/null | head -1)
             echo "localstorage db: ${DB:-<not found>}"
             if [ -n "$DB" ]; then
-              # The value is stored as UTF-16; strip NULs to recover the JSON.
-              sqlite3 "$DB" "SELECT value FROM ItemTable WHERE key='hermes_navlog';" 2>/dev/null \
-                | tr -d '\000' > artifacts/navlog.json || true
+              # WebKit stores the value as UTF-16LE. A plain SELECT stops at
+              # the first NUL byte, so "[" came back as the entire result --
+              # 2 bytes -- and looked like an empty array. Read it as hex and
+              # decode it losslessly instead.
+              sqlite3 "$DB" "SELECT hex(value) FROM ItemTable WHERE key='hermes_navlog';" 2>/dev/null \
+                > /tmp/navlog.hex || true
+              python3 scripts/decode_navlog.py /tmp/navlog.hex > artifacts/navlog.json || echo '[]' > artifacts/navlog.json
               # Diagnose an empty read rather than silently reporting [].
-              if [ ! -s artifacts/navlog.json ]; then
-                echo "keys present in localStorage:"
+              if [ "$(tr -d '[:space:]' < artifacts/navlog.json)" = "[]" ]; then
+                echo "navlog decoded empty; keys present in localStorage:"
                 sqlite3 "$DB" "SELECT key FROM ItemTable;" 2>/dev/null | tr -d '\000' | head -20 | sed 's/^/    /'
               fi
             fi
