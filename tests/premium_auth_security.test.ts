@@ -147,10 +147,14 @@ test("/verify-email never mints a premium session from an email alone", () => {
   assert.match(body, /issuePremiumAccessCode/);
 });
 
-test("every route that promises a code actually sends one", () => {
+test("every route that promises to have SENT a code actually sends one", () => {
   // /create-checkout-session once returned verificationRequired WITHOUT
   // issuing a challenge, so existing subscribers saw a code screen while no
   // email was ever sent and no code could ever work.
+  //
+  // A route may still ASK the client to go and verify (the billing 403 does)
+  // without sending anything itself. The distinction is the message: only a
+  // route claiming "we emailed you" must actually issue a code.
   const re = /app\.post\("([^"]+)"/g;
   const routes: { path: string; start: number }[] = [];
   let m: RegExpExecArray | null;
@@ -158,11 +162,26 @@ test("every route that promises a code actually sends one", () => {
 
   for (let i = 0; i < routes.length; i++) {
     const body = serverSource.slice(routes[i].start, routes[i + 1]?.start ?? serverSource.length);
-    if (!/verificationRequired:\s*true/.test(body)) continue;
+    const claimsSent = /we emailed you|code we emailed/i.test(body);
+    if (!claimsSent) continue;
     assert.match(
       body,
       /issuePremiumAccessCode/,
-      `${routes[i].path} returns verificationRequired without issuing a code`,
+      `${routes[i].path} tells the user a code was emailed but never issues one`,
+    );
+  }
+});
+
+test("a route that only requests verification does not claim to have sent a code", () => {
+  // The billing 403 asks the user to sign in with a code; the sign-in flow
+  // sends it. Claiming otherwise would be a lie the user cannot act on.
+  for (const route of ["/create-customer-portal", "/apply-retention-offer"]) {
+    const body = routeBody(route);
+    if (!/verificationRequired/.test(body)) continue;
+    assert.doesNotMatch(
+      body,
+      /we emailed you/i,
+      `${route} claims a code was already sent, but it does not send one`,
     );
   }
 });
@@ -266,12 +285,15 @@ test("the premium modal has a code step wired to /verify-premium-code", () => {
 });
 
 test("the premium session tier is only granted on a verified path", () => {
-  // Every place that mints a premium session must be reachable only after
-  // either a verified code or a paid Stripe checkout.
+  // "Verified" here means the TIER is justified: either a redeemed emailed
+  // code (which also proves identity) or a confirmed Stripe payment (which
+  // proves entitlement but NOT email ownership). Both are acceptable grounds
+  // for the premium tier; only the former may set identityVerified, which is
+  // asserted separately in checkout_not_identity.test.ts.
   const premiumGrants = [...serverSource.matchAll(/createAuthSession\([^)]*["']premium["']/g)];
   assert.ok(premiumGrants.length > 0, "no premium session is ever created");
   for (const grant of premiumGrants) {
-    const before = serverSource.slice(Math.max(0, grant.index! - 2_600), grant.index!);
+    const before = serverSource.slice(Math.max(0, grant.index! - 4_000), grant.index!);
     const proven =
       /verifyAndConsumePremiumChallenge/.test(before) ||
       /payment_status/.test(before) ||

@@ -64,9 +64,32 @@ type StoredAuthSession = {
   createdAt: string;
   expiresAt: string;
   adminVerified?: boolean;
+  /**
+   * True only when the owner PROVED control of this email address: a redeemed
+   * emailed code, a paid Stripe checkout, or the admin challenge.
+   *
+   * /register-free-access mints a session for any address typed into a form,
+   * so session possession alone proves nothing. Sensitive operations (billing
+   * portal, subscription changes) must require this flag.
+   *
+   * Optional because sessions issued before this field existed do not carry
+   * it; every check must therefore compare strictly against true so those
+   * sessions fail closed.
+   */
+  identityVerified?: boolean;
 };
 
 const PREMIUM_ACTIVE_STRIPE_STATUSES = new Set(["active", "trialing"]);
+
+/**
+ * How long a completed Stripe checkout may be re-confirmed.
+ *
+ * A legitimate customer can land on the success URL and refresh, or have the
+ * request retried, within moments. Beyond this window a repeat POST of the
+ * same cs_ id is a replay: the id is long-lived, retrievable from Stripe
+ * forever, and travels in a URL, so it must stop minting sessions.
+ */
+const CHECKOUT_CONFIRM_GRACE_MS = 30 * 60 * 1000;
 
 function buildAuthSessionKey(token: string) {
   return `auth_session:${token}`;
@@ -285,6 +308,10 @@ async function createAuthSession(
   email: string,
   tier: AuthSessionTier,
   adminVerified = false,
+  // Defaults to false: a freshly minted session proves nothing about who
+  // holds it. Only callers that verified an emailed code, a paid checkout or
+  // the admin challenge may pass true.
+  identityVerified = false,
 ) {
   const token = createAuthSessionToken();
   const createdAt = new Date();
@@ -300,6 +327,8 @@ async function createAuthSession(
     createdAt: createdAt.toISOString(),
     expiresAt: expiresAt.toISOString(),
     adminVerified,
+    // The admin challenge is itself an emailed-code proof of ownership.
+    identityVerified: identityVerified || adminVerified,
   };
 
   await kv.set(buildAuthSessionKey(token), JSON.stringify(session));
@@ -2036,9 +2065,27 @@ app.post("/register-free-access", async (c) => {
       }
     }
 
+    // Free registration is an email CAPTURE, not an authentication. Anyone
+    // can type any address into this form, so the resulting session must
+    // never claim verified identity.
+    //
+    // The old code read `existingSession?.tier === "premium" ? "premium"
+    // : "free"`, which copied premium from ANY presented session onto a
+    // session for a DIFFERENT address. Inheritance is only safe when the
+    // presented session belongs to this same address AND was itself verified.
     const existingSession = await getAuthSessionFromRequest(c);
-    const sessionTier: AuthSessionTier = existingSession?.tier === "premium" ? "premium" : "free";
-    const authSession = await createAuthSession(email, sessionTier);
+    const sameAddress =
+      existingSession?.email === email && existingSession?.identityVerified === true;
+    const sessionTier: AuthSessionTier =
+      sameAddress && existingSession?.tier === "premium" ? "premium" : "free";
+    const authSession = await createAuthSession(
+      email,
+      sessionTier,
+      false,
+      // Carry the verified flag only for the very same, already-verified
+      // address; a new address is always unverified.
+      sameAddress,
+    );
     writeAuthSessionCookie(c, authSession.token);
 
     return c.json({ success: true });
@@ -3651,7 +3698,8 @@ app.post("/verify-premium-code", async (c) => {
       cancelAtPeriodEnd: Boolean(activeSubscription.cancel_at_period_end),
     });
     await syncResendLifecycle(email, "premium");
-    const authSession = await createAuthSession(email, "premium");
+    // identityVerified: the caller redeemed a code delivered to this address.
+    const authSession = await createAuthSession(email, "premium", false, true);
     writeAuthSessionCookie(c, authSession.token);
 
     return c.json({
@@ -3785,6 +3833,24 @@ app.post("/create-customer-portal", async (c) => {
     if (!authSession) {
       return c.json({ error: "Please sign in to manage your subscription." }, 401);
     }
+    // Possessing a session is NOT proof of identity: /register-free-access
+    // mints one for any address typed into a form. Without this check, an
+    // attacker registered "free access" as the victim and opened the
+    // victim's Stripe billing portal with no code, password or payment.
+    // Strict === true so pre-existing sessions, which lack the field, fail
+    // closed and must verify by email code first.
+    if (authSession.identityVerified !== true) {
+      console.warn(
+        `[create-customer-portal] Unverified session attempted billing access for ${email}`,
+      );
+      return c.json(
+        {
+          error: "Please sign in with the code we email you before managing your subscription.",
+          verificationRequired: true,
+        },
+        403,
+      );
+    }
     if (authSession.email !== email) {
       console.warn(
         `[create-customer-portal] Session ${authSession.email} attempted to open the portal for ${email}`,
@@ -3828,6 +3894,22 @@ app.post("/apply-retention-offer", async (c) => {
     const session = await getAuthSessionFromRequest(c);
     if (!session) {
       return c.json({ error: "Please sign in to manage your subscription." }, 401);
+    }
+    // Session possession is not identity: see /create-customer-portal. A
+    // free registration for someone else's address must not be able to
+    // change their subscription. Strict === true so legacy sessions, which
+    // lack the field, fail closed.
+    if (session.identityVerified !== true) {
+      console.warn(
+        `[apply-retention-offer] Unverified session attempted a subscription change for ${email}`,
+      );
+      return c.json(
+        {
+          error: "Please sign in with the code we email you before changing your subscription.",
+          verificationRequired: true,
+        },
+        403,
+      );
     }
     if (session.email !== email) {
       console.warn(
@@ -4860,6 +4942,48 @@ app.post("/confirm-checkout-session", async (c) => {
     });
 
     await syncResendLifecycle(email, "premium");
+
+    // REPLAY CONTAINMENT.
+    //
+    // A cs_ id stays retrievable from Stripe indefinitely, and it travels in
+    // a URL — browser history, a shared link, a referrer log. Without a
+    // marker, anyone holding it could POST it again and be handed a fresh
+    // premium session for that email.
+    //
+    // The legitimate case is a page refresh moments after returning from
+    // Stripe, so the first confirmation opens a short grace window. Replays
+    // inside it still work; replays after it get no session and are told to
+    // sign in with an emailed code instead.
+    const usedKey = `checkout_session_used:${session.id}`;
+    const firstUse = parseKvValue<{ confirmedAt: string }>(await kv.get(usedKey));
+    const withinGrace =
+      !firstUse ||
+      Date.now() - Date.parse(firstUse.confirmedAt) <= CHECKOUT_CONFIRM_GRACE_MS;
+
+    if (!firstUse) {
+      await kv.set(usedKey, JSON.stringify({ confirmedAt: new Date().toISOString() }));
+    }
+
+    if (!withinGrace) {
+      console.warn(`[confirm-checkout-session] Stale replay refused for ${session.id}`);
+      return c.json(
+        {
+          error: "This checkout has already been confirmed. Please sign in with the code we email you.",
+          verificationRequired: true,
+          email,
+        },
+        409,
+      );
+    }
+
+    // identityVerified stays FALSE here on purpose.
+    //
+    // Stripe confirms that someone paid and typed this address. It does not
+    // confirm they control the inbox: the checkout email is customer-supplied,
+    // so an attacker could pay using a victim's address. Payment therefore
+    // grants PREMIUM ENTITLEMENT (the tier) but never the authority to manage
+    // Stripe customers attached to that address. Billing access requires a
+    // redeemed emailed code.
     const authSession = await createAuthSession(email, "premium");
     writeAuthSessionCookie(c, authSession.token);
 
