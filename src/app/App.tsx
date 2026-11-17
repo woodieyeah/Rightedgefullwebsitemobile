@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { resolveApiUrl } from "./api-base.ts";
 import { HelmetProvider, Helmet } from "react-helmet-async";
 import {
   projectId,
@@ -3197,7 +3198,7 @@ function getArchivedRoundNumbers(data: DashboardData, now: number): number[] {
 
 async function fetchRoundSnapshots(round: number): Promise<FrozenSnapshot[]> {
   try {
-    const res = await fetch(`/api/round-snapshots?round=${round}`, {
+    const res = await fetch(resolveApiUrl(`/api/round-snapshots?round=${round}`), {
       method: "GET",
       headers: { Authorization: `Bearer ${publicAnonKey}` },
       credentials: "include",
@@ -3212,7 +3213,7 @@ async function fetchRoundSnapshots(round: number): Promise<FrozenSnapshot[]> {
 
 async function fetchRoundResults(round: number): Promise<SavedRoundResult[]> {
   try {
-    const res = await fetch(`/api/round-results?round=${round}`, {
+    const res = await fetch(resolveApiUrl(`/api/round-results?round=${round}`), {
       method: "GET",
       headers: { Authorization: `Bearer ${publicAnonKey}` },
       credentials: "include",
@@ -3235,11 +3236,17 @@ async function protectedAdminFetch(
   else init.signal?.addEventListener("abort", abort, { once: true });
   window.addEventListener('adminAuthCleared', abort, { once: true });
   try {
-    const response = await fetch(input, {
-      ...init,
-      credentials: "include",
-      signal: controller.signal,
-    });
+    // Admin calls all funnel through here, so resolving the URL once covers
+    // every /api/admin/* site. A string input is a relative API path; a
+    // Request or URL object is already absolute and passes through.
+    const response = await fetch(
+      typeof input === "string" ? resolveApiUrl(input) : input,
+      {
+        ...init,
+        credentials: "include",
+        signal: controller.signal,
+      },
+    );
     if (response.status === 401) {
       window.dispatchEvent(new Event('adminAuthCleared'));
     }
@@ -3262,7 +3269,7 @@ async function postRoundSnapshot(body: {
     // play was ever actually frozen. Plain fetch (not protectedAdminFetch) so
     // a normal visitor's browser can perform the freeze, and so a 401 here can
     // never be mistaken for an expired admin session.
-    const res = await fetch(`/api/round-snapshot`, {
+    const res = await fetch(resolveApiUrl(`/api/round-snapshot`), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -4167,7 +4174,7 @@ function requestAuthSession(force = false): Promise<AuthSessionCheckResult> {
 
   authSessionCheckPromise = (async (): Promise<AuthSessionCheckResult> => {
     try {
-      const res = await fetch(`/api/auth/session`, {
+      const res = await fetch(resolveApiUrl(`/api/auth/session`), {
         method: "GET",
         headers: {
           Authorization: `Bearer ${publicAnonKey}`,
@@ -4461,7 +4468,7 @@ function PaymentGateModal({
     setErrorMsg("");
 
     try {
-      const verifyRes = await fetch(`/api/verify-email`, {
+      const verifyRes = await fetch(resolveApiUrl(`/api/verify-email`), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -4508,7 +4515,7 @@ function PaymentGateModal({
         flow: hasStoredEmail ? "known_email_button" : "email_form",
       });
 
-      void fetch(`/api/register-checkout-lead`, {
+      void fetch(resolveApiUrl(`/api/register-checkout-lead`), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -4531,7 +4538,7 @@ function PaymentGateModal({
         flow: hasStoredEmail ? "known_email_button" : "email_form",
       });
 
-      const checkoutRes = await fetch(`/api/create-checkout-session`, {
+      const checkoutRes = await fetch(resolveApiUrl(`/api/create-checkout-session`), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -4706,7 +4713,7 @@ function RetentionOfferModal({
     setErrorMsg("");
 
     try {
-      const res = await fetch(`/api/apply-retention-offer`, {
+      const res = await fetch(resolveApiUrl(`/api/apply-retention-offer`), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -4877,7 +4884,7 @@ function EmailGateModal({
   setSubmitting(true);
   setErrorMsg("");
   try {
-    const saveRes = await fetch(`/api/register-free-access`, {
+    const saveRes = await fetch(resolveApiUrl(`/api/register-free-access`), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -5388,7 +5395,7 @@ async function fetchCricketLiveOddsCached(home = "West Indies", away = "Sri Lank
     _: String(Date.now()),
   });
 
-  const fetchPromise = fetch(`/api/cricket-live-odds?${params.toString()}`, {
+  const fetchPromise = fetch(resolveApiUrl(`/api/cricket-live-odds?${params.toString()}`), {
     cache: "no-store",
     headers: {
       Authorization: `Bearer ${publicAnonKey}`,
@@ -6025,8 +6032,7 @@ async function fetchLiveOddsCached(bookmaker?: "betr" | "pinnacle", sport?: "ori
   if (sport === "origin") queryParams.set("sport", "origin");
   queryParams.set("_", String(Date.now()));
   const query = `?${queryParams.toString()}`;
-  const fetchOddsPromise = fetch(
-    `/api/live-odds${query}`,
+  const fetchOddsPromise = fetch(resolveApiUrl(`/api/live-odds${query}`),
     {
       cache: bookmaker === "betr" ? "no-store" : "default",
       headers: {
@@ -6066,8 +6072,7 @@ async function fetchLiveOddsCached(bookmaker?: "betr" | "pinnacle", sport?: "ori
 }
 
 async function fetchBestMatchOddsByBookmaker(bookmaker: "pinnacle") {
-  const response = await fetch(
-    `/api/best-match-odds?bookmaker=${encodeURIComponent(bookmaker)}&_=${Date.now()}`,
+  const response = await fetch(resolveApiUrl(`/api/best-match-odds?bookmaker=${encodeURIComponent(bookmaker)}&_=${Date.now()}`),
     {
       cache: "no-store",
       headers: {
@@ -6112,7 +6117,7 @@ async function fetchBestTryScorerOddsCached(bookmaker?: "betr", scope?: "origin"
   if (bookmaker) params.set("bookmaker", bookmaker);
   if (scope) params.set("scope", scope);
 
-  const fetchPromise = fetch(`/api/best-try-scorer-odds?${params.toString()}`, {
+  const fetchPromise = fetch(resolveApiUrl(`/api/best-try-scorer-odds?${params.toString()}`), {
     cache: shouldUsePersistentCache ? "default" : "no-store",
     headers: {
       Authorization: `Bearer ${publicAnonKey}`,
@@ -14432,7 +14437,7 @@ function AppDashboard({
         return;
       }
 
-      const res = await fetch(`/api/create-customer-portal`, {
+      const res = await fetch(resolveApiUrl(`/api/create-customer-portal`), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -15162,7 +15167,7 @@ export default function App() {
     const resetController = new AbortController();
     const resetTimeout = window.setTimeout(() => resetController.abort(), 10_000);
     try {
-      const response = await fetch('/api/auth/logout', {
+      const response = await fetch(resolveApiUrl('/api/auth/logout'), {
         method: 'POST',
         credentials: 'include',
         signal: resetController.signal,
@@ -15282,7 +15287,7 @@ export default function App() {
       trackLinkedInConversion(type);
 
       try {
-        await fetch(`/api/track-event`, {
+        await fetch(resolveApiUrl(`/api/track-event`), {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -15496,7 +15501,7 @@ export default function App() {
       }
 
       try {
-        const res = await fetch(`/api/confirm-checkout-session`, {
+        const res = await fetch(resolveApiUrl(`/api/confirm-checkout-session`), {
           method: "POST",
           headers: {
             "Content-Type": "application/json",

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { resolveApiUrl } from "../api-base.ts";
 import { projectId, publicAnonKey } from '../../../utils/supabase/info';
 import { Mail, Users, Send, AlertTriangle, CheckCircle, RefreshCw, Eye, Lock, LogIn, Activity, TrendingUp, BarChart3, Clock, Globe, Unlock, CreditCard } from 'lucide-react';
 import { normalizeAdminCodeInput } from '../auth-session';
@@ -222,7 +223,7 @@ async function fetchAdminLiveOdds() {
     // Keep the email generator usable even if the cache is malformed.
   }
 
-  const res = await fetch('/api/live-odds', {
+  const res = await fetch(resolveApiUrl('/api/live-odds'), {
     headers: { Authorization: `Bearer ${publicAnonKey}` },
   });
   if (!res.ok) throw new Error('Could not load live odds');
@@ -379,11 +380,17 @@ export function AdminDashboard({ data, onNavigateAdStudio }: { data?: any, onNav
 
   const adminFetch = async (input: RequestInfo | URL, init: RequestInit = {}) => {
     const generation = adminGenerationRef.current;
-    const response = await fetch(input, {
-      ...init,
-      credentials: 'include',
-      signal: init.signal ?? adminRequestControllerRef.current.signal,
-    });
+    // Every /api/admin/* call in this component goes through adminFetch, so
+    // resolving here covers all of them. A string is a relative API path; a
+    // Request or URL is already absolute and passes through untouched.
+    const response = await fetch(
+      typeof input === "string" ? resolveApiUrl(input) : input,
+      {
+        ...init,
+        credentials: 'include',
+        signal: init.signal ?? adminRequestControllerRef.current.signal,
+      },
+    );
     if (generation !== adminGenerationRef.current) {
       throw new Error('Administrator request was invalidated');
     }
@@ -399,7 +406,7 @@ export function AdminDashboard({ data, onNavigateAdStudio }: { data?: any, onNav
     let active = true;
     (async () => {
       try {
-        const res = await fetch('/api/auth/session', {
+        const res = await fetch(resolveApiUrl('/api/auth/session'), {
           credentials: 'include',
         });
         const session = await res.json().catch(() => ({}));
@@ -421,7 +428,7 @@ export function AdminDashboard({ data, onNavigateAdStudio }: { data?: any, onNav
     setAuthSubmitting(true);
     setLoginError('');
     try {
-      const res = await fetch('/api/auth/admin/request', {
+      const res = await fetch(resolveApiUrl('/api/auth/admin/request'), {
         method: 'POST',
         credentials: 'include',
         headers: {
@@ -445,7 +452,7 @@ export function AdminDashboard({ data, onNavigateAdStudio }: { data?: any, onNav
     setAuthSubmitting(true);
     setLoginError('');
     try {
-      const res = await fetch('/api/auth/admin/verify', {
+      const res = await fetch(resolveApiUrl('/api/auth/admin/verify'), {
         method: 'POST',
         credentials: 'include',
         headers: {
@@ -477,7 +484,7 @@ export function AdminDashboard({ data, onNavigateAdStudio }: { data?: any, onNav
     const logoutController = new AbortController();
     const logoutTimeout = window.setTimeout(() => logoutController.abort(), 10_000);
     try {
-      const response = await fetch('/api/auth/logout', {
+      const response = await fetch(resolveApiUrl('/api/auth/logout'), {
         method: 'POST',
         credentials: 'include',
         signal: logoutController.signal,

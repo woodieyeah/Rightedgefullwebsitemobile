@@ -36,6 +36,7 @@
  */
 
 import { useEffect, useMemo, useState } from "react";
+import { resolveApiUrl } from "../api-base.ts";
 import capture from "./grand-final-capture.json";
 import { AffiliateMarketButton, TeamLogo, getTeamColors } from "../App";
 import {
@@ -158,7 +159,7 @@ export function ModelLabPage() {
     let cancelled = false;
     const load = async () => {
       try {
-        const res = await fetch("/api/scores?daysFrom=2", { credentials: "include" });
+        const res = await fetch(resolveApiUrl("/api/scores?daysFrom=2"), { credentials: "include" });
         if (!res.ok) throw new Error(String(res.status));
         const payload = await res.json();
         if (cancelled) return;

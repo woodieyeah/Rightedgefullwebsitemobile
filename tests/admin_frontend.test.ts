@@ -48,8 +48,12 @@ test("round snapshot writes use the public write-once freeze route", () => {
   // A plain fetch is required here (not protectedAdminFetch) for two reasons:
   // a visitor has no admin session, and a 401 from this call must never be
   // mistaken for an expired admin session and clear a real subscriber's login.
-  assert.match(appSource, /fetch\(`\/api\/round-snapshot`/);
-  assert.doesNotMatch(appSource, /protectedAdminFetch\(`\/api\/admin\/round-snapshot`/);
+  //
+  // The URL is wrapped in resolveApiUrl so the native shell reaches the edge
+  // function; on the web it returns the path unchanged. The assertion still
+  // pins the route and still pins that it is a PLAIN fetch.
+  assert.match(appSource, /fetch\(resolveApiUrl\(`\/api\/round-snapshot`\)/);
+  assert.doesNotMatch(appSource, /protectedAdminFetch\([^)]*`\/api\/admin\/round-snapshot`/);
   assert.match(appSource, /postRoundSnapshot\(b, snapshotController\.signal\)/);
   assert.match(appSource, /postingKeysRef/);
   assert.match(appSource, /if \(snapshot\) postedKeysRef\.current\.add\(toPost\[index\]\.matchKey\)/);
@@ -72,7 +76,14 @@ test("logout always clears local administrator state and cached data", () => {
     dashboardSource.indexOf('const handleLogout'),
     dashboardSource.indexOf('const generateReviewEmail'),
   );
-  assert.ok(logoutSource.indexOf('clearAdminAccess();') < logoutSource.indexOf("fetch('/api/auth/logout'"));
+  // The ordering property is what matters: local state is cleared BEFORE the
+  // network call, so a failed or slow logout can never leave the dashboard
+  // believing it is still authenticated. resolveApiUrl wraps the path for the
+  // native shell and is a no-op on the web.
+  assert.ok(
+    logoutSource.indexOf('clearAdminAccess();') <
+      logoutSource.indexOf("fetch(resolveApiUrl('/api/auth/logout')"),
+  );
   assert.match(logoutSource, /AbortController/);
   assert.match(logoutSource, /setTimeout\([^,]+, 10_000\)/s);
   assert.match(dashboardSource, /logoutPending/);
