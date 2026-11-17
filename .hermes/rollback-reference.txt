@@ -1,0 +1,6 @@
+ROLLBACK REFERENCE — recorded 2026-11-17T05:43:33Z
+website bundle js : /assets/index-D6bfwJl9.js
+website bundle css: /assets/index-CVRuaDuR.css
+production main   : 593358d8 Move the grand final core play to the standard line
+hotfix commit     : 8f3f99a8 Rewrite the release plan with the corrected deploy order
+pre-patch edge    : /verify-premium-code 404, portal 404 (no auth gate)
