@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { resolveApiUrl, nativeSafeCredentials } from "./api-base.ts";
-import { describeRoundStatus, isPremiumNavTarget } from "./round-status.ts";
+import { describeRoundStatus, isPremiumNavTarget, showsWebsiteOnlyAccountControls } from "./round-status.ts";
 import {
   isNativeShell,
   onNativeResume,
@@ -14578,25 +14578,28 @@ function AppDashboard({
       );
   }, []);
 
-  const [nativePremiumNotice, setNativePremiumNotice] = useState(false);
-
   const handlePageChange = (newPage: string) => {
     // Tapping a tab is exploration, not a request to buy. In the native shell
     // "Plays" (best-bets) is a premium hash, so letting it reach the router
     // would fire the premium handoff and throw the user into Safari on every
-    // tap. Show an in-app explanation instead; the user opens the website
-    // only by pressing the button inside it.
-    if (isNativeShell() && isPremiumNavTarget(newPage)) {
-      setNativePremiumNotice(true);
-      return;
-    }
-    setNativePremiumNotice(false);
+    // tap. The page still changes -- the render branch for best-bets shows an
+    // in-app explanation instead of premium content -- so `page` stays the
+    // single source of truth and no second flag can desynchronise from it.
     setPage(newPage);
-    window.location.hash = newPage;
+    if (!(isNativeShell() && isPremiumNavTarget(newPage))) {
+      window.location.hash = newPage;
+    }
     window.scrollTo(0, 0);
     document.documentElement.scrollTop = 0;
     document.body.scrollTop = 0;
   };
+
+  // Website-only account controls. MANAGE SUBSCRIPTION needs an
+  // identityVerified session (403 otherwise) and RESET ACCESS re-triggers an
+  // email gate that does not exist in the shell, so both are hidden there.
+  const webAccountControls = showsWebsiteOnlyAccountControls({
+    isNative: isNativeShell(),
+  });
 
   const mobilePages = useMemo(() => getAppPages(isAdmin), [isAdmin]);
 
@@ -14739,6 +14742,9 @@ function AppDashboard({
             </div>
             <div className="mt-4 text-sm text-white/70 leading-relaxed font-bold">
             </div>
+            {/* Website-only: the customer portal needs an identityVerified
+                session, which the native shell cannot hold. */}
+            {webAccountControls && (
             <div ref={manageSidebarRef} className="relative mt-6">
               <button
                 onClick={() => setManageOpenSidebar((v) => !v)}
@@ -14773,6 +14779,7 @@ function AppDashboard({
                 </div>
               )}
             </div>
+            )}
           </div>
         </GlassCard>
 
@@ -14785,6 +14792,8 @@ function AppDashboard({
               >
                 <ChevronLeft className="w-4 h-4" /> Back to Home
               </button>
+              {/* Website-only: see showsWebsiteOnlyAccountControls. */}
+              {webAccountControls && (
               <div ref={manageHeaderRef} className="relative flex flex-col items-end">
                 <button
                   onClick={() => setManageOpenHeader((v) => !v)}
@@ -14819,6 +14828,7 @@ function AppDashboard({
                   </div>
                 )}
               </div>
+              )}
             </div>
           </div>
           <div className="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-4 md:gap-6 pb-4 md:pb-6 border-b border-[#1E1E2E]">
@@ -14930,51 +14940,47 @@ function AppDashboard({
             </div>
           ) : data ? (
             <>
-              {page === "best-bets" && (
-                <BestBetsPage
-                  data={data}
-                  onRequestAccess={onRequestAccess}
-                  isPremium={isPremium}
-                  isAdmin={isAdmin}
-                />
-              )}
-              {nativePremiumNotice && (
-                // Native-only. Explains what Plays is and leaves the decision
-                // to open the website with the user, rather than launching the
-                // browser the moment they touch the tab. No premium content is
-                // rendered here, and website sign-in is explicitly NOT native
-                // sign-in.
-                <GlassCard className="p-6 md:p-8 border-l-4 border-l-[#00E676]">
-                  <div className="text-sm md:text-base font-black uppercase tracking-widest text-white">
-                    Plays is a Premium feature
-                  </div>
-                  <div className="mt-2 text-xs md:text-sm font-medium text-[#9CA3AF]">
-                    Core Plays, best H2H and try scorer value for every match.
-                    Premium runs on the RightEdge website for now — signing in
-                    there does not sign in this app yet.
-                  </div>
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => onRequestAccess("best-bets")}
-                      className="inline-flex h-9 items-center justify-center bg-white px-4 text-xs font-medium text-[#0A0A0F] transition hover:opacity-85"
-                    >
-                      Open Premium on the website
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setNativePremiumNotice(false);
-                        handlePageChange("matches");
-                      }}
-                      className="inline-flex h-9 items-center justify-center border border-[#1E1E2E] px-4 text-xs font-medium text-[#9CA3AF] transition hover:border-white/30 hover:text-white"
-                    >
-                      Back to free predictions
-                    </button>
-                  </div>
-                </GlassCard>
-              )}
-              {page === "matches" && !nativePremiumNotice && (
+              {page === "best-bets" &&
+                (isNativeShell() ? (
+                  // Native-only. Replaces premium content entirely -- it is the
+                  // same `page` branch, so MultiPage or PredictionsPage can
+                  // never render alongside it. No premium data is fetched or
+                  // shown, and website sign-in is explicitly NOT native sign-in.
+                  <GlassCard className="p-6 md:p-8 border-l-4 border-l-[#00E676]">
+                    <div className="text-sm md:text-base font-black uppercase tracking-widest text-white">
+                      Plays is a Premium feature
+                    </div>
+                    <div className="mt-2 text-xs md:text-sm font-medium text-[#9CA3AF]">
+                      Core Plays, best H2H and try scorer value for every match.
+                      Premium runs on the RightEdge website for now — signing in
+                      there does not sign in this app yet.
+                    </div>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => onRequestAccess("best-bets")}
+                        className="inline-flex h-9 items-center justify-center bg-white px-4 text-xs font-medium text-[#0A0A0F] transition hover:opacity-85"
+                      >
+                        Open Premium on the website
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handlePageChange("matches")}
+                        className="inline-flex h-9 items-center justify-center border border-[#1E1E2E] px-4 text-xs font-medium text-[#9CA3AF] transition hover:border-white/30 hover:text-white"
+                      >
+                        Back to free predictions
+                      </button>
+                    </div>
+                  </GlassCard>
+                ) : (
+                  <BestBetsPage
+                    data={data}
+                    onRequestAccess={onRequestAccess}
+                    isPremium={isPremium}
+                    isAdmin={isAdmin}
+                  />
+                ))}
+              {page === "matches" && (
                 <PredictionsPage
                   data={data}
                   onRequestAccess={onRequestAccess}
@@ -15383,6 +15389,11 @@ export default function App() {
     applyAuthState(nextState);
     return nextState;
   };
+
+  // See showsWebsiteOnlyAccountControls: hidden in the native shell.
+  const webAccountControls = showsWebsiteOnlyAccountControls({
+    isNative: isNativeShell(),
+  });
 
   const handleResetAccess = async () => {
     authSessionGenerationRef.current += 1;
@@ -16270,6 +16281,9 @@ export default function App() {
             <div>
               <div className="text-white font-black text-2xl uppercase tracking-tighter mb-2">
                 RightEdge
+                {/* Website-only: re-triggers the email gate, which the
+                    native shell does not have. */}
+                {webAccountControls && (
                 <button
                   onClick={handleResetAccess}
                   className="ml-4 text-[10px] text-white/20 hover:text-[#FF2E63] transition-colors"
@@ -16277,6 +16291,7 @@ export default function App() {
                 >
                   [RESET ACCESS]
                 </button>
+                )}
               </div>
               <div className="text-sm font-bold text-[#FFEA00] uppercase tracking-widest">
                 NRL Predictions & Premium Plays

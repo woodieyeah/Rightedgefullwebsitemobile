@@ -76,3 +76,45 @@ test("the nav routes through the native-aware handler", () => {
     "handlePageChange sets the premium hash directly, which kicks the user to the browser",
   );
 });
+
+test("the premium notice REPLACES page content, it does not overlay it", () => {
+  // The first attempt used a separate `nativePremiumNotice` boolean, which
+  // could be true while `page` was still "multi" -- rendering MultiPage AND
+  // the notice at once. Deriving the notice from the page itself makes that
+  // state unrepresentable.
+  assert.doesNotMatch(
+    app,
+    /nativePremiumNotice/,
+    "a separate notice flag can desynchronise from `page`; derive it instead",
+  );
+  // One branch, two outcomes: native gets the notice, web gets the page.
+  const i = app.indexOf('page === "best-bets" &&');
+  assert.ok(i !== -1, "the best-bets render branch was not found");
+  const branch = app.slice(i, i + 700);
+  assert.match(branch, /isNativeShell\(\)\s*\?/, "no native/web ternary on the premium page");
+  assert.match(branch, /NativePremiumNotice|Plays is a Premium feature/);
+});
+
+test("BestBetsPage cannot render in the native shell", () => {
+  // The premium component must sit on the web side of the ternary.
+  const i = app.indexOf('page === "best-bets" &&');
+  const branch = app.slice(i, i + 2600);
+  const nativeAt = branch.indexOf("isNativeShell()");
+  const bestBetsAt = branch.indexOf("<BestBetsPage");
+  assert.ok(bestBetsAt !== -1, "BestBetsPage render not found in the branch");
+  assert.ok(
+    nativeAt !== -1 && nativeAt < bestBetsAt,
+    "BestBetsPage is reachable without passing the native check",
+  );
+});
+
+test("every app page render is mutually exclusive on `page`", () => {
+  // No two page bodies may be renderable simultaneously.
+  const ids = ["matches", "multi", "best-bets", "performance", "admin"];
+  for (const id of ids) {
+    const matches = [...app.matchAll(new RegExp(`page === "${id}" (&&|\\?)`, "g"))];
+    assert.ok(matches.length > 0, `no render branch for ${id}`);
+  }
+  // The notice must not be gated on anything other than the page itself.
+  assert.doesNotMatch(app, /page === "matches" && !nativePremiumNotice/);
+});

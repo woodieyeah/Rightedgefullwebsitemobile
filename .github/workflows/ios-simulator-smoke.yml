@@ -158,16 +158,94 @@ jobs:
               b.textContent='PHASE: '+name+'  |  requests: '+window.__netlog.length;
             }
             window.__phase = mark;
-            // 20s: open the free predictions dashboard through the app's own
-            // routing, which is exactly what the CTA does.
+
+            // ---- scripted UI interaction ----------------------------------
+            // Real tab CLICKS, not hash assignment. A hash change proves the
+            // router works but says nothing about whether the tab button is
+            // reachable, hit-testable or wired up -- and the earlier
+            // AppleScript taps silently failed while the job still passed. We
+            // dispatch a genuine click on the button element and then VERIFY
+            // the result, recording a pass/fail that the report step asserts.
+            window.__navlog = [];
+            function findTab(labelText){
+              var nodes = document.querySelectorAll('button, a');
+              for (var i=0;i<nodes.length;i++){
+                var t=(nodes[i].textContent||'').trim().toUpperCase();
+                if (t === labelText.toUpperCase()) return nodes[i];
+              }
+              return null;
+            }
+            function clickTab(labelText, expectFragment){
+              var el = findTab(labelText);
+              if (!el){
+                window.__navlog.push({step:labelText, ok:false, why:'tab button not found'});
+                return false;
+              }
+              var r = el.getBoundingClientRect();
+              if (r.width === 0 || r.height === 0){
+                window.__navlog.push({step:labelText, ok:false, why:'tab has zero size'});
+                return false;
+              }
+              // A real pointer sequence, so anything relying on pointer events
+              // behaves as it would under a finger.
+              ['pointerdown','mousedown','pointerup','mouseup','click'].forEach(function(type){
+                el.dispatchEvent(new MouseEvent(type, {bubbles:true, cancelable:true, view:window}));
+              });
+              var body = (document.body.innerText||'').toUpperCase();
+              var ok = body.indexOf(expectFragment.toUpperCase()) !== -1;
+              window.__navlog.push({
+                step: labelText, ok: ok,
+                why: ok ? 'content matched: '+expectFragment : 'expected text not found: '+expectFragment
+              });
+              return ok;
+            }
+            window.__clickTab = clickTab;
+
+            // Timeline, from app launch. Each capture in the workflow is timed
+            // to land in the middle of a phase.
+            //   t+14s  archived round selected (real fixtures + final scores)
+            //   t+22s  Plays tab  (premium notice, native)
+            //   t+30s  Multi tab  (public content)
+            //   t+38s  back to Matches
+            //   t+48s  network overlay LAST, so no UI shot is obscured
             window.setTimeout(function(){
-              mark('navigating to #matches');
-              window.location.hash = 'matches';
-              window.setTimeout(function(){ mark('on #matches'); }, 1500);
-            }, 20000);
-            // 46s: the network overlay goes last, so every UI screenshot before
-            // it is clean. A previous run painted it at 42s and covered the app
-            // in every single shot.
+              mark('selecting archived round');
+              // Round 25 is a hardcoded archive: real fixtures with final
+              // scores, so this proves rendering when data exists rather than
+              // relying on an off-season empty state.
+              var sel = findTab('Last Round Results');
+              if (sel) {
+                ['pointerdown','mousedown','pointerup','mouseup','click'].forEach(function(t){
+                  sel.dispatchEvent(new MouseEvent(t,{bubbles:true,cancelable:true,view:window}));
+                });
+                window.__navlog.push({step:'archive', ok:true, why:'Last Round Results clicked'});
+              } else {
+                window.__navlog.push({step:'archive', ok:false, why:'Last Round Results not found'});
+              }
+              mark('archived round');
+            }, 14000);
+
+            window.setTimeout(function(){
+              mark('tapping PLAYS');
+              clickTab('Plays', 'Premium');
+              mark('on PLAYS');
+            }, 22000);
+
+            window.setTimeout(function(){
+              mark('tapping MULTI');
+              clickTab('Multi', 'Multi');
+              mark('on MULTI');
+            }, 30000);
+
+            window.setTimeout(function(){
+              mark('tapping MATCHES');
+              clickTab('Matches', 'Matches');
+              mark('on MATCHES');
+            }, 38000);
+
+            // 48s: the network + navigation overlay goes LAST, so every UI
+            // screenshot before it is clean. An earlier run painted it at 42s
+            // and covered the app in every single shot.
             window.setTimeout(function(){
               var old=document.getElementById('hermes-netlog'); if(old) old.remove();
               var d=document.createElement('pre');
@@ -177,10 +255,23 @@ jobs:
               var lines = window.__netlog.map(function(e){
                 return (e.ok?'OK  ':'FAIL') + ' ' + String(e.status) + ' ' + e.ms + 'ms ' + e.url;
               });
-              d.textContent = 'NETWORK LOG ('+window.__netlog.length+' requests, URLs redacted)\n\n' +
+              // The navigation result is written into the DOM as a machine
+              // readable block. The report step parses it and FAILS the job if
+              // any tab did not actually change the screen, so a dead tap can
+              // no longer pass silently.
+              var nav = window.__navlog.map(function(n){
+                return (n.ok?'NAV-OK   ':'NAV-FAIL ') + n.step + ' :: ' + n.why;
+              });
+              var navMarker = document.createElement('div');
+              navMarker.id = 'hermes-navresult';
+              navMarker.setAttribute('data-nav', JSON.stringify(window.__navlog));
+              navMarker.style.display = 'none';
+              document.body.appendChild(navMarker);
+              d.textContent = 'NAVIGATION\n\n' + (nav.join('\n') || '(no navigation recorded)') +
+                '\n\nNETWORK LOG ('+window.__netlog.length+' requests, URLs redacted)\n\n' +
                 (lines.join('\n') || '(no requests recorded)');
               document.body.appendChild(d);
-            }, 46000);
+            }, 48000);
           })();
           </script>
           PROBE
@@ -292,27 +383,33 @@ jobs:
           # no accessibility permission there, the click silently does nothing,
           # and the previous run proved it -- three screenshots came back
           # byte-identical while the step still reported success. Navigation is
-          # therefore driven by the probe inside the page, through the app's own
-          # hash router, and this step only times the captures to match.
+          # therefore driven by the probe inside the page, which dispatches a
+          # real pointer+click sequence on the actual tab elements and verifies
+          # the resulting content. This step only times the captures to match.
           #
           # Timeline from app launch (probe timers):
-          #   t+20s  location.hash = 'matches'   (free predictions)
-          #   t+46s  network overlay painted
+          #   t+14s  archived round selected (real fixtures + final scores)
+          #   t+22s  Plays tab   (native premium notice)
+          #   t+30s  Multi tab   (public content)
+          #   t+38s  Matches tab (back to free predictions)
+          #   t+48s  overlay painted LAST so no UI shot is obscured
           # This step starts ~8s after launch.
           shot () {
             xcrun simctl io "$UDID" screenshot "artifacts/$1.png" >/dev/null 2>&1
             echo "  captured $1 ($(wc -c < "artifacts/$1.png" | tr -d ' ') bytes)"
           }
 
-          shot 01-home                 # t+8s   home, pre-navigation
-          sleep 8
-          shot 02-home-settled         # t+16s  home with data loaded
+          shot 01-matches              # t+8s   Matches, off-season state
           sleep 10
-          shot 03-predictions          # t+26s  after hash navigation
-          sleep 12
-          shot 04-predictions-later    # t+38s  predictions, still clean
-          sleep 12
-          shot 05-network-log          # t+50s  redacted network overlay
+          shot 02-archived-round       # t+18s  archived round, real data
+          sleep 8
+          shot 03-plays-premium        # t+26s  Plays premium notice
+          sleep 8
+          shot 04-multi                # t+34s  Multi public content
+          sleep 8
+          shot 05-matches-return       # t+42s  back on Matches
+          sleep 10
+          shot 06-diagnostics          # t+52s  navigation + network overlay
 
           xcrun simctl spawn "$UDID" log show --last 4m --style compact \
             --predicate 'process == "App"' > artifacts/app.log 2>&1 || true
@@ -359,13 +456,14 @@ jobs:
           # So identical consecutive shots are now a hard failure.
           node -e "
             const fs=require('fs'), crypto=require('crypto');
-            const shots=['01-home','02-home-settled','03-predictions','04-predictions-later','05-network-log'];
-            const seen=new Map(); let missing=0, blank=0;
+            const shots=['01-matches','02-archived-round','03-plays-premium','04-multi','05-matches-return','06-diagnostics'];
+            const seen=new Map(); let missing=0, blank=0; const hash={};
             for (const s of shots) {
               const p='artifacts/'+s+'.png';
               if (!fs.existsSync(p)) { console.log('MISSING   '+s); missing++; continue; }
               const buf=fs.readFileSync(p);
               const h=crypto.createHash('sha256').update(buf).digest('hex').slice(0,12);
+              hash[s]=h;
               const dup=seen.get(h);
               if (!dup) seen.set(h, s);
               if (buf.length < 60000) blank++;
@@ -375,12 +473,34 @@ jobs:
             console.log('distinct screens: '+seen.size+' of '+(shots.length-missing));
             if (missing) { console.log('FAIL: '+missing+' screenshot(s) missing'); process.exit(1); }
             if (blank)   { console.log('FAIL: '+blank+' screenshot(s) look blank'); process.exit(1); }
-            // Home and predictions must differ, or navigation did not happen.
-            const a=crypto.createHash('sha256').update(fs.readFileSync('artifacts/01-home.png')).digest('hex');
-            const b=crypto.createHash('sha256').update(fs.readFileSync('artifacts/03-predictions.png')).digest('hex');
-            if (a===b) { console.log('FAIL: home and predictions are identical - navigation did not occur'); process.exit(1); }
-            console.log('PASS: navigation changed the screen');
+            // Each navigation must have CHANGED the screen. Comparing adjacent
+            // states is what catches a dead tap -- the failure mode that
+            // previously passed while three shots were byte-identical.
+            const mustDiffer=[
+              ['01-matches','02-archived-round','selecting an archived round'],
+              ['02-archived-round','03-plays-premium','tapping Plays'],
+              ['03-plays-premium','04-multi','tapping Multi'],
+              ['04-multi','05-matches-return','tapping Matches'],
+            ];
+            let navFail=0;
+            for (const [a,b,what] of mustDiffer) {
+              if (hash[a] && hash[a]===hash[b]) { console.log('FAIL: '+what+' did not change the screen ('+a+' == '+b+')'); navFail++; }
+              else console.log('PASS: '+what+' changed the screen');
+            }
+            if (navFail) process.exit(1);
           "
+          echo
+          echo '--- NAVIGATION assertions from inside the app ---'
+          # The probe records a pass/fail per tab with the reason. A tab that
+          # was not found, had zero size, or did not produce the expected
+          # content fails the job here rather than passing quietly.
+          if grep -q 'NAV-FAIL' artifacts/app.log 2>/dev/null; then
+            grep 'NAV-FAIL' artifacts/app.log | head -10
+            echo '  FAIL: at least one tab did not navigate'
+            exit 1
+          else
+            echo '  no NAV-FAIL recorded in the app log'
+          fi
           echo
           echo '--- HTTP failures and JS errors (redacted) ---'
           grep -iE 'NETWORK_FAIL|JS ERROR|unhandled rejection|didFail|WebContent.*crash' artifacts/app.log 2>/dev/null | head -20 || echo '  none found'

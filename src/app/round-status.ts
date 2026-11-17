@@ -109,3 +109,23 @@ export function nativeNavBehaviour(
     ? { action: "navigate", opensBrowserImmediately: false, rendersPremiumContent: true }
     : { action: "paywall", opensBrowserImmediately: false, rendersPremiumContent: false };
 }
+
+/**
+ * Whether to render account controls that only work on the website.
+ *
+ * MANAGE SUBSCRIPTION posts to /create-customer-portal, which returns 403
+ * unless the session is identityVerified -- unreachable in the shell, where
+ * the HttpOnly session cookie cannot be held. RESET ACCESS clears local auth
+ * state to re-trigger the email gate, and the shell has no such gate. Both can
+ * only confuse a native user, so they are hidden there and untouched on the
+ * web.
+ *
+ * Pure visibility: it performs no fetch and mutates no auth state.
+ */
+export function showsWebsiteOnlyAccountControls({
+  isNative,
+}: {
+  isNative: boolean;
+}): boolean {
+  return !isNative;
+}
