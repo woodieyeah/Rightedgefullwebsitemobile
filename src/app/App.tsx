@@ -4592,7 +4592,7 @@ function PaymentGateModal({
     setSubmitting(true);
     setErrorMsg("");
     try {
-      const res = await fetch(`/api/verify-premium-code`, {
+      const res = await fetch(resolveApiUrl(`/api/verify-premium-code`), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

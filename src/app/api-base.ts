@@ -83,12 +83,20 @@ export function resolveApiUrl(path: string, origin: string = currentOrigin()): s
 }
 
 /**
- * Endpoints whose handler reads the session cookie server-side.
+ * Endpoints whose handler reads the session cookie, requires verified
+ * identity, or establishes a session server-side.
  *
  * Derived from the edge function: every /admin/* route passes through
  * requireAdmin, and these named routes call getAuthSessionFromRequest,
- * clearAuthSession, or build a Stripe session for the signed-in customer.
- * A URL rewrite is not sufficient for any of them.
+ * clearAuthSession, writeAuthSessionCookie, demand identityVerified, or build
+ * a Stripe session for the signed-in customer. A URL rewrite is not sufficient
+ * for any of them.
+ *
+ * DO NOT hand-maintain this list from memory. tests/api_base_session_coverage
+ * .test.ts re-derives it from the backend and fails when a newly gated route
+ * is missing -- which is how /verify-premium-code (the actual login endpoint,
+ * added by the premium-auth security work) was caught after this file was
+ * first written.
  */
 const SESSION_DEPENDENT = new Set([
   "/api/auth/session",
@@ -100,6 +108,11 @@ const SESSION_DEPENDENT = new Set([
   "/api/create-checkout-session",
   "/api/create-customer-portal",
   "/api/confirm-checkout-session",
+  // Added by the identity-verification hotfix: redeeming an emailed code is
+  // what mints a verified session, and free registration both reads a
+  // presented session (same-address tier carry-over) and writes a cookie.
+  "/api/verify-premium-code",
+  "/api/register-free-access",
 ]);
 
 export function requiresSessionCredentials(path: string): boolean {
