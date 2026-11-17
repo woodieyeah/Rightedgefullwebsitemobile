@@ -6,6 +6,7 @@ import {
   openExternal,
   websiteUrl,
   NATIVE_PREMIUM_NOTICE,
+  PREMIUM_WEBSITE_PATH,
 } from "./native-shell.ts";
 import { HelmetProvider, Helmet } from "react-helmet-async";
 import {
@@ -15484,7 +15485,13 @@ export default function App() {
 
   const navigateToApp = (source: string = 'unknown') => {
     (window as any).trackAnalyticsEvent?.('unlock_click', { cta_source: source });
-    if (hasEmailAccess()) {
+    // The native shell cannot hold the session cookie the email gate depends
+    // on, so requiring hasEmailAccess() here left iPhone users staring at a
+    // gate with no way through. Opening the dashboard is not a bypass: the
+    // gate is email capture (tier === free|premium), not authorisation, and
+    // the dashboard's predictions come from a PUBLISHED Google Sheet CSV that
+    // needs no credentials. Premium and admin surfaces keep their own checks.
+    if (isNativeShell() || hasEmailAccess()) {
       setSitePage("app");
       window.location.hash = "matches";
     } else {
@@ -15503,32 +15510,34 @@ export default function App() {
     setShowEmailGate(true);
   };
 
+  // Every native Premium action funnels through here: the external browser is
+  // the only place the session cookie works, and the notice makes clear that
+  // signing in there does not sign in this app. Returns true when it handled
+  // the action, so callers return early instead of opening an in-app modal
+  // that cannot complete.
+  const handlePremiumNatively = (source: string): boolean => {
+    if (!isNativeShell()) return false;
+    (window as any).trackAnalyticsEvent?.("native_premium_external", { source });
+    void openExternal(websiteUrl(PREMIUM_WEBSITE_PATH)).then((opened) => {
+      if (!opened) return;
+      window.setTimeout(() => {
+        try {
+          window.alert(NATIVE_PREMIUM_NOTICE);
+        } catch {
+          /* a blocked alert must not break navigation */
+        }
+      }, 400);
+    });
+    return true;
+  };
+
   const requestPremiumAccess = (source: string = 'unknown') => {
     // In the native shell the Premium flow has to run on the website: the
     // backend reads its session from an HttpOnly, SameSite=Lax cookie and
     // replies with wildcard CORS and no allow-credentials, so a WKWebView on
     // capacitor://localhost can neither hold nor send that cookie. Attempting
     // the in-app flow would show a sign-in that silently 401s afterwards.
-    //
-    // Opening the system browser also means the user keeps whatever session
-    // they already have there. It does NOT sign this app in, and the notice
-    // says so rather than implying otherwise.
-    if (isNativeShell()) {
-      (window as any).trackAnalyticsEvent?.("native_premium_external", { source });
-      void openExternal(websiteUrl("/?premium=1")).then((opened) => {
-        if (!opened) return;
-        // Surfaced after the browser opens so it is read on return, not
-        // dismissed on the way out.
-        window.setTimeout(() => {
-          try {
-            window.alert(NATIVE_PREMIUM_NOTICE);
-          } catch {
-            /* a blocked alert must not break navigation */
-          }
-        }, 400);
-      });
-      return;
-    }
+    if (handlePremiumNatively(source)) return;
 
     let targetHash = ["matches", "best-bets", "multi"].includes(source)
       ? source
@@ -15582,6 +15591,17 @@ export default function App() {
 
     if (premiumHashes.includes(hash)) {
       trackHashPageView(hash);
+      // A direct premium hash in the native shell must hand off to the
+      // browser rather than open the in-app paywall, which cannot complete
+      // without the session cookie. Route back to the public dashboard so
+      // the app is left on a usable screen, not a dead modal.
+      if (handlePremiumNatively(`hash_${hash}`)) {
+        setShowPaymentGate(false);
+        setShowEmailGate(false);
+        setSitePage("app");
+        window.history.replaceState({}, document.title, `${window.location.pathname}#matches`);
+        return;
+      }
       setSitePage("app");
       setShowEmailGate(false);
 
@@ -15626,7 +15646,18 @@ export default function App() {
 
     if (appHashes.includes(hash)) {
       trackHashPageView(hash);
-      if (hasEmailAccess() || hasPaidAccess()) {
+      // The native shell cannot hold the cookie hasEmailAccess() reads, so
+      // these hashes were unreachable on iPhone. Only the genuinely public
+      // sections are opened this way -- NOT admin-results or model-lab, whose
+      // render guards require isAdmin, and not the premium hashes, which are
+      // handled and returned before this branch. Premium content inside these
+      // pages still gates on isPremium, which the native shell never gets.
+      const nativePublicHashes = ["matches", "multi", "performance"];
+      if (
+        (isNativeShell() && nativePublicHashes.includes(hash)) ||
+        hasEmailAccess() ||
+        hasPaidAccess()
+      ) {
         setShowEmailGate(false);
         setSitePage("app");
       } else {
@@ -16078,6 +16109,10 @@ export default function App() {
             isPremium={paidAccessState || isAdmin}
             isAdmin={isAdmin}
             onRequestAccess={(targetHash = "best-bets") => {
+              // Premium actions inside the dashboard must not open the
+              // in-app Stripe modal on iOS -- it depends on the session
+              // cookie the WKWebView cannot hold, so it is a dead end.
+              if (handlePremiumNatively(`dashboard_${targetHash}`)) return;
               setSitePage("app");
               window.location.hash = targetHash;
               if (hasPaidAccess()) {

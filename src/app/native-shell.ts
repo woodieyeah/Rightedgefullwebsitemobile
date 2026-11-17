@@ -98,6 +98,18 @@ export function websiteUrl(path = "/"): string {
 }
 
 /**
+ * The website route that opens Premium.
+ *
+ * Verified against the app's own routing: checkHash() treats `best-bets` as a
+ * premium hash and opens the paywall for it. There is NO `?premium=1` handler
+ * -- a query parameter would be silently ignored and the user would land on
+ * the plain home page. Note that any path returns HTTP 200 because index.html
+ * is served for everything, so a status code cannot validate a route here;
+ * only the client-side hash handling can.
+ */
+export const PREMIUM_WEBSITE_PATH = "/#best-bets";
+
+/**
  * Why Premium login leaves the app.
  *
  * The backend reads its session from an HttpOnly, SameSite=Lax cookie and
