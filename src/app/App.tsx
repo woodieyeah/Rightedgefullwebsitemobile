@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { resolveApiUrl, nativeSafeCredentials } from "./api-base.ts";
+import { describeRoundStatus, isPremiumNavTarget } from "./round-status.ts";
 import {
   isNativeShell,
   onNativeResume,
@@ -8843,6 +8844,20 @@ function PredictionsPage({
       )}
 
       <div className="grid grid-cols-1 gap-6 md:gap-8">
+        {rows.length === 0 && !selectedArchive && (
+          // Without this the page renders a silently empty grid when the
+          // season is over, which reads as a broken app. Say why, and point
+          // at the history that IS available.
+          <GlassCard className="p-6 md:p-8 text-center border-l-4 border-l-white/20">
+            <div className="text-sm md:text-base font-black uppercase tracking-widest text-white">
+              Season complete
+            </div>
+            <div className="mt-2 text-xs md:text-sm font-medium text-[#9CA3AF]">
+              No upcoming matches to predict. Use the round selector above to
+              browse previous rounds and results.
+            </div>
+          </GlassCard>
+        )}
         {rows.map((row, i) => {
           const projectedHomeScore = row.predictedHomeScore
             ? Math.round(row.predictedHomeScore)
@@ -14369,16 +14384,25 @@ function AnalyticsPage({ data }: { data: DashboardData }) {
 
 function RoundSwitcher({
   liveLabel,
+  upcomingCount,
   selectedArchiveRound,
   onSelectArchiveRound,
 }: {
   liveLabel: string;
+  upcomingCount: number;
   selectedArchiveRound: number | null;
   onSelectArchiveRound: (round: number | null) => void;
 }) {
   const [open, setOpen] = useState(false);
   const selectedArchive = ROUND_ARCHIVES.find((archive) => archive.round === selectedArchiveRound) || null;
-  const label = selectedArchive ? selectedArchive.label : `${liveLabel} Live`;
+  // The "Live" suffix and the pulsing dot used to be unconditional, so an
+  // off-season round advertised itself as live. Both now follow the data.
+  const status = describeRoundStatus({
+    label: liveLabel,
+    upcomingCount,
+    archiveSelected: Boolean(selectedArchive),
+  });
+  const label = selectedArchive ? selectedArchive.label : status.label;
 
   return (
     <div className="relative">
@@ -14387,7 +14411,7 @@ function RoundSwitcher({
         onClick={() => setOpen((value) => !value)}
         className="inline-flex items-center gap-2 bg-[#16161D] px-3 md:px-4 py-1.5 md:py-2 border border-[#1E1E2E] text-left transition hover:border-white/25"
       >
-        {!selectedArchive && (
+        {status.showLiveDot && (
           <span className="relative flex h-2.5 w-2.5">
             <span className="absolute inline-flex h-full w-full animate-ping-pong rounded-full bg-[#00E676] opacity-70" />
             <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-[#00E676]" />
@@ -14554,7 +14578,19 @@ function AppDashboard({
       );
   }, []);
 
+  const [nativePremiumNotice, setNativePremiumNotice] = useState(false);
+
   const handlePageChange = (newPage: string) => {
+    // Tapping a tab is exploration, not a request to buy. In the native shell
+    // "Plays" (best-bets) is a premium hash, so letting it reach the router
+    // would fire the premium handoff and throw the user into Safari on every
+    // tap. Show an in-app explanation instead; the user opens the website
+    // only by pressing the button inside it.
+    if (isNativeShell() && isPremiumNavTarget(newPage)) {
+      setNativePremiumNotice(true);
+      return;
+    }
+    setNativePremiumNotice(false);
     setPage(newPage);
     window.location.hash = newPage;
     window.scrollTo(0, 0);
@@ -14837,6 +14873,14 @@ function AppDashboard({
                   ) : null}
                   <RoundSwitcher
                     liveLabel={data?.currentRoundLabel || "Round 1"}
+                    // "Live" must be derived from whether anything is
+                    // actually still to be played, not asserted. During the
+                    // off-season this is 0 and the switcher says Complete.
+                    upcomingCount={
+                      (data?.predictions || []).filter(
+                        (row) => !hasPredictionKickedOff(row),
+                      ).length
+                    }
                     selectedArchiveRound={selectedArchiveRound}
                     onSelectArchiveRound={setSelectedArchiveRound}
                   />
@@ -14894,7 +14938,43 @@ function AppDashboard({
                   isAdmin={isAdmin}
                 />
               )}
-              {page === "matches" && (
+              {nativePremiumNotice && (
+                // Native-only. Explains what Plays is and leaves the decision
+                // to open the website with the user, rather than launching the
+                // browser the moment they touch the tab. No premium content is
+                // rendered here, and website sign-in is explicitly NOT native
+                // sign-in.
+                <GlassCard className="p-6 md:p-8 border-l-4 border-l-[#00E676]">
+                  <div className="text-sm md:text-base font-black uppercase tracking-widest text-white">
+                    Plays is a Premium feature
+                  </div>
+                  <div className="mt-2 text-xs md:text-sm font-medium text-[#9CA3AF]">
+                    Core Plays, best H2H and try scorer value for every match.
+                    Premium runs on the RightEdge website for now — signing in
+                    there does not sign in this app yet.
+                  </div>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => onRequestAccess("best-bets")}
+                      className="inline-flex h-9 items-center justify-center bg-white px-4 text-xs font-medium text-[#0A0A0F] transition hover:opacity-85"
+                    >
+                      Open Premium on the website
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNativePremiumNotice(false);
+                        handlePageChange("matches");
+                      }}
+                      className="inline-flex h-9 items-center justify-center border border-[#1E1E2E] px-4 text-xs font-medium text-[#9CA3AF] transition hover:border-white/30 hover:text-white"
+                    >
+                      Back to free predictions
+                    </button>
+                  </div>
+                </GlassCard>
+              )}
+              {page === "matches" && !nativePremiumNotice && (
                 <PredictionsPage
                   data={data}
                   onRequestAccess={onRequestAccess}
