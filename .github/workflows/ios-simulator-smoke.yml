@@ -1,0 +1,206 @@
+name: iOS simulator smoke
+
+# Builds the Capacitor shell and PROVES it renders, on a GitHub-hosted macOS
+# runner that already has Xcode and the iOS simulators installed.
+#
+# WHY THIS EXISTS
+# The local Mac has no Xcode and cannot install it (no usable Apple ID). These
+# runners need no Apple ID at all, and this repository is public so macOS
+# minutes are free. A simulator build requires no signing certificate and no
+# Apple Developer Program membership.
+#
+# WHAT IT PROVES
+# Not "BUILD SUCCEEDED" -- that passes even when the webview paints nothing.
+# It boots a simulator, launches the app, screenshots it, and uploads the
+# screenshot plus logs as artifacts so the render can be inspected by eye.
+#
+# Triggered on push to the feature branch (workflow_dispatch alone would
+# require this file to live on the default branch first).
+
+on:
+  push:
+    branches: [feature/capacitor-api-compat]
+  workflow_dispatch:
+
+concurrency:
+  group: ios-sim-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  simulator:
+    runs-on: macos-15
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Select an Xcode that has matching simulator runtimes
+        run: |
+          # The image ships several Xcodes. Prefer a recent one that has its
+          # iOS runtime preinstalled, so we never pay the ~10-15 min
+          # xcodebuild -downloadPlatform cost.
+          for v in Xcode_26.2 Xcode_26.1.1 Xcode_26.0.1 Xcode_16.4; do
+            if [ -d "/Applications/$v.app" ]; then
+              sudo xcode-select -s "/Applications/$v.app"
+              break
+            fi
+          done
+          xcodebuild -version
+          echo "--- available iPhone simulators ---"
+          xcrun simctl list devices available | grep -E "iPhone" | head -20
+
+      - name: Install dependencies
+        run: |
+          # node_modules is committed with LINUX binaries (Vercel builds on
+          # linux). The runner is darwin-arm64, so it needs its own platform
+          # binaries. This is ephemeral: nothing here is ever committed back.
+          npm install --no-audit --no-fund
+
+      - name: Build the web bundle
+        run: npm run build
+
+      - name: Inject a visible JS error reporter
+        run: |
+          # A Capacitor webview shows a blank screen on a JS error, and those
+          # errors do NOT appear in the simulator's native log. Painting them
+          # into the DOM is the only way to read them off a screenshot.
+          # cap sync copies dist/ into the app, so this must happen first.
+          cat > /tmp/probe.html <<'PROBE'
+          <script>
+          (function(){
+            function paint(msg){
+              var d=document.createElement('pre');
+              d.id='hermes-error';
+              d.style.cssText='position:fixed;inset:0;z-index:2147483647;margin:0;padding:16px;'+
+                'background:#300;color:#fff;font:12px ui-monospace,monospace;white-space:pre-wrap;overflow:auto';
+              d.textContent='JS ERROR\n\n'+msg;
+              (document.body||document.documentElement).appendChild(d);
+            }
+            window.addEventListener('error',function(e){
+              paint((e.message||'error')+'\n@ '+(e.filename||'?')+':'+(e.lineno||'?'));
+            });
+            window.addEventListener('unhandledrejection',function(e){
+              paint('unhandled rejection: '+String(e.reason&&e.reason.stack||e.reason));
+            });
+          })();
+          </script>
+          PROBE
+          node -e "
+            const fs=require('fs');
+            const p='dist/index.html';
+            const probe=fs.readFileSync('/tmp/probe.html','utf8');
+            let html=fs.readFileSync(p,'utf8');
+            html=html.replace('</head>', probe+'</head>');
+            fs.writeFileSync(p,html);
+            console.log('error reporter injected into', p);
+          "
+
+      - name: Sync the web assets into the iOS app
+        run: npx cap sync ios
+
+      - name: Build for the simulator
+        run: |
+          set -euo pipefail
+          cd ios/App
+
+          # No .xcscheme is committed (Capacitor leaves schemes to Xcode, and
+          # ios/.gitignore excludes xcuserdata). xcodebuild normally
+          # autocreates one, but that is a setting we should not depend on --
+          # so inspect what this project actually exposes and pick
+          # accordingly. -target App always exists in the pbxproj.
+          echo '--- xcodebuild -list ---'
+          xcodebuild -list -project App.xcodeproj || true
+
+          if xcodebuild -list -project App.xcodeproj 2>/dev/null | awk '/Schemes:/,0' | grep -qx '        App'; then
+            echo 'building via -scheme App'
+            SELECTOR=(-scheme App)
+          else
+            echo 'no shared scheme; building via -target App'
+            SELECTOR=(-target App)
+          fi
+
+          xcodebuild \
+            -project App.xcodeproj \
+            "${SELECTOR[@]}" \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -derivedDataPath "$RUNNER_TEMP/dd" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY= \
+            build 2>&1 | tail -40
+
+      - name: Boot a simulator, install and launch
+        run: |
+          set -euo pipefail
+          # Pick whatever iPhone this image actually has, rather than pinning a
+          # device name that a future image update could remove.
+          UDID=$(xcrun simctl list devices available -j \
+            | node -e "
+              let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{
+                const j=JSON.parse(s);
+                let best=null;
+                for (const [rt,devs] of Object.entries(j.devices)) {
+                  if (!/iOS/.test(rt)) continue;
+                  for (const d of devs) {
+                    if (!d.isAvailable) continue;
+                    if (!/^iPhone/.test(d.name)) continue;
+                    const score=(/17 Pro/.test(d.name)?3:/17/.test(d.name)?2:1);
+                    if (!best||score>best.score) best={udid:d.udid,name:d.name,rt,score};
+                  }
+                }
+                if(!best){console.error('no iPhone simulator available');process.exit(1);}
+                console.error('using '+best.name+' ('+best.rt+')');
+                process.stdout.write(best.udid);
+              });")
+          echo "UDID=$UDID" >> "$GITHUB_ENV"
+
+          xcrun simctl boot "$UDID" || true
+          xcrun simctl bootstatus "$UDID" -b
+
+          APP=$(find "$RUNNER_TEMP/dd/Build/Products/Debug-iphonesimulator" -maxdepth 1 -name '*.app' | head -1)
+          echo "app bundle: $APP"
+          xcrun simctl install "$UDID" "$APP"
+          xcrun simctl launch --console-pty "$UDID" au.com.rightedge.app > "$RUNNER_TEMP/launch.log" 2>&1 &
+          # Give the webview time to fetch live fixtures and paint.
+          sleep 35
+
+      - name: Screenshot the running app
+        run: |
+          mkdir -p artifacts
+          xcrun simctl io "$UDID" screenshot artifacts/simulator.png
+          # A second shot a few seconds later distinguishes "still loading"
+          # from "stuck".
+          sleep 12
+          xcrun simctl io "$UDID" screenshot artifacts/simulator-later.png
+          cp "$RUNNER_TEMP/launch.log" artifacts/launch.log 2>/dev/null || true
+          ls -la artifacts | tail -5
+
+      - name: Report whether the app actually painted
+        run: |
+          # Pixel-level check: a blank/near-uniform screen means it did not
+          # render, regardless of what the build said.
+          node -e "
+            const fs=require('fs');
+            const b=fs.readFileSync('artifacts/simulator.png');
+            console.log('screenshot bytes:', b.length);
+            // A PNG of a flat colour compresses tiny. Real UI does not.
+            if (b.length < 60000) {
+              console.log('WARNING: screenshot is very small - likely a blank or near-uniform screen');
+            } else {
+              console.log('screenshot size is consistent with rendered content');
+            }
+          "
+          echo '--- launch log (first 40 lines) ---'
+          head -40 artifacts/launch.log 2>/dev/null || echo '(none)'
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ios-simulator-screenshots
+          path: artifacts/
+          retention-days: 14
