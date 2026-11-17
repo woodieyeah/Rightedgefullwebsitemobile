@@ -196,9 +196,11 @@ test("/create-customer-portal requires an authenticated session for that email",
   assert.match(body, /getAuthSessionFromRequest/, "no session is read");
   assert.match(body, /401/, "an unauthenticated caller is not refused");
   assert.match(body, /403/, "a mismatched session is not refused");
-  // The Stripe customer must be resolved from the SESSION email. The body's
-  // email may only be compared against it.
-  assert.match(body, /customers\.list\(\s*\{\s*email:\s*session\.email/);
+  // The Stripe customer must be resolved from the SESSION email. The local
+  // variable is authSession here because `session` is already the Stripe
+  // portal session later in this handler — a duplicate declaration broke the
+  // worker boot once, so the name must stay distinct.
+  assert.match(body, /customers\.list\(\s*\{\s*email:\s*authSession\.email/);
   assert.doesNotMatch(
     body,
     /customers\.list\(\s*\{\s*email\s*,/,

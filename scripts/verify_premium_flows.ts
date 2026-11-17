@@ -84,7 +84,7 @@ function has(body: string, re: RegExp) {
     checks: [
       { label: "portal requires a session", ok: has(portal, /getAuthSessionFromRequest/) && has(portal, /401/) },
       { label: "portal refuses a mismatched email with 403", ok: has(portal, /403/) },
-      { label: "portal resolves the customer from session.email", ok: has(portal, /customers\.list\(\s*\{\s*email:\s*session\.email/) },
+      { label: "portal resolves the customer from the session email", ok: has(portal, /customers\.list\(\s*\{\s*email:\s*authSession\.email/) },
       { label: "portal still returns a billingPortal URL", ok: has(portal, /billingPortal\.sessions\.create/) },
       { label: "retention requires a session", ok: has(retention, /getAuthSessionFromRequest/) && has(retention, /401/) },
       { label: "retention refuses a mismatched email with 403", ok: has(retention, /403/) },
@@ -116,7 +116,7 @@ function has(body: string, re: RegExp) {
       { label: "verify-email: no session, code goes to the victim's inbox", ok: !has(verify, /createAuthSession/) },
       { label: "checkout: no access link", ok: !has(checkout, /createInstantAccessUrl/) },
       { label: "portal: 401 without a session", ok: has(portal, /401/) },
-      { label: "portal: 403 when the session is another account", ok: has(portal, /session\.email !== email[\s\S]{0,300}403/) },
+      { label: "portal: 403 when the session is another account", ok: has(portal, /authSession\.email !== email[\s\S]{0,300}403/) },
       { label: "retention: 403 when the session is another account", ok: has(retention, /session\.email !== email[\s\S]{0,300}403/) },
       { label: "no instant-access capability remains", ok: !/kv\.(set|get|del)\(\s*`instant_access:/.test(server) },
       { label: "code is bound to its email in the HMAC payload", ok: /\$\{normalizePremiumEmail\(email\)\}:\$\{code\}/.test(readFileSync("supabase/functions/server/premium_auth.ts", "utf8")) },

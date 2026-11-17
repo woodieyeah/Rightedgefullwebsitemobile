@@ -4,3 +4,4 @@ website bundle css: /assets/index-CVRuaDuR.css
 production main   : 593358d8 Move the grand final core play to the standard line
 hotfix commit     : 8f3f99a8 Rewrite the release plan with the corrected deploy order
 pre-patch edge    : /verify-premium-code 404, portal 404 (no auth gate)
+PATCH_DEPLOY_CUTOFF=2026-11-17T05:50:19Z

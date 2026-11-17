@@ -3779,13 +3779,15 @@ app.post("/create-customer-portal", async (c) => {
     // A billing portal session can change payment details and cancel a
     // subscription, so the caller must prove they are this customer. An email
     // in the request body proves nothing.
-    const session = await getAuthSessionFromRequest(c);
-    if (!session) {
+    // Named authSession because `session` is already the Stripe portal
+    // session further down this handler.
+    const authSession = await getAuthSessionFromRequest(c);
+    if (!authSession) {
       return c.json({ error: "Please sign in to manage your subscription." }, 401);
     }
-    if (session.email !== email) {
+    if (authSession.email !== email) {
       console.warn(
-        `[create-customer-portal] Session ${session.email} attempted to open the portal for ${email}`,
+        `[create-customer-portal] Session ${authSession.email} attempted to open the portal for ${email}`,
       );
       return c.json({ error: "Please sign in to manage your subscription." }, 403);
     }
@@ -3795,7 +3797,7 @@ app.post("/create-customer-portal", async (c) => {
 
     const stripe = new Stripe(stripeKey, { apiVersion: "2023-10-16" });
     // Resolve the customer from the SESSION's email, never the body's.
-    const customers = await stripe.customers.list({ email: session.email, limit: 1 });
+    const customers = await stripe.customers.list({ email: authSession.email, limit: 1 });
 
     if (customers.data.length === 0) {
       return c.json({ error: "No active subscription found for this email." }, 404);
