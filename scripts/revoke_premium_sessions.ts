@@ -53,6 +53,13 @@ type Session = {
   createdAt?: string;
   expiresAt?: string;
   adminVerified?: boolean;
+  /**
+   * Set only by a redeemed emailed code or the admin email challenge, both of
+   * which require possession of the inbox. No session minted before the
+   * identity patch carries it, so honouring it can never spare a compromised
+   * session — it can only protect a provably legitimate one.
+   */
+  identityVerified?: boolean;
 };
 
 async function rest(path: string, init: RequestInit = {}) {
@@ -94,6 +101,7 @@ async function fetchAllSessions(): Promise<Session[]> {
         createdAt: parsed?.createdAt,
         expiresAt: parsed?.expiresAt,
         adminVerified: Boolean(parsed?.adminVerified),
+        identityVerified: parsed?.identityVerified === true,
       });
     }
     if (rows.length < PAGE) break;
@@ -157,6 +165,12 @@ function isPreCutoff(session: Session): boolean {
 
 /** The exact predicate for revocation. Anything else is out of scope. */
 function isTarget(session: Session, now: number): boolean {
+  // A session carrying identityVerified was minted by the patched backend
+  // after a redeemed emailed code or the admin challenge, so its holder
+  // provably controls the address. Spare it even if a clock skew or a
+  // mis-set cutoff would otherwise catch it: this flag cannot exist on a
+  // session created by any of the vulnerable paths.
+  if (session.identityVerified) return false;
   return (
     session.key.startsWith(SESSION_PREFIX) &&
     session.tier === "premium" &&
@@ -172,10 +186,16 @@ async function main() {
   const targets = all.filter((s) => isTarget(s, now));
   const premiumExpired = all.filter((s) => s.tier === "premium" && !isLive(s, now));
   const free = all.filter((s) => s.tier !== "premium");
-  // Live premium sessions minted AFTER the cutoff: the corrected flow's work.
+  // Live premium sessions the corrected flow produced: either created after
+  // the cutoff, or carrying identityVerified (which only the patched backend
+  // can set). Mirrors isTarget exactly so the partition closes.
   const preserved = all.filter(
-    (s) => s.tier === "premium" && isLive(s, now) && !isPreCutoff(s),
+    (s) =>
+      s.tier === "premium" &&
+      isLive(s, now) &&
+      (s.identityVerified || !isPreCutoff(s)),
   );
+  const preservedByFlag = preserved.filter((s) => s.identityVerified).length;
 
   const accounts = new Map<string, { sessions: number; oldest?: string; newest?: string; admin: boolean }>();
   for (const t of targets) {
@@ -195,6 +215,7 @@ async function main() {
   console.log(`  free (untouched) ............ ${free.length}`);
   console.log(`  premium already expired ..... ${premiumExpired.length} (untouched)`);
   console.log(`  premium AFTER cutoff ........ ${preserved.length} (PRESERVED — corrected flow)`);
+  console.log(`    of which identity-verified  ${preservedByFlag} (spared by flag, not by clock)`);
   console.log(`  TARGETED for revocation ..... ${targets.length}`);
   console.log(`  distinct accounts affected .. ${accounts.size}`);
   const adminCount = [...accounts.values()].filter((a) => a.admin).length;
@@ -247,6 +268,7 @@ async function main() {
         targetedKeys: targets.length,
         distinctAccounts: accounts.size,
         preservedPostCutoff: preserved.length,
+        preservedByIdentityFlag: preservedByFlag,
         freeUntouched: free.length,
         premiumExpiredUntouched: premiumExpired.length,
         // Keys contain the session token, so the manifest stores digests only.
@@ -281,7 +303,10 @@ async function main() {
   const nowAfter = Date.now();
   const remaining = after.filter((s) => isTarget(s, nowAfter));
   const preservedAfter = after.filter(
-    (s) => s.tier === "premium" && isLive(s, nowAfter) && !isPreCutoff(s),
+    (s) =>
+      s.tier === "premium" &&
+      isLive(s, nowAfter) &&
+      (s.identityVerified || !isPreCutoff(s)),
   );
   console.log(`\n  targeted sessions remaining: ${remaining.length} (expect 0)`);
   console.log(`  post-cutoff premium preserved: ${preservedAfter.length} (was ${preserved.length})`);
