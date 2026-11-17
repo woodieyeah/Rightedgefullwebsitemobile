@@ -185,17 +185,23 @@ jobs:
             function findTab(labelText){
               var want = labelText.toUpperCase();
               var nodes = document.querySelectorAll('button, a');
-              // Exact match first (tab labels are exact), then a contains
-              // match, because CTAs wrap an icon and extra whitespace --
-              // "View Free Round Predictions →" never equals the bare label.
+              // Only consider VISIBLE candidates. The desktop sidebar nav is
+              // present in the DOM but display:none on a phone, and it uses
+              // the same "Matches" label as the bottom tab bar -- so an
+              // unfiltered search returned the hidden one and reported
+              // "tab has zero size".
+              function visible(el){
+                var r = el.getBoundingClientRect();
+                return r.width > 0 && r.height > 0;
+              }
+              var exact = [], loose = [];
               for (var i=0;i<nodes.length;i++){
-                if ((nodes[i].textContent||'').trim().toUpperCase() === want) return nodes[i];
+                if (!visible(nodes[i])) continue;
+                var t=(nodes[i].textContent||'').trim().toUpperCase();
+                if (t === want) exact.push(nodes[i]);
+                else if (t.indexOf(want) !== -1 && t.length < want.length + 24) loose.push(nodes[i]);
               }
-              for (var j=0;j<nodes.length;j++){
-                var t=(nodes[j].textContent||'').trim().toUpperCase();
-                if (t.indexOf(want) !== -1 && t.length < want.length + 24) return nodes[j];
-              }
-              return null;
+              return exact[0] || loose[0] || null;
             }
             function record(step, ok, why, extra){
               var e = {step:step, ok:ok, why:why};

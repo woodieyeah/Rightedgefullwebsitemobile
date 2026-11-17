@@ -14435,8 +14435,8 @@ function RoundSwitcher({
                 : "text-[#9CA3AF] hover:bg-white/[0.05] hover:text-white"
             }`}
           >
-            <span>{liveLabel} Live</span>
-            <span className="h-2 w-2 bg-[#00E676]" />
+            <span>{status.isLive ? `${liveLabel} Live` : `${liveLabel} Complete`}</span>
+            {status.isLive && <span className="h-2 w-2 bg-[#00E676]" />}
           </button>
           {ROUND_ARCHIVES.map((archive) => (
             <button
@@ -14896,13 +14896,29 @@ function AppDashboard({
                   />
                 </>
               ) : (
-                <span className="inline-flex items-center gap-2 bg-[#16161D] px-3 md:px-4 py-1.5 md:py-2 border border-[#1E1E2E]">
-                  <span className="relative flex h-2.5 w-2.5">
-                    <span className="absolute inline-flex h-full w-full animate-ping-pong rounded-full bg-[#00E676] opacity-70" />
-                    <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-[#00E676]" />
-                  </span>
-                  <span>{data?.currentRoundLabel || "Round 1"} Live</span>
-                </span>
+                (() => {
+                  // Same rule as RoundSwitcher: "Live" and the pulsing dot are
+                  // derived from whether anything is still to be played. This
+                  // badge is what the Multi and Plays pages show, and it was
+                  // still asserting "Round 31 Live" during the off-season.
+                  const badge = describeRoundStatus({
+                    label: data?.currentRoundLabel || "Round 1",
+                    upcomingCount: (data?.predictions || []).filter(
+                      (row) => !hasPredictionKickedOff(row),
+                    ).length,
+                  });
+                  return (
+                    <span className="inline-flex items-center gap-2 bg-[#16161D] px-3 md:px-4 py-1.5 md:py-2 border border-[#1E1E2E]">
+                      {badge.showLiveDot && (
+                        <span className="relative flex h-2.5 w-2.5">
+                          <span className="absolute inline-flex h-full w-full animate-ping-pong rounded-full bg-[#00E676] opacity-70" />
+                          <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-[#00E676]" />
+                        </span>
+                      )}
+                      <span>{badge.label}</span>
+                    </span>
+                  );
+                })()
               )}
             </div>
           </div>

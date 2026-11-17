@@ -64,14 +64,43 @@ test("a missing or malformed count is treated as not-live", () => {
   }
 });
 
+test("every live badge derives from the data, not a hardcoded suffix", () => {
+  // Three places rendered "<round> Live" unconditionally: RoundSwitcher's
+  // button, its dropdown row, and the standalone badge on Multi/Plays. The
+  // simulator caught the third still saying "ROUND 31 LIVE" off-season.
+  //
+  // Match a JSX expression immediately followed by the bare word Live as
+  // TEXT -- `{x} Live<` -- which is the broken form. A ternary that already
+  // chooses between Live and Complete puts "Live" inside a template literal
+  // followed by a backtick, so it is correctly ignored.
+  const hardcoded = [...app.matchAll(/\{(?:data\?\.)?(?:liveLabel|currentRoundLabel)(?:\s*\|\|\s*"[^"]*")?\}\s*Live\s*</g)];
+  assert.equal(
+    hardcoded.length,
+    0,
+    `found ${hardcoded.length} unconditional "Live" label(s): ${hardcoded.map((m) => m[0]).join(" | ")}`,
+  );
+});
+
+test("the standalone round badge uses describeRoundStatus", () => {
+  // The badge shown on Multi and Plays.
+  assert.match(
+    app,
+    /const badge = describeRoundStatus\(\{/,
+    "the standalone round badge still hardcodes its label",
+  );
+});
+
 test("RoundSwitcher no longer hardcodes the Live suffix", () => {
   const i = app.indexOf("function RoundSwitcher(");
   assert.ok(i !== -1, "RoundSwitcher not found");
   const fn = app.slice(i, i + 3000);
+  // The old form built the label unconditionally. The current form asks
+  // describeRoundStatus and only uses the Live wording when it says so.
   assert.doesNotMatch(
     fn,
-    /`\$\{liveLabel\} Live`/,
+    /const label = selectedArchive \? selectedArchive\.label : `\$\{liveLabel\} Live`/,
     "the label still appends Live unconditionally",
   );
   assert.match(fn, /describeRoundStatus\(/, "RoundSwitcher does not use the derived status");
+  assert.match(fn, /status\.isLive/, "RoundSwitcher ignores the derived liveness");
 });
