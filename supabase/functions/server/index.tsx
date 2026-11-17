@@ -81,6 +81,16 @@ type StoredAuthSession = {
 
 const PREMIUM_ACTIVE_STRIPE_STATUSES = new Set(["active", "trialing"]);
 
+/**
+ * How long a completed Stripe checkout may be re-confirmed.
+ *
+ * A legitimate customer can land on the success URL and refresh, or have the
+ * request retried, within moments. Beyond this window a repeat POST of the
+ * same cs_ id is a replay: the id is long-lived, retrievable from Stripe
+ * forever, and travels in a URL, so it must stop minting sessions.
+ */
+const CHECKOUT_CONFIRM_GRACE_MS = 30 * 60 * 1000;
+
 function buildAuthSessionKey(token: string) {
   return `auth_session:${token}`;
 }
@@ -4932,10 +4942,49 @@ app.post("/confirm-checkout-session", async (c) => {
     });
 
     await syncResendLifecycle(email, "premium");
-    // identityVerified: Stripe confirmed a completed payment for this
-    // address (payment_status === "paid" was checked above), and the email
-    // comes from Stripe's own session record, not the request body.
-    const authSession = await createAuthSession(email, "premium", false, true);
+
+    // REPLAY CONTAINMENT.
+    //
+    // A cs_ id stays retrievable from Stripe indefinitely, and it travels in
+    // a URL — browser history, a shared link, a referrer log. Without a
+    // marker, anyone holding it could POST it again and be handed a fresh
+    // premium session for that email.
+    //
+    // The legitimate case is a page refresh moments after returning from
+    // Stripe, so the first confirmation opens a short grace window. Replays
+    // inside it still work; replays after it get no session and are told to
+    // sign in with an emailed code instead.
+    const usedKey = `checkout_session_used:${session.id}`;
+    const firstUse = parseKvValue<{ confirmedAt: string }>(await kv.get(usedKey));
+    const withinGrace =
+      !firstUse ||
+      Date.now() - Date.parse(firstUse.confirmedAt) <= CHECKOUT_CONFIRM_GRACE_MS;
+
+    if (!firstUse) {
+      await kv.set(usedKey, JSON.stringify({ confirmedAt: new Date().toISOString() }));
+    }
+
+    if (!withinGrace) {
+      console.warn(`[confirm-checkout-session] Stale replay refused for ${session.id}`);
+      return c.json(
+        {
+          error: "This checkout has already been confirmed. Please sign in with the code we email you.",
+          verificationRequired: true,
+          email,
+        },
+        409,
+      );
+    }
+
+    // identityVerified stays FALSE here on purpose.
+    //
+    // Stripe confirms that someone paid and typed this address. It does not
+    // confirm they control the inbox: the checkout email is customer-supplied,
+    // so an attacker could pay using a victim's address. Payment therefore
+    // grants PREMIUM ENTITLEMENT (the tier) but never the authority to manage
+    // Stripe customers attached to that address. Billing access requires a
+    // redeemed emailed code.
+    const authSession = await createAuthSession(email, "premium");
     writeAuthSessionCookie(c, authSession.token);
 
     if (isNewSubscriber) {

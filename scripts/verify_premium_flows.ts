@@ -132,8 +132,8 @@ function has(body: string, re: RegExp) {
   flows.push({
     name: "Unchanged: free email gate, Stripe webhooks, admin auth",
     checks: [
-      { label: "free access gate still mints a session (tier via sessionTier)", ok: has(free, /createAuthSession\(\s*email\s*,\s*sessionTier\s*\)/) && has(free, /writeAuthSessionCookie/) },
-      { label: "free gate preserves an existing premium tier", ok: has(free, /existingSession\?\.tier === "premium" \? "premium" : "free"/) },
+      { label: "free access gate still mints a session (tier via sessionTier)", ok: has(free, /createAuthSession\(\s*email\s*,\s*sessionTier/) && has(free, /writeAuthSessionCookie/) },
+      { label: "free gate carries premium ONLY for the same verified address", ok: has(free, /sameAddress/) && has(free, /existingSession\?\.email === email/) && has(free, /identityVerified === true/) },
       { label: "Stripe webhook still syncs subscribers", ok: /invoice\.payment_succeeded/.test(server) && /customer\.subscription\.deleted/.test(server) },
       { label: "webhook signature still verified", ok: /constructEventAsync|webhooks\.constructEvent/.test(server) },
       { label: "admin routes still gated by middleware", ok: /app\.use\("\/admin\/\*"/.test(server) },

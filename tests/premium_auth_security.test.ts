@@ -285,12 +285,15 @@ test("the premium modal has a code step wired to /verify-premium-code", () => {
 });
 
 test("the premium session tier is only granted on a verified path", () => {
-  // Every place that mints a premium session must be reachable only after
-  // either a verified code or a paid Stripe checkout.
+  // "Verified" here means the TIER is justified: either a redeemed emailed
+  // code (which also proves identity) or a confirmed Stripe payment (which
+  // proves entitlement but NOT email ownership). Both are acceptable grounds
+  // for the premium tier; only the former may set identityVerified, which is
+  // asserted separately in checkout_not_identity.test.ts.
   const premiumGrants = [...serverSource.matchAll(/createAuthSession\([^)]*["']premium["']/g)];
   assert.ok(premiumGrants.length > 0, "no premium session is ever created");
   for (const grant of premiumGrants) {
-    const before = serverSource.slice(Math.max(0, grant.index! - 2_600), grant.index!);
+    const before = serverSource.slice(Math.max(0, grant.index! - 4_000), grant.index!);
     const proven =
       /verifyAndConsumePremiumChallenge/.test(before) ||
       /payment_status/.test(before) ||

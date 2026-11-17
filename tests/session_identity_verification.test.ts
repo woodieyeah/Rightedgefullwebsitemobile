@@ -122,13 +122,19 @@ test("/verify-premium-code mints a verified session", () => {
   );
 });
 
-test("/confirm-checkout-session mints a verified session", () => {
+test("/confirm-checkout-session grants premium but NOT verified identity", () => {
   const body = routeBody("/confirm-checkout-session");
   assert.match(body, /payment_status/);
-  assert.match(
-    body,
-    /createAuthSession\([^)]*true/,
-    "a paid Stripe checkout must produce a verified session",
+  // Payment proves someone paid using this address, not that they control
+  // the inbox — the checkout email is customer-supplied. So premium tier is
+  // granted, identity is not. Billing management needs an emailed code.
+  assert.match(body, /createAuthSession\(\s*email\s*,\s*"premium"\s*\)/);
+  const mint = body.match(/createAuthSession\(([\s\S]*?)\);/);
+  assert.ok(mint);
+  assert.doesNotMatch(
+    mint[1],
+    /\btrue\b/,
+    "a Stripe payment must not set identityVerified",
   );
 });
 
