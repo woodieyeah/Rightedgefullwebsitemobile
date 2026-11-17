@@ -65,6 +65,20 @@ test("the header inset uses max() so the web layout is unchanged", () => {
   );
 });
 
+test("the app shell clears the Dynamic Island too", () => {
+  // The dashboard ("app") branch originally used a plain py-4/sm:py-6, so the
+  // BACK TO HOME / MANAGE SUBSCRIPTION row rendered under the status bar and
+  // Dynamic Island even after the marketing header was fixed.
+  const shell = app.match(/sitePage === "app" \? "[^"]+"/);
+  assert.ok(shell, "the app shell class string was not found");
+  assert.match(
+    shell[0],
+    /pt-\[calc\(1rem\+max\(0px,env\(safe-area-inset-top\)\)\)\]/,
+    "the app dashboard has no top safe-area inset",
+  );
+  assert.doesNotMatch(shell[0], /\bpy-4\b/, "py-4 reintroduces the overlap");
+});
+
 test("the bottom nav keeps its existing home-indicator inset", () => {
   // This one was already correct in source; it was only ever dead because
   // viewport-fit was missing. It must survive the change.

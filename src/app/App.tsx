@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { resolveApiUrl } from "./api-base.ts";
+import { resolveApiUrl, nativeSafeCredentials } from "./api-base.ts";
 import {
   isNativeShell,
   onNativeResume,
@@ -3209,7 +3209,11 @@ async function fetchRoundSnapshots(round: number): Promise<FrozenSnapshot[]> {
     const res = await fetch(resolveApiUrl(`/api/round-snapshots?round=${round}`), {
       method: "GET",
       headers: { Authorization: `Bearer ${publicAnonKey}` },
-      credentials: "include",
+      // Public read. Natively this MUST NOT send credentials: the
+      // edge function uses wildcard CORS, and a credentialed
+      // cross-origin request against `*` is rejected by the
+      // browser before any response exists. Unchanged on web.
+      credentials: nativeSafeCredentials("/api/round-snapshots"),
     });
     if (!res.ok) return [];
     const json = await res.json();
@@ -3224,7 +3228,11 @@ async function fetchRoundResults(round: number): Promise<SavedRoundResult[]> {
     const res = await fetch(resolveApiUrl(`/api/round-results?round=${round}`), {
       method: "GET",
       headers: { Authorization: `Bearer ${publicAnonKey}` },
-      credentials: "include",
+      // Public read. Natively this MUST NOT send credentials: the
+      // edge function uses wildcard CORS, and a credentialed
+      // cross-origin request against `*` is rejected by the
+      // browser before any response exists. Unchanged on web.
+      credentials: nativeSafeCredentials("/api/round-results"),
     });
     if (!res.ok) return [];
     const json = await res.json();
@@ -16047,7 +16055,7 @@ export default function App() {
       <div className="absolute inset-0 pointer-events-none" />
 
       <div
-        className={`max-w-[1200px] mx-auto relative z-10 flex flex-col ${sitePage === "app" ? "gap-10 px-3 py-4 sm:px-6 sm:py-6" : "gap-3 sm:gap-4 px-6 pb-6 pt-[calc(72px+max(0px,env(safe-area-inset-top)))] sm:pt-[calc(80px+max(0px,env(safe-area-inset-top)))]"}`}
+        className={`max-w-[1200px] mx-auto relative z-10 flex flex-col ${sitePage === "app" ? "gap-10 px-3 pb-4 pt-[calc(1rem+max(0px,env(safe-area-inset-top)))] sm:px-6 sm:pb-6 sm:pt-[calc(1.5rem+max(0px,env(safe-area-inset-top)))]" : "gap-3 sm:gap-4 px-6 pb-6 pt-[calc(72px+max(0px,env(safe-area-inset-top)))] sm:pt-[calc(80px+max(0px,env(safe-area-inset-top)))]"}`}
       >
         <div
           className={

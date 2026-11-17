@@ -123,6 +123,42 @@ export function requiresSessionCredentials(path: string): boolean {
 }
 
 /**
+ * The credentials mode a call site should use for a given path.
+ *
+ * On the website this is always "include" -- identical to the behaviour before
+ * this helper existed, because those requests are same-origin through the
+ * /api/* rewrite and CORS never applies.
+ *
+ * In the native shell the origin is capacitor://localhost and the edge
+ * function replies `Access-Control-Allow-Origin: *` with no
+ * `Access-Control-Allow-Credentials`. A browser REFUSES a credentialed
+ * cross-origin request against a wildcard origin, rejecting the fetch before
+ * any response exists -- a statusless network failure, not an HTTP error. That
+ * is what left the native MATCHES dashboard with no match cards while
+ * /round-results and /round-snapshots failed eight times.
+ *
+ * So natively a PUBLIC path drops credentials (verified: both endpoints return
+ * 200 with no cookie, they are public reads). A session-dependent path keeps
+ * them: sending them is still useless against wildcard CORS, but silently
+ * stripping them would turn an authorisation failure into a request that looks
+ * legitimate, and those routes must fail loudly instead.
+ */
+export function nativeSafeCredentials(
+  path: string,
+  fallback: RequestCredentials = "include",
+): RequestCredentials | undefined {
+  if (requiresSessionCredentials(path)) return fallback;
+  try {
+    // Imported lazily to keep this module free of a Capacitor dependency.
+    const origin = typeof window !== "undefined" ? window.location?.origin ?? "" : "";
+    const isNative = /^(capacitor|ionic|file):/i.test(origin);
+    return isNative ? undefined : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+/**
  * fetch() with the platform-correct URL.
  *
  * A drop-in replacement for `fetch` at an /api/ call site: identical
