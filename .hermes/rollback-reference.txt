@@ -1,0 +1,42 @@
+ROLLBACK REFERENCE — recorded 2026-11-17T05:43:33Z
+website bundle js : /assets/index-D6bfwJl9.js
+website bundle css: /assets/index-CVRuaDuR.css
+production main   : 593358d8 Move the grand final core play to the standard line
+hotfix commit     : 8f3f99a8 Rewrite the release plan with the corrected deploy order
+pre-patch edge    : /verify-premium-code 404, portal 404 (no auth gate)
+PATCH_DEPLOY_CUTOFF=2026-11-17T05:50:19Z
+
+--- SUPERSEDED 2026-11-17T07:05Z ---
+
+The 05:50:19Z cutoff refers to the FIRST security deployment (premium auth /
+Stripe authorisation). The /register-free-access billing vulnerability
+remained exploitable after that instant, so any premium session created
+between 05:50:19Z and the identity patch is still of unknown provenance and
+must be revoked.
+
+Use this cutoff for session revocation:
+
+  PATCH_DEPLOY_CUTOFF=2026-11-17T06:44:55.659Z
+
+Source: Supabase Management API, GET /v1/projects/<ref>/functions/<slug>,
+field updated_at = 1794897895659 ms for version 199 (ACTIVE). This is the
+instant the identity-verification patch began serving, established exactly
+rather than estimated.
+
+Note on versions: I deployed version 198 at ~06:31Z; the live function then
+reported 199 at 06:44:55.659Z with no further deploy by me and no
+edge-deploy CI in the repo. 199 is the later of the two and is the version
+whose behaviour was verified live (impersonation -> billing portal = 403),
+so it is the conservative choice.
+
+Current production state:
+  main              dcbb28d0
+  edge function     version 199 ACTIVE, verify_jwt=false
+  website bundle    /assets/index-DOMGrSPe.js (unchanged by the identity patch)
+  probe             9/9   gates 10/10   tests 651
+
+Defence in depth: revocation also spares any session carrying
+identityVerified === true regardless of the cutoff. Only the patched backend
+can set that flag (redeemed emailed code or admin email challenge), so it
+cannot appear on a session minted by a vulnerable path. Verified live with a
+hostile cutoff of "now": the identity-verified session survived.
