@@ -1,8 +1,83 @@
 # Security assessment: session possession is not identity
 
-Branch: `security/session-identity-verification` @ `dbf4bee5`
-Production: `main` @ `45880cd6`, Edge Function **version 197 — STILL VULNERABLE**
-Status: **fix built and verified, NOT deployed.** No sessions revoked.
+Production: `main` @ `6ad5e064`, Edge Function **version 199 — PATCHED AND LIVE**
+Status: **DEPLOYED 2026-11-17.** Exploit closed, 9/9 production probe, 10/10
+gates. No sessions revoked.
+
+## Deployment outcome (2026-11-17)
+
+| | |
+|---|---|
+| Edge Function | version **199**, ACTIVE, `verify_jwt=false`, booted first try (no 503) |
+| Website bundle | `/assets/index-DOMGrSPe.js` — **unchanged**, no website deploy needed |
+| `/api/*` health | `/`, `/api/scores`, `/api/health` all `200` |
+| Production probe | **9/9 PASS** (was 3 FAIL incl. "EXPLOITABLE: a billing portal URL was issued") |
+| Release gates | **10/10 PASS** |
+| Tests | 651 pass, 0 fail; build clean; function parses |
+| Customer data | 164 subscribers, 1,351 free-access records intact; 23 probe artefacts removed |
+
+Verified live after deploy: impersonation → portal now **403**; emailed code
+→ redeem → `tier=premium, premium=true` → portal **200** → logout → portal
+**401**; free registration `200` with `tier=free`; `identityVerified: true`
+persisted on the real session record.
+
+### A completed Stripe payment is NOT proof of email ownership
+
+Correcting my own earlier mistake: the first version of this fix set
+`identityVerified = true` on a paid checkout. The checkout email is
+customer-supplied, so an attacker could pay using a victim's address and then
+manage the **victim's** real Stripe customer. `identityVerified` is now set by
+exactly two paths, both requiring possession of the inbox:
+
+```
+/auth/admin/verify      admin email challenge
+/verify-premium-code    redeemed 6-digit emailed code
+```
+
+`/confirm-checkout-session` still grants the premium **tier** and writes the
+subscriber record, so paying customers keep immediate access — it simply no
+longer confers billing authority.
+
+### Checkout-session replay
+
+A `cs_` id is retrievable from Stripe indefinitely and travels in a URL
+(history, shared links, referrer logs). The first confirmation now records
+`checkout_session_used:<cs_id>`. Replays inside a **30-minute grace window**
+still mint a session (the client re-POSTs on reload, and React StrictMode
+double-invokes the effect in development); later replays return **409** with
+`verificationRequired` and no session.
+
+**Remaining accepted Premium-access replay risk:** replaying a `cs_` id inside
+the grace window, or paying with someone else's address, can still obtain a
+**premium-tier** session for that address. It grants content only — never
+billing — and `/auth/session` re-derives entitlement from Stripe on every
+call, so it cannot outlive the subscription. Closing it fully requires an
+emailed code at the end of checkout, which would add friction for every new
+customer; recommended as a follow-up, not an emergency.
+
+### Email delivery — a real defect found, and it was not spam
+
+Resend's API (not just its accept response) shows all four earlier code
+emails to `betr@rightedge.com.au` were **`suppressed`**, then a fresh send
+**`bounced`**:
+
+```
+smtp; The email account that you tried to reach does not exist.   (Permanent / General)
+```
+
+**`betr@rightedge.com.au` has no mailbox.** It was suppressed on 2026-08-04
+after a bounce, so every "success" I previously reported for that address was
+Resend accepting a message it then refused to deliver. My earlier claim that
+delivery was merely "unconfirmed" was too generous — it was failing.
+
+Proven on a real mailbox instead: a code to **`elliott@rightedge.com.au`**
+reached `last_event = delivered`, and that delivered code redeemed
+successfully → premium → billing portal `200` → logout.
+
+Fleet deliverability over the last 100 emails: **81 reached the inbox**
+(delivered/opened/clicked), 10 failed, 9 in flight — about **89%**. Of 164
+subscribers, exactly **1** is on the suppression list, and it is this
+dead test address. **No real customer is blocked from receiving a login code.**
 
 ---
 
