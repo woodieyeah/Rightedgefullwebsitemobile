@@ -103,6 +103,7 @@ jobs:
         run: npx cap sync ios
 
       - name: Build for the simulator
+        timeout-minutes: 20
         run: |
           set -euo pipefail
           cd ios/App
@@ -135,6 +136,7 @@ jobs:
             build 2>&1 | tail -40
 
       - name: Boot a simulator, install and launch
+        timeout-minutes: 12
         run: |
           set -euo pipefail
           # Pick whatever iPhone this image actually has, rather than pinning a
@@ -165,11 +167,26 @@ jobs:
           APP=$(find "$RUNNER_TEMP/dd/Build/Products/Debug-iphonesimulator" -maxdepth 1 -name '*.app' | head -1)
           echo "app bundle: $APP"
           xcrun simctl install "$UDID" "$APP"
-          xcrun simctl launch --console-pty "$UDID" au.com.rightedge.app > "$RUNNER_TEMP/launch.log" 2>&1 &
-          # Give the webview time to fetch live fixtures and paint.
+
+          # Plain `launch` returns immediately with the PID. Do NOT use
+          # --console-pty here: it streams the app's output for as long as the
+          # app lives, and the Actions runner keeps the step alive while a
+          # child holds the step's process group -- so the step hangs until the
+          # job timeout instead of moving on to the screenshot. The app keeps
+          # running in the simulator either way; its log is collected
+          # separately below.
+          xcrun simctl launch "$UDID" au.com.rightedge.app
+
+          # Give the webview time to boot, fetch live fixtures and paint.
           sleep 35
 
+          # Collect the app's own console output without attaching to it.
+          xcrun simctl spawn "$UDID" log show --last 2m --style compact \
+            --predicate 'process == "App"' > "$RUNNER_TEMP/launch.log" 2>&1 || true
+          echo "--- captured app log lines: $(wc -l < "$RUNNER_TEMP/launch.log" | tr -d ' ') ---"
+
       - name: Screenshot the running app
+        timeout-minutes: 6
         run: |
           mkdir -p artifacts
           xcrun simctl io "$UDID" screenshot artifacts/simulator.png
