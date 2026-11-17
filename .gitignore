@@ -1,1 +1,6 @@
 .vercel
+
+# Revocation audit manifests: key digests only, never tokens, but they are
+# operational records and do not belong in the repo.
+tmp/
+.hermes/audit/
