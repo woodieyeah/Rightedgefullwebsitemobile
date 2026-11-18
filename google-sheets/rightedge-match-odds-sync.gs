@@ -30,13 +30,18 @@ function onOpen() {
     .addItem('Sync Pinnacle Match Odds Now', 'syncRightEdgePinnacleMatchOdds')
     .addItem('Sync Try Scorer Odds Now', 'syncRightEdgeTryScorerOdds')
     .addSeparator()
+    .addItem('Preview Tuesday Automation', 'runRightEdgeTuesdayAutomation')
+    .addItem('Approve Tuesday Preview', 'approveRightEdgeTuesdayAutomation')
+    .addItem('Install Tuesday 6pm Automation', 'installRightEdgeTuesdayAutomation')
+    .addItem('Remove Tuesday Automation', 'removeRightEdgeTuesdayAutomation')
+    .addSeparator()
     .addItem('Create 12 Hour Match Auto Sync', 'createRightEdgeMatchOddsTrigger')
     .addItem('Create Daily Try Scorer Auto Sync', 'createRightEdgeTryScorerOddsTrigger')
     .addItem('Remove All Auto Syncs', 'removeRightEdgeOddsTriggers')
     .addToUi();
 }
 
-function syncRightEdgeMatchOdds() {
+function syncRightEdgeMatchOdds(options) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sh = ss.getSheetByName('Match Predictions');
   if (!sh) throw new Error('Match Predictions sheet not found.');
@@ -130,12 +135,13 @@ function syncRightEdgeMatchOdds() {
     }
   });
 
-  writeRightEdgeOddsColumns_(sh, {
-    homeCol: bestHomeOddsCol,
-    awayCol: bestAwayOddsCol,
-    homeValues: nextBestHomeOdds,
-    awayValues: nextBestAwayOdds,
-  });
+  // In strict (Tuesday) mode, validate everything BEFORE touching the sheet.
+  // These odds columns sit outside the Tuesday plan's rollback, so a late
+  // failure would otherwise leave them already cleared with no way back.
+  if (options && options.requireMatchOdds && !updatedCount) {
+    throw new Error('Match odds returned no matching fixtures, so no odds were written and the prediction model was not run.');
+  }
+
   let pinnacleResult;
   try {
     pinnacleResult = syncRightEdgePinnacleMatchOdds_(ss, sh, matches, lastRow);
@@ -145,6 +151,21 @@ function syncRightEdgeMatchOdds() {
       reason: 'Pinnacle odds skipped. The Starter Odds API plan may not include this bookmaker: ' + err.message,
     };
   }
+
+  if (options && options.requirePinnacle && pinnacleResult.skipped) {
+    throw new Error(pinnacleResult.reason);
+  }
+  if (options && options.requirePinnacle && !pinnacleResult.updatedCount) {
+    throw new Error('Pinnacle odds returned no matching fixtures, so no odds were written and the prediction model was not run.');
+  }
+
+  // Validation passed (or this is a non-strict manual run) — safe to write.
+  writeRightEdgeOddsColumns_(sh, {
+    homeCol: bestHomeOddsCol,
+    awayCol: bestAwayOddsCol,
+    homeValues: nextBestHomeOdds,
+    awayValues: nextBestAwayOdds,
+  });
 
   // Rerun the prediction engine, then rewrite odds so an older model function
   // cannot leave overlays sitting in the odds columns.
@@ -176,6 +197,10 @@ function syncRightEdgeMatchOdds() {
     ? ''
     : ` Updated ${pinnacleResult.updatedCount} Pinnacle row(s).`;
   ss.toast(`Updated ${updatedCount} match odds from RightEdge.${pinnacleNote}${unmatchedNote} Last sync: ${stamp}`, 'RightEdge Odds', 12);
+  return {
+    updatedCount: updatedCount,
+    pinnacleResult: pinnacleResult
+  };
 }
 
 function syncRightEdgePinnacleMatchOdds() {
@@ -344,7 +369,7 @@ function removeRightEdgeTryScorerOddsTrigger() {
   });
 }
 
-function syncRightEdgeTryScorerOdds() {
+function syncRightEdgeTryScorerOdds(options) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sh = findRightEdgeTryScorerSheet_(ss);
   if (!sh) {
@@ -385,6 +410,9 @@ function syncRightEdgeTryScorerOdds() {
   const oddsByMatchAndPlayer = {};
 
   if (!oddsRows.length) {
+    if (options && options.requirePrices) {
+      throw new Error('No try scorer prices came back from RightEdge.');
+    }
     ss.toast('No try scorer prices came back from RightEdge. Check the Supabase function deployment and The Odds API market availability.', 'RightEdge Odds', 12);
     return;
   }
@@ -429,6 +457,10 @@ function syncRightEdgeTryScorerOdds() {
 
     updatedCount++;
   });
+
+  if (options && options.requirePrices && updatedCount === 0) {
+    throw new Error('No try scorer rows matched the available RightEdge prices.');
+  }
 
   dataRange.setValues(values);
 
